@@ -1,0 +1,52 @@
+# Environment & secrets
+.env
+*.tfvars
+**/*.tfvars
+
+# Terraform state and plans (anywhere in tree)
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/tfplan
+**/.terraform/
+*.backup
+
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+
+# Build artifacts
+frontend/build/
+*.tar.gz
+dist/
+build/
+
+# IDE & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local development
+*.local
+.env.local
+.env.*.local

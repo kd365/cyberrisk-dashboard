@@ -1,0 +1,60 @@
+Zscaler,Entry level,11
+Zscaler,Associate,0
+Zscaler,Mid-Senior level,273
+Zscaler,Director,28
+Zscaler,Executive,1
+Zscaler,Not Applicable,1
+Cloudflare,Entry level,28
+Cloudflare,Associate,232
+Cloudflare,Mid-Senior level,527
+Cloudflare,Director,24
+Cloudflare,Executive,10
+Cloudflare,Not Applicable,1
+Crowdstrike,Entry level,65
+Crowdstrike,Associate,33
+Crowdstrike,Mid-Senior level,932
+Crowdstrike,Director,47
+Crowdstrike,Executive,2
+Crowdstrike,Not Applicable,5
+Palo Alto Networks,Entry level,4
+Palo Alto Networks,Associate,677
+Palo Alto Networks,Mid-Senior level,312
+Palo Alto Networks,Director,49
+Palo Alto Networks,Executive,0
+Palo Alto Networks,Not Applicable,31
+Fortinet,Entry level,150
+Fortinet,Associate,0
+Fortinet,Mid-Senior level,657
+Fortinet,Director,27
+Fortinet,Executive,0
+Fortinet,Not Applicable,5
+Okta,Entry level,0
+Okta,Associate,0
+Okta,Mid-Senior level,4
+Okta,Director,0
+Okta,Executive,0
+Okta,Not Applicable,337
+SentinelOne,Entry level,0
+SentinelOne,Associate,0
+SentinelOne,Mid-Senior level,2
+SentinelOne,Director,1
+SentinelOne,Executive,0
+SentinelOne,Not Applicable,231
+CyberArk,Entry level,1
+CyberArk,Associate,0
+CyberArk,Mid-Senior level,164
+CyberArk,Director,0
+CyberArk,Executive,0
+CyberArk,Not Applicable,1
+Tenable,Entry level,8
+Tenable,Associate,1
+Tenable,Mid-Senior level,58
+Tenable,Director,2
+Tenable,Executive,0
+Tenable,Not Applicable,0
+Splunk,Entry level,0
+Splunk,Associate,0
+Splunk,Mid-Senior level,0
+Splunk,Director,0
+Splunk,Executive,0
+Splunk,Not Applicable,161

@@ -1,0 +1,245 @@
+{
+  "fetched_at": "2025-12-29T06:12:49Z",
+  "companies": {
+    "CRWD": {
+      "coresignal_id": 10020216,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "ZS": {
+      "coresignal_id": 1114997,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "NET": {
+      "coresignal_id": 10826791,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "PANW": {
+      "coresignal_id": 7898996,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "FTNT": {
+      "coresignal_id": 9560844,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "OKTA": {
+      "coresignal_id": 5929958,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "S": {
+      "coresignal_id": 10842616,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "CYBR": {
+      "coresignal_id": 1904796,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "TENB": {
+      "coresignal_id": 11438875,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    },
+    "SPLK": {
+      "coresignal_id": 4268152,
+      "jobs_by_function": {
+        "Engineering": 0,
+        "Sales": 0,
+        "Information Technology": 0,
+        "Marketing": 0,
+        "Finance": 0,
+        "Human Resources": 0,
+        "Product Management": 0,
+        "Research": 0,
+        "Legal": 0,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0
+      },
+      "jobs_by_seniority": {
+        "Entry level": 0,
+        "Associate": 0,
+        "Mid-Senior level": 0,
+        "Director": 0,
+        "Executive": 0
+      }
+    }
+  }
+}

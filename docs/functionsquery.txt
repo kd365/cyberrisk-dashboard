@@ -1,0 +1,130 @@
+Zscaler,Engineering,103
+Zscaler,Sales and Business Development,104
+Zscaler,Information Technology,157
+Zscaler,Marketing,17
+Zscaler,Finance,15
+Zscaler,Human Resources,10
+Zscaler,Operations,0
+Zscaler,Product Management,9
+Zscaler,Research,4
+Zscaler,Legal,3
+Zscaler,Customer Success and Support,0
+Zscaler,Administrative,0
+Zscaler,Quality Assurance,0
+Cloudflare,Engineering,336
+Cloudflare,Sales and Business Development,141
+Cloudflare,Information Technology,297
+Cloudflare,Marketing,88
+Cloudflare,Finance,16
+Cloudflare,Human Resources,8
+Cloudflare,Operations,0
+Cloudflare,Product Management,59
+Cloudflare,Research,0
+Cloudflare,Legal,14
+Cloudflare,Customer Success and Support,0
+Cloudflare,Administrative,3
+Cloudflare,Quality Assurance,0
+Crowdstrike,Engineering,518
+Crowdstrike,Sales and Business Development,213
+Crowdstrike,Information Technology,768
+Crowdstrike,Marketing,36
+Crowdstrike,Finance,13
+Crowdstrike,Human Resources,8
+Crowdstrike,Operations,0
+Crowdstrike,Product Management,21
+Crowdstrike,Research,8
+Crowdstrike,Legal,8
+Crowdstrike,Customer Success and Support,0
+Crowdstrike,Administrative,1
+Crowdstrike,Quality Assurance,1
+Palo Alto Networks,Engineering,253
+Palo Alto Networks,Sales and Business Development,0
+Palo Alto Networks,Information Technology,70
+Palo Alto Networks,Marketing,25
+Palo Alto Networks,Finance,15
+Palo Alto Networks,Human Resources,9
+Palo Alto Networks,Operations,0
+Palo Alto Networks,Product Management,41
+Palo Alto Networks,Research,1
+Palo Alto Networks,Legal,0
+Palo Alto Networks,Customer Success and Support,0
+Palo Alto Networks,Administrative,3
+Palo Alto Networks,Quality Assurance,0
+Fortinet,Engineering,141
+Fortinet,Sales and Business Development,351
+Fortinet,Information Technology,376
+Fortinet,Marketing,12
+Fortinet,Finance,3
+Fortinet,Human Resources,11
+Fortinet,Operations,0
+Fortinet,Product Management,2
+Fortinet,Research,1
+Fortinet,Legal,1
+Fortinet,Customer Success and Support,0
+Fortinet,Administrative,1
+Fortinet,Quality Assurance,17
+Okta,Engineering,112
+Okta,Sales and Business Development,66
+Okta,Information Technology,140
+Okta,Marketing,30
+Okta,Finance,17
+Okta,Human Resources,2
+Okta,Operations,0
+Okta,Product Management,30
+Okta,Research,1
+Okta,Legal,3
+Okta,Customer Success and Support,0
+Okta,Administrative,3
+Okta,Quality Assurance,0
+SentinelOne,Engineering,111
+SentinelOne,Sales and Business Development,36
+SentinelOne,Information Technology,164
+SentinelOne,Marketing,17
+SentinelOne,Finance,1
+SentinelOne,Human Resources,1
+SentinelOne,Operations,0
+SentinelOne,Product Management,6
+SentinelOne,Research,0
+SentinelOne,Legal,1
+SentinelOne,Customer Success and Support,0
+SentinelOne,Administrative,1
+SentinelOne,Quality Assurance,0
+CyberArk,Engineering,0
+CyberArk,Sales and Business Development,0
+CyberArk,Information Technology,149
+CyberArk,Marketing,0
+CyberArk,Finance,0
+CyberArk,Human Resources,0
+CyberArk,Operations,0
+CyberArk,Product Management,0
+CyberArk,Research,0
+CyberArk,Legal,0
+CyberArk,Customer Success and Support,0
+CyberArk,Administrative,0
+CyberArk,Quality Assurance,0
+Tenable,Engineering,27
+Tenable,Sales and Business Development,23
+Tenable,Information Technology,37
+Tenable,Marketing,6
+Tenable,Finance,1
+Tenable,Human Resources,1
+Tenable,Operations,0
+Tenable,Product Management,2
+Tenable,Research,1
+Tenable,Legal,0
+Tenable,Customer Success and Support,0
+Tenable,Administrative,0
+Tenable,Quality Assurance,0
+Splunk,Engineering,49
+Splunk,Sales and Business Development,39
+Splunk,Information Technology,77
+Splunk,Marketing,15
+Splunk,Finance,0
+Splunk,Human Resources,0
+Splunk,Operations,0
+Splunk,Product Management,6
+Splunk,Research,4
+Splunk,Legal,0
+Splunk,Customer Success and Support,0
+Splunk,Administrative,4
+Splunk,Quality Assurance,0
