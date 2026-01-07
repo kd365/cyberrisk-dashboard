@@ -25,6 +25,9 @@ frontend/build/
 dist/
 build/
 
+# Lambda deployment packages (regenerated)
+**/*.zip
+
 # IDE & OS
 .DS_Store
 .idea/

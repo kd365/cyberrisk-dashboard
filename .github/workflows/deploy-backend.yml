@@ -1,0 +1,103 @@
+name: Deploy Backend
+
+on:
+  workflow_run:
+    workflows: ["Backend CI"]
+    types:
+      - completed
+    branches: [main]
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: cyberrisk-backend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd backend
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ec2-user
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Create deployment script
+          cat << 'DEPLOY_SCRIPT' > deploy.sh
+          #!/bin/bash
+          set -e
+
+          # Login to ECR
+          aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+          # Pull latest image
+          docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+          # Stop old container
+          docker stop cyberrisk-backend || true
+          docker rm cyberrisk-backend || true
+
+          # Run new container
+          docker run -d \
+            --name cyberrisk-backend \
+            --restart unless-stopped \
+            -p 5000:5000 \
+            -e AWS_REGION=us-west-2 \
+            -e DB_HOST=$DB_HOST \
+            -e DB_PASSWORD=$DB_PASSWORD \
+            -e NEO4J_URI=$NEO4J_URI \
+            -e NEO4J_PASSWORD=$NEO4J_PASSWORD \
+            -e S3_BUCKET=$S3_BUCKET \
+            -e COGNITO_USER_POOL_ID=$COGNITO_USER_POOL_ID \
+            -e COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID \
+            $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+          # Verify deployment
+          sleep 10
+          curl -f http://localhost:5000/api/health || exit 1
+
+          # Clean up old images
+          docker image prune -f
+          DEPLOY_SCRIPT
+
+          # Note: For production, use SSM or a proper secrets management
+          echo "Deployment script created. Manual SSH deployment or SSM required."
+          echo "Image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "Deployment successful: ${{ steps.build-image.outputs.image }}"
+          else
+            echo "Deployment failed"
+            exit 1
+          fi
