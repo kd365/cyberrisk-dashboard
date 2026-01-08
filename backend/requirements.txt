@@ -23,10 +23,10 @@ lxml>=5.0.0
 # Utilities
 python-dateutil>=2.8.0
 
-# LangChain (Phase 3 - currently commented out)
-# langchain>=0.3.0
-# langchain-aws>=0.2.0
-# langchain-neo4j>=0.1.0
+# LangChain (Phase 3)
+langchain>=0.3.0
+langchain-aws>=0.2.0
+langchain-community>=0.3.0
 
 # Development and testing
 pytest>=7.4.0

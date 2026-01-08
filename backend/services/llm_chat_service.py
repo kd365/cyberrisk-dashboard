@@ -2,15 +2,19 @@
 # LLM Chat Service - GraphRAG-Powered Assistant
 # =============================================================================
 #
-# This service provides LLM-powered chat functionality using Claude Haiku
-# via AWS Bedrock. Replaces Lex with enhanced capabilities:
+# This service provides LLM-powered chat functionality.
 #
-# - All 11 original Lex intents (via tool calling)
-# - GraphRAG for document intelligence
-# - Conversation memory
-# - Knowledge graph queries
+# Two modes available (controlled by USE_LANGCHAIN env var):
 #
-# Cost: ~$25-35/month at moderate usage
+# 1. Legacy Mode (USE_LANGCHAIN=false, default):
+#    - Direct Bedrock API with Claude 3 Haiku
+#    - Manual tool-calling loop
+#    - Lower cost (~$25-35/month)
+#
+# 2. LangChain Mode (USE_LANGCHAIN=true):
+#    - LangChain agent with Claude 3.5 Sonnet
+#    - Automatic tool iteration
+#    - Better reasoning, higher cost (~$100-150/month)
 #
 # =============================================================================
 
@@ -25,6 +29,9 @@ import boto3
 from botocore.config import Config
 
 logger = logging.getLogger(__name__)
+
+# Feature flag for LangChain mode
+USE_LANGCHAIN = os.environ.get('USE_LANGCHAIN', 'false').lower() == 'true'
 
 
 class LLMChatService:
@@ -981,17 +988,32 @@ Tracked cybersecurity companies: CRWD (CrowdStrike), PANW (Palo Alto Networks), 
 
 
 # =============================================================================
-# Singleton Instance
+# Singleton Instance with Feature Flag
 # =============================================================================
 
 _llm_chat_service = None
 
 
-def get_llm_chat_service() -> LLMChatService:
-    """Get or create LLM chat service singleton."""
+def get_llm_chat_service():
+    """
+    Get or create chat service singleton.
+
+    Returns LangChainAgentService if USE_LANGCHAIN=true,
+    otherwise returns legacy LLMChatService.
+    """
     global _llm_chat_service
     if _llm_chat_service is None:
-        _llm_chat_service = LLMChatService()
+        if USE_LANGCHAIN:
+            try:
+                from services.langchain_agent import get_langchain_agent_service
+                _llm_chat_service = get_langchain_agent_service()
+                logger.info("Using LangChain agent with Claude 3.5 Sonnet")
+            except ImportError as e:
+                logger.warning(f"LangChain not available, falling back to legacy: {e}")
+                _llm_chat_service = LLMChatService()
+        else:
+            _llm_chat_service = LLMChatService()
+            logger.info("Using legacy Bedrock API with Claude 3 Haiku")
     return _llm_chat_service
 
 
@@ -1004,7 +1026,8 @@ def init_llm_chat_service():
     global llm_chat_service
     try:
         llm_chat_service = get_llm_chat_service()
-        logger.info("LLM chat service initialized successfully")
+        mode = "LangChain (Claude 3.5 Sonnet)" if USE_LANGCHAIN else "Legacy (Claude 3 Haiku)"
+        logger.info(f"LLM chat service initialized: {mode}")
     except Exception as e:
         logger.error(f"Failed to initialize LLM chat service: {e}")
         llm_chat_service = None
