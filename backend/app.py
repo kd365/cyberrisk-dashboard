@@ -683,8 +683,6 @@ scraping_status = {
 
 def run_scraping_task(companies, scrape_type):
     """Background task to scrape companies"""
-    global scraping_status
-
     scraping_status['running'] = True
     scraping_status['progress'] = 0
     scraping_status['results'] = []
@@ -743,8 +741,6 @@ def get_scraping_status():
 @app.route('/api/scraping/start', methods=['POST'])
 def start_scraping():
     """Start scraping process in background"""
-    global scraping_status
-
     if scraping_status['running']:
         return jsonify({
             'status': 'error',
@@ -2139,8 +2135,7 @@ def fetch_patents_for_company(ticker):
             return jsonify({'error': 'Patent service not available'}), 503
 
         # Get company name from database
-        db = get_db()
-        company = db.get_company(ticker) if db else None
+        company = db_service.get_company(ticker) if db_service else None
 
         if not company:
             return jsonify({'error': f'Company {ticker} not found'}), 404
