@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Component } from 'react';
-import SigmaGraphVisualization from './SigmaGraphVisualization';
+import D3GraphVisualization from './D3GraphVisualization';
 
 // Error boundary to catch ForceGraph crashes
 class GraphErrorBoundary extends Component {
@@ -621,16 +621,16 @@ function KnowledgeGraphViz({ ticker }) {
       <div style={styles.header}>
         <h3 style={styles.title}>Knowledge Graph for {ticker}</h3>
         <span style={{ fontSize: '12px', color: '#64748b' }}>
-          Powered by Sigma.js
+          Powered by D3.js • Drag nodes to reposition
         </span>
       </div>
 
       <div style={styles.graphArea}>
         <GraphErrorBoundary>
-          <SigmaGraphVisualization
+          <D3GraphVisualization
             ticker={ticker}
             onNodeClick={handleNodeClick}
-            height={400}
+            height={450}
           />
         </GraphErrorBoundary>
       </div>

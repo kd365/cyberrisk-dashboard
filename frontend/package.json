@@ -5,21 +5,17 @@
   "proxy": "http://localhost:5000",
   "dependencies": {
     "@aws-sdk/client-lex-runtime-v2": "^3.948.0",
-    "@react-sigma/core": "^5.0.6",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.13.2",
-    "graphology": "^0.26.0",
-    "graphology-layout-forceatlas2": "^0.10.1",
+    "d3": "^7.9.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-force-graph": "^1.48.1",
     "react-router-dom": "^7.10.1",
     "react-scripts": "5.0.1",
     "recharts": "^3.5.1",
-    "sigma": "^3.0.2",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
