@@ -16,6 +16,10 @@ pandas>=2.1.0
 numpy>=1.26.0
 yfinance>=0.2.36
 
+# Machine learning and forecasting
+prophet>=1.1.5
+scikit-learn>=1.3.0
+
 # PDF processing
 PyPDF2>=3.0.0
 
