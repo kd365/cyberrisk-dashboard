@@ -24,6 +24,7 @@ import threading
 ChronosForecaster = None
 CHRONOS_AVAILABLE = False
 
+
 def _load_chronos_forecaster():
     """Lazy load Chronos forecaster"""
     global ChronosForecaster, CHRONOS_AVAILABLE
@@ -31,6 +32,7 @@ def _load_chronos_forecaster():
         return CHRONOS_AVAILABLE
     try:
         from models.chronos_forecaster import ChronosForecaster as CF
+
         ChronosForecaster = CF
         CHRONOS_AVAILABLE = True
         print("✅ Chronos forecaster available")
@@ -38,6 +40,7 @@ def _load_chronos_forecaster():
         print(f"⚠️  Chronos forecaster not available: {e}")
         CHRONOS_AVAILABLE = False
     return CHRONOS_AVAILABLE
+
 
 app = Flask(__name__)
 CORS(app)
@@ -53,24 +56,27 @@ lex_service = LexService()  # Bot ID/Alias from env vars or Terraform outputs
 forecasters = {}  # Prophet forecasters
 chronos_forecasters = {}  # Chronos forecasters
 
-@app.route('/health', methods=['GET'])
+
+@app.route("/health", methods=["GET"])
 def health():
-    return jsonify({'status': 'healthy', 'service': 'cyber-risk-api'})
+    return jsonify({"status": "healthy", "service": "cyber-risk-api"})
+
 
 # ============================================================================
 # ARTIFACT PROXY - Allow frontend to access S3 documents
 # ============================================================================
 
-@app.route('/api/artifact-proxy', methods=['GET'])
+
+@app.route("/api/artifact-proxy", methods=["GET"])
 def artifact_proxy():
     """Proxy for accessing S3 documents with presigned URLs"""
     try:
-        url = request.args.get('url')
+        url = request.args.get("url")
         if not url:
-            return jsonify({'error': 'No URL provided'}), 400
+            return jsonify({"error": "No URL provided"}), 400
 
         # If it's already a full S3 URL, redirect to it
-        if url.startswith('http'):
+        if url.startswith("http"):
             return redirect(url, code=302)
 
         # Otherwise, it might be an S3 key - get presigned URL
@@ -78,32 +84,35 @@ def artifact_proxy():
         if presigned:
             return redirect(presigned, code=302)
         else:
-            return jsonify({'error': 'Could not generate presigned URL'}), 404
+            return jsonify({"error": "Could not generate presigned URL"}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/artifact-url', methods=['GET'])
+
+@app.route("/api/artifact-url", methods=["GET"])
 def artifact_url():
     """Get presigned S3 URL as JSON (for frontend to handle redirect)"""
     try:
-        s3_key = request.args.get('key')
+        s3_key = request.args.get("key")
         if not s3_key:
-            return jsonify({'error': 'No S3 key provided'}), 400
+            return jsonify({"error": "No S3 key provided"}), 400
 
         # Generate presigned URL
         presigned = s3_service.get_presigned_url(s3_key)
         if presigned:
-            return jsonify({'url': presigned})
+            return jsonify({"url": presigned})
         else:
-            return jsonify({'error': 'Could not generate presigned URL'}), 404
+            return jsonify({"error": "Could not generate presigned URL"}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 # ============================================================================
 # ARTIFACT ENDPOINTS
 # ============================================================================
 
-@app.route('/api/artifacts', methods=['GET'])
+
+@app.route("/api/artifacts", methods=["GET"])
 def get_artifacts():
     """Get all artifacts from database (with S3 fallback)"""
     try:
@@ -123,9 +132,10 @@ def get_artifacts():
             artifacts = s3_service.get_artifacts_table()
             return jsonify(artifacts)
         except:
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
 
-@app.route('/api/companies', methods=['GET'])
+
+@app.route("/api/companies", methods=["GET"])
 def get_companies():
     """Get company list from database (with S3 fallback)"""
     try:
@@ -136,13 +146,13 @@ def get_companies():
             companies = []
             for db_c in db_companies:
                 company = {
-                    'name': db_c.get('company_name'),
-                    'ticker': db_c.get('ticker', '').upper(),
-                    'description': db_c.get('description', ''),
-                    'exchange': db_c.get('exchange', ''),
-                    'location': db_c.get('location', ''),
-                    'sector': db_c.get('sector', 'Cybersecurity'),
-                    'alternate_names': db_c.get('alternate_names', '')
+                    "name": db_c.get("company_name"),
+                    "ticker": db_c.get("ticker", "").upper(),
+                    "description": db_c.get("description", ""),
+                    "exchange": db_c.get("exchange", ""),
+                    "location": db_c.get("location", ""),
+                    "sector": db_c.get("sector", "Cybersecurity"),
+                    "alternate_names": db_c.get("alternate_names", ""),
                 }
                 companies.append(company)
 
@@ -159,13 +169,15 @@ def get_companies():
             companies = s3_service.get_companies()
             return jsonify(companies)
         except:
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
+
 
 # ============================================================================
 # COMPANY CRUD ENDPOINTS (Database-backed)
 # ============================================================================
 
-@app.route('/api/companies/db', methods=['GET'])
+
+@app.route("/api/companies/db", methods=["GET"])
 def get_companies_db():
     """Get all companies from database"""
     try:
@@ -173,9 +185,10 @@ def get_companies_db():
         return jsonify(companies)
     except Exception as e:
         print(f"Error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/companies/db/<ticker>', methods=['GET'])
+
+@app.route("/api/companies/db/<ticker>", methods=["GET"])
 def get_company_db(ticker):
     """Get a specific company by ticker from database"""
     try:
@@ -183,12 +196,13 @@ def get_company_db(ticker):
         if company:
             return jsonify(company)
         else:
-            return jsonify({'error': f'Company not found: {ticker}'}), 404
+            return jsonify({"error": f"Company not found: {ticker}"}), 404
     except Exception as e:
         print(f"Error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/companies/db', methods=['POST'])
+
+@app.route("/api/companies/db", methods=["POST"])
 def create_company():
     """
     Create a new company in the database
@@ -206,35 +220,41 @@ def create_company():
     try:
         data = request.json
         if not data:
-            return jsonify({'error': 'Request body required'}), 400
+            return jsonify({"error": "Request body required"}), 400
 
-        company_name = data.get('company_name')
-        ticker = data.get('ticker')
-        sector = data.get('sector', 'Cybersecurity')
+        company_name = data.get("company_name")
+        ticker = data.get("ticker")
+        sector = data.get("sector", "Cybersecurity")
 
         if not company_name or not ticker:
-            return jsonify({'error': 'company_name and ticker are required'}), 400
+            return jsonify({"error": "company_name and ticker are required"}), 400
 
         # Check if company already exists
         if db_service.company_exists(ticker):
-            return jsonify({'error': f'Company already exists: {ticker}'}), 409
+            return jsonify({"error": f"Company already exists: {ticker}"}), 409
 
         company = db_service.create_company(company_name, ticker, sector)
         if company:
-            return jsonify({
-                'status': 'success',
-                'message': f'Company {ticker} created successfully',
-                'company': company
-            }), 201
+            return (
+                jsonify(
+                    {
+                        "status": "success",
+                        "message": f"Company {ticker} created successfully",
+                        "company": company,
+                    }
+                ),
+                201,
+            )
         else:
-            return jsonify({'error': 'Failed to create company'}), 500
+            return jsonify({"error": "Failed to create company"}), 500
 
     except Exception as e:
         print(f"Error creating company: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/companies/db/<ticker>', methods=['PUT'])
+
+@app.route("/api/companies/db/<ticker>", methods=["PUT"])
 def update_company(ticker):
     """
     Update a company in the database
@@ -251,45 +271,51 @@ def update_company(ticker):
     try:
         data = request.json
         if not data:
-            return jsonify({'error': 'Request body required'}), 400
+            return jsonify({"error": "Request body required"}), 400
 
-        company_name = data.get('company_name')
-        sector = data.get('sector')
+        company_name = data.get("company_name")
+        sector = data.get("sector")
 
         company = db_service.update_company(ticker, company_name, sector)
         if company:
-            return jsonify({
-                'status': 'success',
-                'message': f'Company {ticker} updated successfully',
-                'company': company
-            })
+            return jsonify(
+                {
+                    "status": "success",
+                    "message": f"Company {ticker} updated successfully",
+                    "company": company,
+                }
+            )
         else:
-            return jsonify({'error': f'Company not found: {ticker}'}), 404
+            return jsonify({"error": f"Company not found: {ticker}"}), 404
 
     except Exception as e:
         print(f"Error updating company: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/companies/db/<ticker>', methods=['DELETE'])
+
+@app.route("/api/companies/db/<ticker>", methods=["DELETE"])
 def delete_company(ticker):
     """Delete a company from the database"""
     try:
         deleted = db_service.delete_company(ticker)
         if deleted:
-            return jsonify({
-                'status': 'success',
-                'message': f'Company {ticker} deleted successfully'
-            })
+            return jsonify(
+                {
+                    "status": "success",
+                    "message": f"Company {ticker} deleted successfully",
+                }
+            )
         else:
-            return jsonify({'error': f'Company not found: {ticker}'}), 404
+            return jsonify({"error": f"Company not found: {ticker}"}), 404
 
     except Exception as e:
         print(f"Error deleting company: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/all-artifacts', methods=['GET'])
+
+@app.route("/api/all-artifacts", methods=["GET"])
 def get_all_artifacts():
     """Get all artifacts from all companies (database with S3 fallback)"""
     try:
@@ -307,9 +333,10 @@ def get_all_artifacts():
             artifacts = s3_service.get_artifacts_table()
             return jsonify(artifacts)
         except:
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
 
-@app.route('/api/artifacts/<ticker>', methods=['GET'])
+
+@app.route("/api/artifacts/<ticker>", methods=["GET"])
 def get_company_artifacts(ticker):
     """Get artifacts for specific company (database with S3 fallback)"""
     try:
@@ -327,47 +354,48 @@ def get_company_artifacts(ticker):
             artifacts = s3_service.get_artifacts_by_ticker(ticker.upper())
             return jsonify(artifacts)
         except:
-            return jsonify({'error': str(e)}), 500
+            return jsonify({"error": str(e)}), 500
 
-@app.route('/api/artifacts/status/<ticker>', methods=['GET'])
+
+@app.route("/api/artifacts/status/<ticker>", methods=["GET"])
 def get_artifact_status(ticker):
     """Get status of what documents exist for a ticker"""
     try:
         status = s3_service.check_existing_documents(ticker.upper())
         needed = s3_service.get_documents_to_fetch(ticker.upper())
-        
-        return jsonify({
-            'status': status,
-            'to_fetch': needed
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/document/<path:filename>', methods=['GET'])
+        return jsonify({"status": status, "to_fetch": needed})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/document/<path:filename>", methods=["GET"])
 def get_document(filename):
     """Get presigned URL for document"""
     try:
         # Determine if SEC or transcript based on filename
-        if '_10-K_' in filename or '_10-Q_' in filename:
-            s3_key = f'raw/sec/{filename}'
+        if "_10-K_" in filename or "_10-Q_" in filename:
+            s3_key = f"raw/sec/{filename}"
         else:
-            s3_key = f'raw/transcripts/{filename}'
-        
+            s3_key = f"raw/transcripts/{filename}"
+
         url = s3_service.get_presigned_url(s3_key)
-        
+
         if url:
-            return jsonify({'url': url, 'filename': filename})
+            return jsonify({"url": url, "filename": filename})
         else:
-            return jsonify({'error': 'Document not found'}), 404
-    
+            return jsonify({"error": "Document not found"}), 404
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 # ============================================================================
 # FORECAST ENDPOINTS
 # ============================================================================
 
-@app.route('/api/forecast', methods=['GET'])
+
+@app.route("/api/forecast", methods=["GET"])
 def get_forecast():
     """
     Get forecast for a ticker using Prophet or Chronos-Bolt
@@ -378,73 +406,94 @@ def get_forecast():
         model: 'prophet' or 'chronos' (default: prophet)
         refresh: If 'true', force recomputation (bypass cache)
     """
-    ticker = request.args.get('ticker', 'MSFT').upper()
-    days = int(request.args.get('days', 30))
-    model_type = request.args.get('model', 'prophet').lower()
-    refresh = request.args.get('refresh', 'false').lower() == 'true'
+    ticker = request.args.get("ticker", "MSFT").upper()
+    days = int(request.args.get("days", 30))
+    model_type = request.args.get("model", "prophet").lower()
+    refresh = request.args.get("refresh", "false").lower() == "true"
 
     # Validate model type
-    if model_type not in ['prophet', 'chronos']:
-        return jsonify({'error': f"Invalid model type: {model_type}. Use 'prophet' or 'chronos'"}), 400
+    if model_type not in ["prophet", "chronos"]:
+        return (
+            jsonify(
+                {
+                    "error": f"Invalid model type: {model_type}. Use 'prophet' or 'chronos'"
+                }
+            ),
+            400,
+        )
 
     try:
         # Check cache first (unless refresh is requested)
         if not refresh:
             cached_data = forecast_cache.get(ticker, days, model_type)
             if cached_data:
-                cached_data['from_cache'] = True
+                cached_data["from_cache"] = True
                 return jsonify(cached_data)
 
         # If refresh requested, invalidate cache for this ticker/model
         if refresh:
             forecast_cache.invalidate(ticker, model_type)
             # Also clear in-memory model to force retrain
-            if model_type == 'prophet' and ticker in forecasters:
+            if model_type == "prophet" and ticker in forecasters:
                 del forecasters[ticker]
-            elif model_type == 'chronos' and ticker in chronos_forecasters:
+            elif model_type == "chronos" and ticker in chronos_forecasters:
                 del chronos_forecasters[ticker]
 
         import datetime
+
         today = datetime.date.today().isoformat()
 
-        if model_type == 'chronos':
+        if model_type == "chronos":
             # Use Chronos-Bolt forecaster
             if not _load_chronos_forecaster():
-                return jsonify({
-                    'error': 'Chronos model not available. Install with: pip install chronos-forecasting torch'
-                }), 503
+                return (
+                    jsonify(
+                        {
+                            "error": "Chronos model not available. Install with: pip install chronos-forecasting torch"
+                        }
+                    ),
+                    503,
+                )
 
             # Initialize Chronos forecaster if needed
             if ticker not in chronos_forecasters:
                 print(f"Initializing Chronos-Bolt for {ticker}...")
-                chronos_forecasters[ticker] = ChronosForecaster(ticker, model_size='small')
-                chronos_forecasters[ticker].fetch_stock_data(period='3y')  # More context for Chronos
+                chronos_forecasters[ticker] = ChronosForecaster(
+                    ticker, model_size="small"
+                )
+                chronos_forecasters[ticker].fetch_stock_data(
+                    period="3y"
+                )  # More context for Chronos
                 print(f"Chronos ready for {ticker}")
 
             results = chronos_forecasters[ticker].forecast(days_ahead=days)
 
             # Convert forecast DataFrame to list
-            forecast_data = results['forecast_df'][['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_dict('records')
+            forecast_data = results["forecast_df"][
+                ["ds", "yhat", "yhat_lower", "yhat_upper"]
+            ].to_dict("records")
 
             # Convert historical DataFrame to list
-            historical_data = results['historical_df'].to_dict('records')
+            historical_data = results["historical_df"].to_dict("records")
 
             response_data = {
-                'ticker': ticker,
-                'model': 'chronos-bolt',
-                'current_price': float(results['current_price']),
-                'predicted_price': float(results['predicted_price']),
-                'expected_return_pct': float(results['expected_return_pct']),
-                'confidence_interval': {
-                    'lower': float(results['confidence_lower']),
-                    'upper': float(results['confidence_upper'])
+                "ticker": ticker,
+                "model": "chronos-bolt",
+                "current_price": float(results["current_price"]),
+                "predicted_price": float(results["predicted_price"]),
+                "expected_return_pct": float(results["expected_return_pct"]),
+                "confidence_interval": {
+                    "lower": float(results["confidence_lower"]),
+                    "upper": float(results["confidence_upper"]),
                 },
-                'expected_volatility_pct': float(results.get('expected_volatility_pct', 0)),
-                'forecast': forecast_data,
-                'historical': historical_data,
-                'today': today,
-                'from_cache': False,
-                'notes': 'Using log returns with P10/P50/P90 quantiles'
+                "expected_volatility_pct": float(
+                    results.get("expected_volatility_pct", 0)
+                ),
+                "forecast": forecast_data,
+                "historical": historical_data,
+                "today": today,
+                "from_cache": False,
+                "notes": "Using log returns with P10/P50/P90 quantiles",
             }
 
         else:
@@ -452,7 +501,7 @@ def get_forecast():
             if ticker not in forecasters:
                 print(f"Training Prophet model for {ticker}...")
                 forecasters[ticker] = CyberRiskForecaster(ticker)
-                forecasters[ticker].fetch_stock_data(period='2y')
+                forecasters[ticker].fetch_stock_data(period="2y")
                 forecasters[ticker].add_cybersecurity_sentiment(mock=False)
                 forecasters[ticker].add_volatility_regressor()
                 forecasters[ticker].train()
@@ -461,25 +510,27 @@ def get_forecast():
             results = forecasters[ticker].forecast(days_ahead=days)
 
             # Convert forecast DataFrame to list
-            forecast_data = results['forecast_df'][['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_dict('records')
+            forecast_data = results["forecast_df"][
+                ["ds", "yhat", "yhat_lower", "yhat_upper"]
+            ].to_dict("records")
 
             # Convert historical DataFrame to list
-            historical_data = results['historical_df'].to_dict('records')
+            historical_data = results["historical_df"].to_dict("records")
 
             response_data = {
-                'ticker': ticker,
-                'model': 'prophet',
-                'current_price': float(results['current_price']),
-                'predicted_price': float(results['predicted_price']),
-                'expected_return_pct': float(results['expected_return_pct']),
-                'confidence_interval': {
-                    'lower': float(results['confidence_lower']),
-                    'upper': float(results['confidence_upper'])
+                "ticker": ticker,
+                "model": "prophet",
+                "current_price": float(results["current_price"]),
+                "predicted_price": float(results["predicted_price"]),
+                "expected_return_pct": float(results["expected_return_pct"]),
+                "confidence_interval": {
+                    "lower": float(results["confidence_lower"]),
+                    "upper": float(results["confidence_upper"]),
                 },
-                'forecast': forecast_data,
-                'historical': historical_data,
-                'today': today,
-                'from_cache': False
+                "forecast": forecast_data,
+                "historical": historical_data,
+                "today": today,
+                "from_cache": False,
             }
 
         # Cache the results with model type
@@ -490,30 +541,30 @@ def get_forecast():
     except Exception as e:
         print(f"Error: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/forecast/models', methods=['GET'])
+@app.route("/api/forecast/models", methods=["GET"])
 def get_available_models():
     """Get list of available forecast models"""
     models = [
         {
-            'id': 'prophet',
-            'name': 'Prophet',
-            'description': 'Facebook Prophet with cybersecurity sentiment regressors',
-            'available': True
+            "id": "prophet",
+            "name": "Prophet",
+            "description": "Facebook Prophet with cybersecurity sentiment regressors",
+            "available": True,
         },
         {
-            'id': 'chronos',
-            'name': 'Chronos-Bolt',
-            'description': 'Amazon foundation model using log returns (zero-shot, no training)',
-            'available': _load_chronos_forecaster()
-        }
+            "id": "chronos",
+            "name": "Chronos-Bolt",
+            "description": "Amazon foundation model using log returns (zero-shot, no training)",
+            "available": _load_chronos_forecaster(),
+        },
     ]
-    return jsonify({'models': models})
+    return jsonify({"models": models})
 
 
-@app.route('/api/forecast/compare', methods=['GET'])
+@app.route("/api/forecast/compare", methods=["GET"])
 def get_forecast_comparison():
     """
     Get comparative forecast summary for both Prophet and Chronos models
@@ -527,100 +578,104 @@ def get_forecast_comparison():
         - Recommendation for best model
         - Prompt for user to request refresh or select model
     """
-    ticker = request.args.get('ticker', '').upper()
-    days = int(request.args.get('days', 30))
+    ticker = request.args.get("ticker", "").upper()
+    days = int(request.args.get("days", 30))
 
     if not ticker:
-        return jsonify({'error': 'Ticker is required'}), 400
+        return jsonify({"error": "Ticker is required"}), 400
 
     import datetime as dt
 
     # Check cache for BOTH models
     cached_forecasts = forecast_cache.get_all_models(ticker, days)
 
-    prophet_data = cached_forecasts.get('prophet')
-    chronos_data = cached_forecasts.get('chronos')
+    prophet_data = cached_forecasts.get("prophet")
+    chronos_data = cached_forecasts.get("chronos")
 
     response = {
-        'ticker': ticker,
-        'forecast_days': days,
-        'models': {},
-        'has_cached_data': False,
-        'recommended_model': 'chronos',  # Chronos is better (8.75% MAPE vs ~23%)
-        'recommendation_reason': 'Chronos has better accuracy (MAPE: 8.75% vs ~23% for Prophet)'
+        "ticker": ticker,
+        "forecast_days": days,
+        "models": {},
+        "has_cached_data": False,
+        "recommended_model": "chronos",  # Chronos is better (8.75% MAPE vs ~23%)
+        "recommendation_reason": "Chronos has better accuracy (MAPE: 8.75% vs ~23% for Prophet)",
     }
 
     # Build model summaries
     if prophet_data:
-        cached_at = prophet_data.get('cached_at', '')
+        cached_at = prophet_data.get("cached_at", "")
         # Parse cached_at to get readable time
         try:
-            cached_dt = dt.datetime.fromisoformat(cached_at.replace('Z', '+00:00'))
-            cache_time_str = cached_dt.strftime('%H:%M %m/%d/%y')
+            cached_dt = dt.datetime.fromisoformat(cached_at.replace("Z", "+00:00"))
+            cache_time_str = cached_dt.strftime("%H:%M %m/%d/%y")
         except:
-            cache_time_str = 'today'
+            cache_time_str = "today"
 
-        response['models']['prophet'] = {
-            'available': True,
-            'cached': True,
-            'cached_at': cached_at,
-            'cache_time_display': cache_time_str,
-            'current_price': prophet_data.get('current_price'),
-            'predicted_price': prophet_data.get('predicted_price'),
-            'expected_return_pct': prophet_data.get('expected_return_pct'),
-            'confidence_interval': prophet_data.get('confidence_interval'),
-            'mape': prophet_data.get('model_metrics', {}).get('mape', 23.0)
+        response["models"]["prophet"] = {
+            "available": True,
+            "cached": True,
+            "cached_at": cached_at,
+            "cache_time_display": cache_time_str,
+            "current_price": prophet_data.get("current_price"),
+            "predicted_price": prophet_data.get("predicted_price"),
+            "expected_return_pct": prophet_data.get("expected_return_pct"),
+            "confidence_interval": prophet_data.get("confidence_interval"),
+            "mape": prophet_data.get("model_metrics", {}).get("mape", 23.0),
         }
-        response['has_cached_data'] = True
+        response["has_cached_data"] = True
     else:
-        response['models']['prophet'] = {
-            'available': True,
-            'cached': False,
-            'mape': 23.0  # Historical average MAPE for Prophet
+        response["models"]["prophet"] = {
+            "available": True,
+            "cached": False,
+            "mape": 23.0,  # Historical average MAPE for Prophet
         }
 
     if chronos_data:
-        cached_at = chronos_data.get('cached_at', '')
+        cached_at = chronos_data.get("cached_at", "")
         try:
-            cached_dt = dt.datetime.fromisoformat(cached_at.replace('Z', '+00:00'))
-            cache_time_str = cached_dt.strftime('%H:%M %m/%d/%y')
+            cached_dt = dt.datetime.fromisoformat(cached_at.replace("Z", "+00:00"))
+            cache_time_str = cached_dt.strftime("%H:%M %m/%d/%y")
         except:
-            cache_time_str = 'today'
+            cache_time_str = "today"
 
-        response['models']['chronos'] = {
-            'available': _load_chronos_forecaster(),
-            'cached': True,
-            'cached_at': cached_at,
-            'cache_time_display': cache_time_str,
-            'current_price': chronos_data.get('current_price'),
-            'predicted_price': chronos_data.get('predicted_price'),
-            'expected_return_pct': chronos_data.get('expected_return_pct'),
-            'confidence_interval': chronos_data.get('confidence_interval'),
-            'mape': chronos_data.get('model_metrics', {}).get('mape', 8.75)
+        response["models"]["chronos"] = {
+            "available": _load_chronos_forecaster(),
+            "cached": True,
+            "cached_at": cached_at,
+            "cache_time_display": cache_time_str,
+            "current_price": chronos_data.get("current_price"),
+            "predicted_price": chronos_data.get("predicted_price"),
+            "expected_return_pct": chronos_data.get("expected_return_pct"),
+            "confidence_interval": chronos_data.get("confidence_interval"),
+            "mape": chronos_data.get("model_metrics", {}).get("mape", 8.75),
         }
-        response['has_cached_data'] = True
+        response["has_cached_data"] = True
     else:
-        response['models']['chronos'] = {
-            'available': _load_chronos_forecaster(),
-            'cached': False,
-            'mape': 8.75  # Historical average MAPE for Chronos
+        response["models"]["chronos"] = {
+            "available": _load_chronos_forecaster(),
+            "cached": False,
+            "mape": 8.75,  # Historical average MAPE for Chronos
         }
 
     # Determine recommendation based on actual MAPE if available
-    prophet_mape = response['models']['prophet'].get('mape', 23.0)
-    chronos_mape = response['models']['chronos'].get('mape', 8.75)
+    prophet_mape = response["models"]["prophet"].get("mape", 23.0)
+    chronos_mape = response["models"]["chronos"].get("mape", 8.75)
 
     if chronos_mape < prophet_mape:
-        response['recommended_model'] = 'chronos'
-        response['recommendation_reason'] = f'Chronos has better accuracy (MAPE: {chronos_mape:.1f}% vs {prophet_mape:.1f}% for Prophet)'
+        response["recommended_model"] = "chronos"
+        response["recommendation_reason"] = (
+            f"Chronos has better accuracy (MAPE: {chronos_mape:.1f}% vs {prophet_mape:.1f}% for Prophet)"
+        )
     else:
-        response['recommended_model'] = 'prophet'
-        response['recommendation_reason'] = f'Prophet has better accuracy (MAPE: {prophet_mape:.1f}% vs {chronos_mape:.1f}% for Chronos)'
+        response["recommended_model"] = "prophet"
+        response["recommendation_reason"] = (
+            f"Prophet has better accuracy (MAPE: {prophet_mape:.1f}% vs {chronos_mape:.1f}% for Chronos)"
+        )
 
     return jsonify(response)
 
 
-@app.route('/api/evaluate/<ticker>', methods=['GET'])
+@app.route("/api/evaluate/<ticker>", methods=["GET"])
 def evaluate_model(ticker):
     """
     Get model evaluation metrics
@@ -629,44 +684,63 @@ def evaluate_model(ticker):
         model: 'prophet' or 'chronos' (default: prophet)
     """
     ticker = ticker.upper()
-    model_type = request.args.get('model', 'prophet').lower()
+    model_type = request.args.get("model", "prophet").lower()
 
     try:
-        if model_type == 'chronos':
+        if model_type == "chronos":
             if ticker not in chronos_forecasters:
-                return jsonify({'error': 'Chronos model not loaded yet. Call /api/forecast?model=chronos first.'}), 404
+                return (
+                    jsonify(
+                        {
+                            "error": "Chronos model not loaded yet. Call /api/forecast?model=chronos first."
+                        }
+                    ),
+                    404,
+                )
 
             evaluation = chronos_forecasters[ticker].evaluate(test_days=30)
 
-            return jsonify({
-                'ticker': ticker,
-                'model': 'chronos-bolt',
-                'mape': float(evaluation['mape']),
-                'rmse': float(evaluation['rmse']),
-                'mae': float(evaluation['mae']),
-                'directional_accuracy': float(evaluation['directional_accuracy']),
-                'test_days': evaluation['test_days'],
-                'model_variant': evaluation.get('model_variant', 'small')
-            })
+            return jsonify(
+                {
+                    "ticker": ticker,
+                    "model": "chronos-bolt",
+                    "mape": float(evaluation["mape"]),
+                    "rmse": float(evaluation["rmse"]),
+                    "mae": float(evaluation["mae"]),
+                    "directional_accuracy": float(evaluation["directional_accuracy"]),
+                    "test_days": evaluation["test_days"],
+                    "model_variant": evaluation.get("model_variant", "small"),
+                }
+            )
         else:
             # Prophet evaluation
             if ticker not in forecasters:
-                return jsonify({'error': 'Prophet model not trained yet. Call /api/forecast first.'}), 404
+                return (
+                    jsonify(
+                        {
+                            "error": "Prophet model not trained yet. Call /api/forecast first."
+                        }
+                    ),
+                    404,
+                )
 
             evaluation = forecasters[ticker].evaluate(test_days=30)
 
-            return jsonify({
-                'ticker': ticker,
-                'model': 'prophet',
-                'mape': float(evaluation['mape']),
-                'rmse': float(evaluation['rmse']),
-                'mae': float(evaluation['mae']),
-                'directional_accuracy': float(evaluation['directional_accuracy']),
-                'test_days': evaluation['test_days']
-            })
+            return jsonify(
+                {
+                    "ticker": ticker,
+                    "model": "prophet",
+                    "mape": float(evaluation["mape"]),
+                    "rmse": float(evaluation["rmse"]),
+                    "mae": float(evaluation["mae"]),
+                    "directional_accuracy": float(evaluation["directional_accuracy"]),
+                    "test_days": evaluation["test_days"],
+                }
+            )
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 # ============================================================================
 # SCRAPING ENDPOINTS
@@ -674,106 +748,117 @@ def evaluate_model(ticker):
 
 # Global scraping state
 scraping_status = {
-    'running': False,
-    'progress': 0,
-    'message': 'Ready',
-    'current_company': None,
-    'results': []
+    "running": False,
+    "progress": 0,
+    "message": "Ready",
+    "current_company": None,
+    "results": [],
 }
+
 
 def run_scraping_task(companies, scrape_type):
     """Background task to scrape companies"""
-    scraping_status['running'] = True
-    scraping_status['progress'] = 0
-    scraping_status['results'] = []
+    scraping_status["running"] = True
+    scraping_status["progress"] = 0
+    scraping_status["results"] = []
 
     scraper = SecTranscriptScraper()
     total = len(companies)
 
     for i, ticker in enumerate(companies):
         try:
-            scraping_status['current_company'] = ticker
-            scraping_status['message'] = f'Scraping {ticker} ({i+1}/{total})...'
-            scraping_status['progress'] = int((i / total) * 100)
+            scraping_status["current_company"] = ticker
+            scraping_status["message"] = f"Scraping {ticker} ({i+1}/{total})..."
+            scraping_status["progress"] = int((i / total) * 100)
 
-            result = {'ticker': ticker, 'sec_filings': 0, 'transcripts': 0, 'errors': []}
+            result = {
+                "ticker": ticker,
+                "sec_filings": 0,
+                "transcripts": 0,
+                "errors": [],
+            }
 
             # Scrape SEC filings
-            if scrape_type in ['all', 'sec']:
+            if scrape_type in ["all", "sec"]:
                 try:
                     filings = scraper.scrape_sec_filings(ticker, num_filings=5)
                     if filings:
                         saved = scraper.save_raw_pdf_files(filings)
-                        result['sec_filings'] = len(saved)
+                        result["sec_filings"] = len(saved)
                 except Exception as e:
-                    result['errors'].append(f'SEC: {str(e)}')
+                    result["errors"].append(f"SEC: {str(e)}")
 
             # Scrape transcripts
-            if scrape_type in ['all', 'transcripts']:
+            if scrape_type in ["all", "transcripts"]:
                 try:
-                    transcripts = scraper.scrape_earnings_transcripts(ticker, num_quarters=4)
-                    result['transcripts'] = len(transcripts)
+                    transcripts = scraper.scrape_earnings_transcripts(
+                        ticker, num_quarters=4
+                    )
+                    result["transcripts"] = len(transcripts)
                 except Exception as e:
-                    result['errors'].append(f'Transcripts: {str(e)}')
+                    result["errors"].append(f"Transcripts: {str(e)}")
 
-            scraping_status['results'].append(result)
+            scraping_status["results"].append(result)
 
         except Exception as e:
-            scraping_status['results'].append({
-                'ticker': ticker,
-                'sec_filings': 0,
-                'transcripts': 0,
-                'errors': [str(e)]
-            })
+            scraping_status["results"].append(
+                {
+                    "ticker": ticker,
+                    "sec_filings": 0,
+                    "transcripts": 0,
+                    "errors": [str(e)],
+                }
+            )
 
-    scraping_status['running'] = False
-    scraping_status['progress'] = 100
-    scraping_status['current_company'] = None
-    scraping_status['message'] = f'Completed scraping {total} companies'
+    scraping_status["running"] = False
+    scraping_status["progress"] = 100
+    scraping_status["current_company"] = None
+    scraping_status["message"] = f"Completed scraping {total} companies"
 
 
-@app.route('/api/scraping/status', methods=['GET'])
+@app.route("/api/scraping/status", methods=["GET"])
 def get_scraping_status():
     """Get scraping progress status"""
     return jsonify(scraping_status)
 
 
-@app.route('/api/scraping/start', methods=['POST'])
+@app.route("/api/scraping/start", methods=["POST"])
 def start_scraping():
     """Start scraping process in background"""
-    if scraping_status['running']:
-        return jsonify({
-            'status': 'error',
-            'message': 'Scraping already in progress'
-        }), 400
+    if scraping_status["running"]:
+        return (
+            jsonify({"status": "error", "message": "Scraping already in progress"}),
+            400,
+        )
 
     data = request.json or {}
-    scrape_type = data.get('type', 'all')
-    companies = data.get('companies', [])
+    scrape_type = data.get("type", "all")
+    companies = data.get("companies", [])
 
     if not companies:
-        return jsonify({
-            'status': 'error',
-            'message': 'No companies specified'
-        }), 400
+        return jsonify({"status": "error", "message": "No companies specified"}), 400
 
     # Start scraping in background thread
     thread = threading.Thread(target=run_scraping_task, args=(companies, scrape_type))
     thread.daemon = True
     thread.start()
 
-    return jsonify({
-        'status': 'started',
-        'type': scrape_type,
-        'companies': companies,
-        'message': f'Started scraping {len(companies)} companies'
-    })
+    return jsonify(
+        {
+            "status": "started",
+            "type": scrape_type,
+            "companies": companies,
+            "message": f"Started scraping {len(companies)} companies",
+        }
+    )
+
 
 # ============================================================================
 # SENTIMENT ANALYSIS ENDPOINTS (AWS Comprehend NLP)
 # ============================================================================
 
-@app.route('/api/sentiment/<ticker>', methods=['GET'])
+
+@app.route("/api/sentiment/<ticker>", methods=["GET"])
 def get_sentiment_analysis(ticker):
     """
     Get comprehensive sentiment analysis for a ticker using AWS Comprehend
@@ -792,7 +877,7 @@ def get_sentiment_analysis(ticker):
     """
     try:
         ticker = ticker.upper()
-        refresh = request.args.get('refresh', 'false').lower() == 'true'
+        refresh = request.args.get("refresh", "false").lower() == "true"
 
         # Get all artifacts for this ticker
         artifacts = s3_service.get_artifacts_table()
@@ -805,28 +890,33 @@ def get_sentiment_analysis(ticker):
         if not refresh:
             cached_data = sentiment_cache.get(ticker, artifacts)
             if cached_data:
-                cached_data['from_cache'] = True
+                cached_data["from_cache"] = True
                 return jsonify(cached_data)
 
         # Perform comprehensive sentiment analysis
         print(f"Analyzing sentiment for {ticker}...")
 
         # Check if entities should be included
-        include_entities = request.args.get('include_entities', 'true').lower() == 'true'
+        include_entities = (
+            request.args.get("include_entities", "true").lower() == "true"
+        )
 
         sentiment_data = comprehend_service.analyze_ticker_sentiment(
-            ticker,
-            artifacts,
-            include_entities=include_entities
+            ticker, artifacts, include_entities=include_entities
         )
 
         if not sentiment_data:
-            return jsonify({
-                'error': 'No documents found for sentiment analysis',
-                'ticker': ticker
-            }), 404
+            return (
+                jsonify(
+                    {
+                        "error": "No documents found for sentiment analysis",
+                        "ticker": ticker,
+                    }
+                ),
+                404,
+            )
 
-        sentiment_data['from_cache'] = False
+        sentiment_data["from_cache"] = False
 
         # Cache the results
         sentiment_cache.set(ticker, artifacts, sentiment_data)
@@ -837,9 +927,10 @@ def get_sentiment_analysis(ticker):
     except Exception as e:
         print(f"Error analyzing sentiment: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/sentiment/<ticker>/timeline', methods=['GET'])
+
+@app.route("/api/sentiment/<ticker>/timeline", methods=["GET"])
 def get_sentiment_timeline(ticker):
     """Get sentiment timeline for a specific ticker"""
     try:
@@ -849,38 +940,38 @@ def get_sentiment_timeline(ticker):
         sentiment_data = comprehend_service.analyze_ticker_sentiment(ticker, artifacts)
 
         if not sentiment_data:
-            return jsonify({'error': 'No documents found'}), 404
+            return jsonify({"error": "No documents found"}), 404
 
-        return jsonify({
-            'ticker': ticker,
-            'timeline': sentiment_data.get('timeline', [])
-        })
+        return jsonify(
+            {"ticker": ticker, "timeline": sentiment_data.get("timeline", [])}
+        )
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/sentiment/<ticker>/words', methods=['GET'])
+
+@app.route("/api/sentiment/<ticker>/words", methods=["GET"])
 def get_word_frequency(ticker):
     """Get word frequency analysis for a ticker"""
     try:
         ticker = ticker.upper()
-        top_n = int(request.args.get('top_n', 50))
+        top_n = int(request.args.get("top_n", 50))
 
         artifacts = s3_service.get_artifacts_table()
         sentiment_data = comprehend_service.analyze_ticker_sentiment(ticker, artifacts)
 
         if not sentiment_data:
-            return jsonify({'error': 'No documents found'}), 404
+            return jsonify({"error": "No documents found"}), 404
 
-        return jsonify({
-            'ticker': ticker,
-            'words': sentiment_data.get('wordFrequency', [])[:top_n]
-        })
+        return jsonify(
+            {"ticker": ticker, "words": sentiment_data.get("wordFrequency", [])[:top_n]}
+        )
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/sentiment/<ticker>/targeted', methods=['GET'])
+
+@app.route("/api/sentiment/<ticker>/targeted", methods=["GET"])
 def get_targeted_sentiment(ticker):
     """
     Get AWS Comprehend Targeted Sentiment Analysis
@@ -897,17 +988,23 @@ def get_targeted_sentiment(ticker):
 
         # Filter for transcripts only (better quality text than SEC PDFs)
         ticker_artifacts = [
-            a for a in artifacts
-            if a.get('ticker') == ticker
-            and 'transcript' in a.get('type', '').lower()
-            and a.get('s3_key', '').endswith('.txt')  # Alpha Vantage transcripts only
+            a
+            for a in artifacts
+            if a.get("ticker") == ticker
+            and "transcript" in a.get("type", "").lower()
+            and a.get("s3_key", "").endswith(".txt")  # Alpha Vantage transcripts only
         ]
 
         if not ticker_artifacts:
-            return jsonify({
-                'error': 'No Alpha Vantage transcripts found for targeted sentiment',
-                'ticker': ticker
-            }), 404
+            return (
+                jsonify(
+                    {
+                        "error": "No Alpha Vantage transcripts found for targeted sentiment",
+                        "ticker": ticker,
+                    }
+                ),
+                404,
+            )
 
         print(f"Running targeted sentiment analysis for {ticker}...")
 
@@ -916,8 +1013,8 @@ def get_targeted_sentiment(ticker):
 
         # Analyze a sample of transcripts (targeted sentiment is more expensive)
         for artifact in ticker_artifacts[:5]:  # Limit to 5 docs for cost
-            s3_key = artifact.get('s3_key')
-            doc_type = artifact.get('type', '')
+            s3_key = artifact.get("s3_key")
+            doc_type = artifact.get("type", "")
 
             if not s3_key:
                 continue
@@ -930,36 +1027,45 @@ def get_targeted_sentiment(ticker):
 
             # Analyze first 5000 chars
             sample_text = text[:5000]
-            targeted_entities = comprehend_service.detect_targeted_sentiment(sample_text)
+            targeted_entities = comprehend_service.detect_targeted_sentiment(
+                sample_text
+            )
 
             if targeted_entities:
                 all_targeted_entities.extend(targeted_entities)
                 docs_analyzed += 1
 
         if not all_targeted_entities:
-            return jsonify({
-                'error': 'No targeted sentiment data extracted',
-                'ticker': ticker
-            }), 404
+            return (
+                jsonify(
+                    {"error": "No targeted sentiment data extracted", "ticker": ticker}
+                ),
+                404,
+            )
 
         # Summarize targeted sentiment
-        entity_sentiments = comprehend_service._summarize_targeted_sentiment(all_targeted_entities)
+        entity_sentiments = comprehend_service._summarize_targeted_sentiment(
+            all_targeted_entities
+        )
 
         print(f"Extracted targeted sentiment for {len(entity_sentiments)} entities")
 
-        return jsonify({
-            'ticker': ticker,
-            'documents_analyzed': docs_analyzed,
-            'entity_count': len(entity_sentiments),
-            'entities': entity_sentiments
-        })
+        return jsonify(
+            {
+                "ticker": ticker,
+                "documents_analyzed": docs_analyzed,
+                "entity_count": len(entity_sentiments),
+                "entities": entity_sentiments,
+            }
+        )
 
     except Exception as e:
         print(f"Error in targeted sentiment: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/sentiment/<ticker>/alphavantage', methods=['GET'])
+
+@app.route("/api/sentiment/<ticker>/alphavantage", methods=["GET"])
 def get_alphavantage_sentiment(ticker):
     """
     Get Alpha Vantage sentiment scores over time for earnings call transcripts
@@ -973,92 +1079,114 @@ def get_alphavantage_sentiment(ticker):
 
         # Filter for Alpha Vantage transcripts (.txt files)
         transcript_artifacts = [
-            a for a in artifacts
-            if a.get('ticker') == ticker
-            and 'transcript' in a.get('type', '').lower()
-            and a.get('s3_key', '').endswith('.txt')  # Alpha Vantage transcripts
+            a
+            for a in artifacts
+            if a.get("ticker") == ticker
+            and "transcript" in a.get("type", "").lower()
+            and a.get("s3_key", "").endswith(".txt")  # Alpha Vantage transcripts
         ]
 
         if not transcript_artifacts:
-            return jsonify({
-                'error': 'No Alpha Vantage transcripts found',
-                'ticker': ticker
-            }), 404
+            return (
+                jsonify(
+                    {"error": "No Alpha Vantage transcripts found", "ticker": ticker}
+                ),
+                404,
+            )
 
         timeline = []
 
         for artifact in transcript_artifacts:
-            s3_key = artifact.get('s3_key')
-            date = artifact.get('date')
+            s3_key = artifact.get("s3_key")
+            date = artifact.get("date")
 
             print(f"  Extracting Alpha Vantage sentiment from {s3_key}")
 
             sentiment_data = comprehend_service.extract_alphavantage_sentiment(s3_key)
 
             if sentiment_data:
-                timeline.append({
-                    'date': date,
-                    's3_key': s3_key,
-                    'quarter': s3_key.split('_')[1].replace('transcript.txt', '').strip('_'),
-                    'sentiment': sentiment_data
-                })
+                timeline.append(
+                    {
+                        "date": date,
+                        "s3_key": s3_key,
+                        "quarter": s3_key.split("_")[1]
+                        .replace("transcript.txt", "")
+                        .strip("_"),
+                        "sentiment": sentiment_data,
+                    }
+                )
 
         if not timeline:
-            return jsonify({
-                'error': 'Could not extract sentiment from transcripts',
-                'ticker': ticker
-            }), 404
+            return (
+                jsonify(
+                    {
+                        "error": "Could not extract sentiment from transcripts",
+                        "ticker": ticker,
+                    }
+                ),
+                404,
+            )
 
         # Sort by date
-        timeline.sort(key=lambda x: x['date'])
+        timeline.sort(key=lambda x: x["date"])
 
         # Calculate overall statistics
-        overall_scores = [t['sentiment']['overall_score'] for t in timeline]
+        overall_scores = [t["sentiment"]["overall_score"] for t in timeline]
 
-        return jsonify({
-            'ticker': ticker,
-            'timeline': timeline,
-            'overall': {
-                'average_score': sum(overall_scores) / len(overall_scores),
-                'min_score': min(overall_scores),
-                'max_score': max(overall_scores),
-                'transcript_count': len(timeline)
+        return jsonify(
+            {
+                "ticker": ticker,
+                "timeline": timeline,
+                "overall": {
+                    "average_score": sum(overall_scores) / len(overall_scores),
+                    "min_score": min(overall_scores),
+                    "max_score": max(overall_scores),
+                    "transcript_count": len(timeline),
+                },
             }
-        })
+        )
 
     except Exception as e:
         print(f"Error extracting Alpha Vantage sentiment: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/sentiment/cache/stats', methods=['GET'])
+
+@app.route("/api/sentiment/cache/stats", methods=["GET"])
 def get_cache_stats():
     """Get sentiment cache statistics"""
     try:
         stats = sentiment_cache.get_cache_stats()
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/sentiment/cache/clear', methods=['POST'])
+
+@app.route("/api/sentiment/cache/clear", methods=["POST"])
 def clear_cache():
     """Clear sentiment cache (optional: specific ticker)"""
     try:
-        ticker = request.args.get('ticker')
+        ticker = request.args.get("ticker")
         sentiment_cache.invalidate(ticker)
 
-        return jsonify({
-            'status': 'success',
-            'message': f'Cache cleared for {ticker}' if ticker else 'All cache cleared'
-        })
+        return jsonify(
+            {
+                "status": "success",
+                "message": (
+                    f"Cache cleared for {ticker}" if ticker else "All cache cleared"
+                ),
+            }
+        )
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 # ============================================================================
 # FINANCIAL DATA ENDPOINTS (AWS Textract SEC Filing Extraction)
 # ============================================================================
 
-@app.route('/api/financials/<ticker>', methods=['GET'])
+
+@app.route("/api/financials/<ticker>", methods=["GET"])
 def get_financials(ticker):
     """
     Extract financial metrics from SEC filings using AWS Textract
@@ -1077,6 +1205,7 @@ def get_financials(ticker):
         # Import and initialize financial extractor
         # Using HTML extractor for modern iXBRL filings (more reliable than Textract)
         from services.financial_html_extractor import FinancialHtmlExtractor
+
         extractor = FinancialHtmlExtractor()
 
         print(f"Extracting financial data for {ticker}...")
@@ -1085,11 +1214,16 @@ def get_financials(ticker):
         financials = extractor.extract_all_financials_for_ticker(ticker, artifacts)
 
         if not financials:
-            return jsonify({
-                'error': 'No financial data extracted',
-                'ticker': ticker,
-                'message': 'No SEC filings found or extraction failed'
-            }), 404
+            return (
+                jsonify(
+                    {
+                        "error": "No financial data extracted",
+                        "ticker": ticker,
+                        "message": "No SEC filings found or extraction failed",
+                    }
+                ),
+                404,
+            )
 
         # Calculate rolling averages
         financials_with_avg = extractor.calculate_rolling_averages(financials, window=4)
@@ -1098,25 +1232,27 @@ def get_financials(ticker):
         latest = financials_with_avg[-1] if financials_with_avg else {}
 
         summary = {
-            'ticker': ticker,
-            'latest_filing': {
-                'date': latest.get('date'),
-                'type': latest.get('type'),
-                'revenue': latest.get('revenue'),
-                'subscription_revenue': latest.get('subscription_revenue'),
-                'arr': latest.get('arr'),
-                'net_income': latest.get('net_income'),
-                'operating_income': latest.get('operating_income'),
-                'eps': latest.get('eps')
+            "ticker": ticker,
+            "latest_filing": {
+                "date": latest.get("date"),
+                "type": latest.get("type"),
+                "revenue": latest.get("revenue"),
+                "subscription_revenue": latest.get("subscription_revenue"),
+                "arr": latest.get("arr"),
+                "net_income": latest.get("net_income"),
+                "operating_income": latest.get("operating_income"),
+                "eps": latest.get("eps"),
             },
-            'rolling_averages': {
-                'revenue_4q_avg': latest.get('revenue_rolling_avg'),
-                'subscription_revenue_4q_avg': latest.get('subscription_revenue_rolling_avg'),
-                'net_income_4q_avg': latest.get('net_income_rolling_avg'),
-                'operating_income_4q_avg': latest.get('operating_income_rolling_avg')
+            "rolling_averages": {
+                "revenue_4q_avg": latest.get("revenue_rolling_avg"),
+                "subscription_revenue_4q_avg": latest.get(
+                    "subscription_revenue_rolling_avg"
+                ),
+                "net_income_4q_avg": latest.get("net_income_rolling_avg"),
+                "operating_income_4q_avg": latest.get("operating_income_rolling_avg"),
             },
-            'timeline': financials_with_avg,
-            'filing_count': len(financials_with_avg)
+            "timeline": financials_with_avg,
+            "filing_count": len(financials_with_avg),
         }
 
         print(f"Extracted {len(financials_with_avg)} financial data points")
@@ -1126,13 +1262,15 @@ def get_financials(ticker):
     except Exception as e:
         print(f"Error extracting financials: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 # ============================================================================
 # COMPANY GROWTH ENDPOINTS (CoreSignal API)
 # ============================================================================
 
-@app.route('/api/company-growth/available', methods=['GET'])
+
+@app.route("/api/company-growth/available", methods=["GET"])
 def get_available_growth_companies():
     """
     Get list of companies available for growth metrics
@@ -1142,16 +1280,13 @@ def get_available_growth_companies():
     """
     try:
         companies = coresignal_service.get_available_companies()
-        return jsonify({
-            'companies': companies,
-            'count': len(companies)
-        })
+        return jsonify({"companies": companies, "count": len(companies)})
     except Exception as e:
         print(f"Error getting available companies: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/company-growth/<ticker>', methods=['GET'])
+@app.route("/api/company-growth/<ticker>", methods=["GET"])
 def get_company_growth(ticker):
     """
     Get company growth metrics from CoreSignal (with RDS storage)
@@ -1170,11 +1305,16 @@ def get_company_growth(ticker):
 
         # Check if ticker is in our curated list
         if not coresignal_service.is_valid_ticker(ticker):
-            return jsonify({
-                'error': f'Company {ticker} not in curated list',
-                'ticker': ticker,
-                'available': list(CORESIGNAL_COMPANIES.keys())
-            }), 404
+            return (
+                jsonify(
+                    {
+                        "error": f"Company {ticker} not in curated list",
+                        "ticker": ticker,
+                        "available": list(CORESIGNAL_COMPANIES.keys()),
+                    }
+                ),
+                404,
+            )
 
         print(f"Fetching CoreSignal growth data for {ticker}...")
 
@@ -1190,25 +1330,31 @@ def get_company_growth(ticker):
         # Build response
         latest_employee_count = None
         if headcount_history:
-            latest_employee_count = headcount_history[-1].get('employee_count')
+            latest_employee_count = headcount_history[-1].get("employee_count")
         elif jobs_data:
-            latest_employee_count = jobs_data.get('employee_count')
+            latest_employee_count = jobs_data.get("employee_count")
 
         response_data = {
-            'ticker': ticker,
-            'company': {
-                'name': company_info.get('name', ticker),
-                'domain': company_info.get('domain'),
-                'coresignal_id': company_info.get('id')
+            "ticker": ticker,
+            "company": {
+                "name": company_info.get("name", ticker),
+                "domain": company_info.get("domain"),
+                "coresignal_id": company_info.get("id"),
             },
-            'employee_count': latest_employee_count,
-            'headcount_history': headcount_history,
-            'jobs_by_function': jobs_data.get('jobs_by_function', {}) if jobs_data else {},
-            'jobs_by_seniority': jobs_data.get('jobs_by_seniority', {}) if jobs_data else {},
-            'total_jobs': jobs_data.get('total_jobs', 0) if jobs_data else 0,
-            'hiring_intensity': jobs_data.get('hiring_intensity', 0) if jobs_data else 0,
-            'data_freshness': jobs_data.get('snapshot_date') if jobs_data else None,
-            'from_cache': jobs_data.get('from_cache', False) if jobs_data else False
+            "employee_count": latest_employee_count,
+            "headcount_history": headcount_history,
+            "jobs_by_function": (
+                jobs_data.get("jobs_by_function", {}) if jobs_data else {}
+            ),
+            "jobs_by_seniority": (
+                jobs_data.get("jobs_by_seniority", {}) if jobs_data else {}
+            ),
+            "total_jobs": jobs_data.get("total_jobs", 0) if jobs_data else 0,
+            "hiring_intensity": (
+                jobs_data.get("hiring_intensity", 0) if jobs_data else 0
+            ),
+            "data_freshness": jobs_data.get("snapshot_date") if jobs_data else None,
+            "from_cache": jobs_data.get("from_cache", False) if jobs_data else False,
         }
 
         return jsonify(response_data)
@@ -1216,10 +1362,10 @@ def get_company_growth(ticker):
     except Exception as e:
         print(f"Error fetching company growth: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/company-growth/compare', methods=['GET'])
+@app.route("/api/company-growth/compare", methods=["GET"])
 def compare_companies():
     """
     Compare growth metrics for multiple companies
@@ -1231,40 +1377,47 @@ def compare_companies():
         Comprehensive comparison data for visualizations
     """
     try:
-        tickers_param = request.args.get('tickers', '')
+        tickers_param = request.args.get("tickers", "")
         if not tickers_param:
-            return jsonify({
-                'error': 'tickers parameter required',
-                'example': '/api/company-growth/compare?tickers=CRWD,ZS,NET'
-            }), 400
+            return (
+                jsonify(
+                    {
+                        "error": "tickers parameter required",
+                        "example": "/api/company-growth/compare?tickers=CRWD,ZS,NET",
+                    }
+                ),
+                400,
+            )
 
-        tickers = [t.strip().upper() for t in tickers_param.split(',')][:3]
+        tickers = [t.strip().upper() for t in tickers_param.split(",")][:3]
 
         # Validate all tickers
         invalid = [t for t in tickers if not coresignal_service.is_valid_ticker(t)]
         if invalid:
-            return jsonify({
-                'error': f'Invalid tickers: {invalid}',
-                'available': list(CORESIGNAL_COMPANIES.keys())
-            }), 400
+            return (
+                jsonify(
+                    {
+                        "error": f"Invalid tickers: {invalid}",
+                        "available": list(CORESIGNAL_COMPANIES.keys()),
+                    }
+                ),
+                400,
+            )
 
         print(f"Comparing companies: {tickers}")
 
         # Get comparison data
         comparison_data = coresignal_service.get_comparison_data(tickers)
 
-        return jsonify({
-            'tickers': tickers,
-            **comparison_data
-        })
+        return jsonify({"tickers": tickers, **comparison_data})
 
     except Exception as e:
         print(f"Error comparing companies: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/company-growth/<ticker>/jobs', methods=['GET'])
+@app.route("/api/company-growth/<ticker>/jobs", methods=["GET"])
 def get_company_jobs(ticker):
     """
     Get current job postings breakdown for a company
@@ -1278,39 +1431,43 @@ def get_company_jobs(ticker):
         ticker = ticker.upper()
 
         if not coresignal_service.is_valid_ticker(ticker):
-            return jsonify({
-                'error': f'Company {ticker} not in curated list',
-                'available': list(CORESIGNAL_COMPANIES.keys())
-            }), 404
+            return (
+                jsonify(
+                    {
+                        "error": f"Company {ticker} not in curated list",
+                        "available": list(CORESIGNAL_COMPANIES.keys()),
+                    }
+                ),
+                404,
+            )
 
         company_info = CORESIGNAL_COMPANIES.get(ticker, {})
         jobs_data = coresignal_service.get_latest_jobs(ticker)
 
         if not jobs_data:
-            return jsonify({
-                'error': 'No jobs data available',
-                'ticker': ticker
-            }), 404
+            return jsonify({"error": "No jobs data available", "ticker": ticker}), 404
 
-        return jsonify({
-            'ticker': ticker,
-            'company_name': company_info.get('name', ticker),
-            'jobs_by_function': jobs_data.get('jobs_by_function', {}),
-            'jobs_by_seniority': jobs_data.get('jobs_by_seniority', {}),
-            'total_jobs': jobs_data.get('total_jobs', 0),
-            'employee_count': jobs_data.get('employee_count'),
-            'hiring_intensity': jobs_data.get('hiring_intensity', 0),
-            'snapshot_date': jobs_data.get('snapshot_date'),
-            'from_cache': jobs_data.get('from_cache', False)
-        })
+        return jsonify(
+            {
+                "ticker": ticker,
+                "company_name": company_info.get("name", ticker),
+                "jobs_by_function": jobs_data.get("jobs_by_function", {}),
+                "jobs_by_seniority": jobs_data.get("jobs_by_seniority", {}),
+                "total_jobs": jobs_data.get("total_jobs", 0),
+                "employee_count": jobs_data.get("employee_count"),
+                "hiring_intensity": jobs_data.get("hiring_intensity", 0),
+                "snapshot_date": jobs_data.get("snapshot_date"),
+                "from_cache": jobs_data.get("from_cache", False),
+            }
+        )
 
     except Exception as e:
         print(f"Error fetching jobs: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/company-growth/<ticker>/headcount', methods=['GET'])
+@app.route("/api/company-growth/<ticker>/headcount", methods=["GET"])
 def get_company_headcount(ticker):
     """
     Get headcount history for a company
@@ -1323,35 +1480,45 @@ def get_company_headcount(ticker):
     """
     try:
         ticker = ticker.upper()
-        limit = int(request.args.get('limit', 100))
+        limit = int(request.args.get("limit", 100))
 
         if not coresignal_service.is_valid_ticker(ticker):
-            return jsonify({
-                'error': f'Company {ticker} not in curated list',
-                'available': list(CORESIGNAL_COMPANIES.keys())
-            }), 404
+            return (
+                jsonify(
+                    {
+                        "error": f"Company {ticker} not in curated list",
+                        "available": list(CORESIGNAL_COMPANIES.keys()),
+                    }
+                ),
+                404,
+            )
 
         company_info = CORESIGNAL_COMPANIES.get(ticker, {})
-        headcount_history = coresignal_service.get_headcount_history(ticker, limit=limit)
+        headcount_history = coresignal_service.get_headcount_history(
+            ticker, limit=limit
+        )
 
-        return jsonify({
-            'ticker': ticker,
-            'company_name': company_info.get('name', ticker),
-            'headcount_history': headcount_history,
-            'count': len(headcount_history)
-        })
+        return jsonify(
+            {
+                "ticker": ticker,
+                "company_name": company_info.get("name", ticker),
+                "headcount_history": headcount_history,
+                "count": len(headcount_history),
+            }
+        )
 
     except Exception as e:
         print(f"Error fetching headcount: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # ============================================================================
 # LEX CHATBOT ENDPOINTS (Amazon Lex V2 Integration)
 # ============================================================================
 
-@app.route('/api/lex/message', methods=['POST'])
+
+@app.route("/api/lex/message", methods=["POST"])
 def lex_message():
     """
     Send a message to the Lex chatbot and get a response
@@ -1372,11 +1539,11 @@ def lex_message():
     """
     try:
         data = request.json
-        message = data.get('message', '')
-        session_id = data.get('sessionId')
+        message = data.get("message", "")
+        session_id = data.get("sessionId")
 
         if not message:
-            return jsonify({'error': 'Message is required'}), 400
+            return jsonify({"error": "Message is required"}), 400
 
         response = lex_service.send_message(message, session_id)
         return jsonify(response)
@@ -1384,26 +1551,28 @@ def lex_message():
     except Exception as e:
         print(f"Error in Lex message: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/lex/session', methods=['DELETE'])
+@app.route("/api/lex/session", methods=["DELETE"])
 def lex_end_session():
     """End a Lex conversation session"""
     try:
-        session_id = request.args.get('sessionId')
+        session_id = request.args.get("sessionId")
         if not session_id:
-            return jsonify({'error': 'sessionId is required'}), 400
+            return jsonify({"error": "sessionId is required"}), 400
 
         success = lex_service.end_session(session_id)
-        return jsonify({
-            'success': success,
-            'message': 'Session ended' if success else 'Failed to end session'
-        })
+        return jsonify(
+            {
+                "success": success,
+                "message": "Session ended" if success else "Failed to end session",
+            }
+        )
 
     except Exception as e:
         print(f"Error ending Lex session: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # ============================================================================
@@ -1415,17 +1584,20 @@ _llm_chat_service = None
 _memory_service = None
 _neo4j_service = None
 
+
 def get_llm_chat():
     """Lazy load LLM chat service"""
     global _llm_chat_service
     if _llm_chat_service is None:
         try:
             from services.llm_chat_service import LLMChatService
+
             _llm_chat_service = LLMChatService()
             print("✅ LLM chat service initialized")
         except Exception as e:
             print(f"⚠️  LLM chat service not available: {e}")
     return _llm_chat_service
+
 
 def get_memory():
     """Lazy load memory service"""
@@ -1433,6 +1605,7 @@ def get_memory():
     if _memory_service is None:
         try:
             from services.memory_service import MemoryService
+
             _memory_service = MemoryService()
             _memory_service.init_schema()
             print("✅ Memory service initialized")
@@ -1440,12 +1613,14 @@ def get_memory():
             print(f"⚠️  Memory service not available: {e}")
     return _memory_service
 
+
 def get_neo4j():
     """Lazy load Neo4j service"""
     global _neo4j_service
     if _neo4j_service is None:
         try:
             from services.neo4j_service import Neo4jService
+
             _neo4j_service = Neo4jService()
             if _neo4j_service.is_connected():
                 print("✅ Neo4j service connected")
@@ -1456,7 +1631,7 @@ def get_neo4j():
     return _neo4j_service
 
 
-@app.route('/api/chat', methods=['POST'])
+@app.route("/api/chat", methods=["POST"])
 def chat():
     """
     Main chat endpoint for GraphRAG-powered LLM assistant
@@ -1482,32 +1657,38 @@ def chat():
     try:
         data = request.json
         if not data:
-            return jsonify({'error': 'Request body required'}), 400
+            return jsonify({"error": "Request body required"}), 400
 
-        message = data.get('message', '').strip()
+        message = data.get("message", "").strip()
         if not message:
-            return jsonify({'error': 'Message is required'}), 400
+            return jsonify({"error": "Message is required"}), 400
 
-        session_id = data.get('session_id')
-        user_email = data.get('user_email')
+        session_id = data.get("session_id")
+        user_email = data.get("user_email")
 
         # Get auth token if present
-        auth_header = request.headers.get('Authorization', '')
+        auth_header = request.headers.get("Authorization", "")
         auth_token = None
-        if auth_header.startswith('Bearer '):
-            auth_token = auth_header.split(' ', 1)[1]
+        if auth_header.startswith("Bearer "):
+            auth_token = auth_header.split(" ", 1)[1]
 
         # Get LLM service
         llm_service = get_llm_chat()
         if not llm_service:
-            return jsonify({
-                'error': 'LLM service not available',
-                'message': 'The AI assistant is currently unavailable. Please try again later.'
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "error": "LLM service not available",
+                        "message": "The AI assistant is currently unavailable. Please try again later.",
+                    }
+                ),
+                503,
+            )
 
         # Generate session ID if not provided
         if not session_id:
             import uuid
+
             session_id = str(uuid.uuid4())
 
         # Process chat message
@@ -1515,7 +1696,7 @@ def chat():
             message=message,
             session_id=session_id,
             user_email=user_email,
-            auth_token=auth_token
+            auth_token=auth_token,
         )
 
         return jsonify(response)
@@ -1523,10 +1704,10 @@ def chat():
     except Exception as e:
         print(f"Error in chat: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/chat/history/<session_id>', methods=['GET'])
+@app.route("/api/chat/history/<session_id>", methods=["GET"])
 def get_chat_history(session_id):
     """
     Get conversation history for a session
@@ -1535,50 +1716,46 @@ def get_chat_history(session_id):
         List of messages with role, content, and timestamp
     """
     try:
-        limit = int(request.args.get('limit', 50))
+        limit = int(request.args.get("limit", 50))
 
         memory = get_memory()
         if not memory:
-            return jsonify({'error': 'Memory service not available'}), 503
+            return jsonify({"error": "Memory service not available"}), 503
 
         messages = memory.get_session_history(session_id, limit=limit)
 
-        return jsonify({
-            'session_id': session_id,
-            'messages': messages,
-            'count': len(messages)
-        })
+        return jsonify(
+            {"session_id": session_id, "messages": messages, "count": len(messages)}
+        )
 
     except Exception as e:
         print(f"Error getting chat history: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/chat/session/<session_id>', methods=['DELETE'])
+@app.route("/api/chat/session/<session_id>", methods=["DELETE"])
 def delete_chat_session(session_id):
     """Delete a chat session and its history"""
     try:
         memory = get_memory()
         if not memory:
-            return jsonify({'error': 'Memory service not available'}), 503
+            return jsonify({"error": "Memory service not available"}), 503
 
         memory.delete_session(session_id)
 
-        return jsonify({
-            'success': True,
-            'message': f'Session {session_id} deleted'
-        })
+        return jsonify({"success": True, "message": f"Session {session_id} deleted"})
 
     except Exception as e:
         print(f"Error deleting chat session: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # ============================================================================
 # KNOWLEDGE GRAPH ENDPOINTS (Neo4j)
 # ============================================================================
 
-@app.route('/api/knowledge-graph/<ticker>', methods=['GET'])
+
+@app.route("/api/knowledge-graph/<ticker>", methods=["GET"])
 def get_knowledge_graph(ticker):
     """
     Get knowledge graph data for visualization
@@ -1598,17 +1775,30 @@ def get_knowledge_graph(ticker):
 
         neo4j = get_neo4j()
         if not neo4j or not neo4j.is_connected():
-            return jsonify({
-                'error': 'Knowledge graph not available',
-                'message': 'Neo4j service is not connected'
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
 
-        depth = int(request.args.get('depth', 2))
-        include_organizations = request.args.get('include_organizations', 'true').lower() == 'true'
-        include_locations = request.args.get('include_locations', 'true').lower() == 'true'
-        include_concepts = request.args.get('include_concepts', 'true').lower() == 'true'
-        include_documents = request.args.get('include_documents', 'false').lower() == 'true'
-        limit = int(request.args.get('limit', 100))
+        depth = int(request.args.get("depth", 2))
+        include_organizations = (
+            request.args.get("include_organizations", "true").lower() == "true"
+        )
+        include_locations = (
+            request.args.get("include_locations", "true").lower() == "true"
+        )
+        include_concepts = (
+            request.args.get("include_concepts", "true").lower() == "true"
+        )
+        include_documents = (
+            request.args.get("include_documents", "false").lower() == "true"
+        )
+        limit = int(request.args.get("limit", 100))
 
         graph_data = neo4j.get_company_graph(
             ticker=ticker,
@@ -1617,21 +1807,18 @@ def get_knowledge_graph(ticker):
             include_locations=include_locations,
             include_concepts=include_concepts,
             include_documents=include_documents,
-            limit=limit
+            limit=limit,
         )
 
-        return jsonify({
-            'ticker': ticker,
-            **graph_data
-        })
+        return jsonify({"ticker": ticker, **graph_data})
 
     except Exception as e:
         print(f"Error getting knowledge graph: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/knowledge-graph/query', methods=['POST'])
+@app.route("/api/knowledge-graph/query", methods=["POST"])
 def query_knowledge_graph():
     """
     Natural language query over knowledge graph
@@ -1648,20 +1835,25 @@ def query_knowledge_graph():
     try:
         data = request.json
         if not data:
-            return jsonify({'error': 'Request body required'}), 400
+            return jsonify({"error": "Request body required"}), 400
 
-        query = data.get('query', '').strip()
+        query = data.get("query", "").strip()
         if not query:
-            return jsonify({'error': 'Query is required'}), 400
+            return jsonify({"error": "Query is required"}), 400
 
-        ticker = data.get('ticker')
+        ticker = data.get("ticker")
 
         neo4j = get_neo4j()
         if not neo4j or not neo4j.is_connected():
-            return jsonify({
-                'error': 'Knowledge graph not available',
-                'message': 'Neo4j service is not connected'
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
 
         results = neo4j.semantic_query(query, ticker)
 
@@ -1670,33 +1862,30 @@ def query_knowledge_graph():
     except Exception as e:
         print(f"Error in knowledge graph query: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/knowledge-graph/stats', methods=['GET'])
+@app.route("/api/knowledge-graph/stats", methods=["GET"])
 def get_knowledge_graph_stats():
     """Get knowledge graph statistics"""
     try:
         neo4j = get_neo4j()
         if not neo4j or not neo4j.is_connected():
-            return jsonify({
-                'error': 'Knowledge graph not available',
-                'connected': False
-            }), 503
+            return (
+                jsonify({"error": "Knowledge graph not available", "connected": False}),
+                503,
+            )
 
         stats = neo4j.get_stats()
 
-        return jsonify({
-            'connected': True,
-            **stats
-        })
+        return jsonify({"connected": True, **stats})
 
     except Exception as e:
         print(f"Error getting graph stats: {e}")
-        return jsonify({'error': str(e), 'connected': False}), 500
+        return jsonify({"error": str(e), "connected": False}), 500
 
 
-@app.route('/api/cypher/query', methods=['POST'])
+@app.route("/api/cypher/query", methods=["POST"])
 def execute_cypher():
     """
     Execute a Cypher query (read-only, for Cypher Console)
@@ -1712,23 +1901,28 @@ def execute_cypher():
     try:
         data = request.json
         if not data:
-            return jsonify({'error': 'Request body required'}), 400
+            return jsonify({"error": "Request body required"}), 400
 
-        query = data.get('query', '').strip()
+        query = data.get("query", "").strip()
         if not query:
-            return jsonify({'error': 'Query is required'}), 400
+            return jsonify({"error": "Query is required"}), 400
 
         neo4j = get_neo4j()
         if not neo4j or not neo4j.is_connected():
-            return jsonify({
-                'error': 'Knowledge graph not available',
-                'message': 'Neo4j service is not connected'
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
 
         # Execute with security filtering (blocks write operations)
         results = neo4j.execute_cypher_safe(query)
 
-        if 'error' in results:
+        if "error" in results:
             return jsonify(results), 400
 
         return jsonify(results)
@@ -1736,14 +1930,15 @@ def execute_cypher():
     except Exception as e:
         print(f"Error executing Cypher: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # ============================================================================
 # AUTHENTICATION ENDPOINTS (Cognito)
 # ============================================================================
 
-@app.route('/api/auth/status', methods=['GET'])
+
+@app.route("/api/auth/status", methods=["GET"])
 def auth_status():
     """
     Check current authentication status
@@ -1756,18 +1951,20 @@ def auth_status():
     """
     try:
         from services.cognito_auth_service import get_auth_status
+
         status = get_auth_status()
         return jsonify(status)
     except Exception as e:
         print(f"Error checking auth status: {e}")
-        return jsonify({'authenticated': False, 'error': str(e)})
+        return jsonify({"authenticated": False, "error": str(e)})
 
 
 # ============================================================================
 # ADMIN ENDPOINTS - Database migrations and maintenance
 # ============================================================================
 
-@app.route('/api/admin/neo4j/write', methods=['POST'])
+
+@app.route("/api/admin/neo4j/write", methods=["POST"])
 def admin_neo4j_write():
     """
     Execute a write Cypher query (admin only, for cleanup operations)
@@ -1784,101 +1981,112 @@ def admin_neo4j_write():
     try:
         data = request.json
         if not data:
-            return jsonify({'error': 'Request body required'}), 400
+            return jsonify({"error": "Request body required"}), 400
 
         # Simple admin key check (not for production security, just to prevent accidental calls)
-        admin_key = data.get('admin_key', '')
-        if admin_key != 'cleanup-2026':
-            return jsonify({'error': 'Invalid admin key'}), 403
+        admin_key = data.get("admin_key", "")
+        if admin_key != "cleanup-2026":
+            return jsonify({"error": "Invalid admin key"}), 403
 
-        query = data.get('query', '').strip()
+        query = data.get("query", "").strip()
         if not query:
-            return jsonify({'error': 'Query is required'}), 400
+            return jsonify({"error": "Query is required"}), 400
 
         neo4j = get_neo4j()
         if not neo4j or not neo4j.is_connected():
-            return jsonify({
-                'error': 'Knowledge graph not available',
-                'message': 'Neo4j service is not connected'
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
 
         # Execute write operation
         result = neo4j.execute_write(query)
 
-        return jsonify({
-            'success': True,
-            'result': result
-        })
+        return jsonify({"success": True, "result": result})
 
     except Exception as e:
         print(f"Error executing admin Cypher write: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/admin/migrate', methods=['POST'])
+@app.route("/api/admin/migrate", methods=["POST"])
 @require_cognito_auth
 def run_migration():
     """Run database migrations - add alternate_names column to companies. Requires auth."""
     try:
         conn = db_service._get_connection()
         if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
+            return jsonify({"error": "Database connection failed"}), 500
 
         cursor = conn.cursor()
 
         # Add alternate_names column if it doesn't exist
-        cursor.execute("""
+        cursor.execute(
+            """
             ALTER TABLE companies
             ADD COLUMN IF NOT EXISTS alternate_names TEXT
-        """)
+        """
+        )
         conn.commit()
 
         cursor.close()
-        return jsonify({
-            'success': True,
-            'message': 'Migration completed - alternate_names column added'
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": "Migration completed - alternate_names column added",
+            }
+        )
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/admin/companies/<ticker>/alternate-names', methods=['PUT'])
+@app.route("/api/admin/companies/<ticker>/alternate-names", methods=["PUT"])
 @require_cognito_auth
 def set_alternate_names(ticker):
     """Set alternate names for a company. Requires auth."""
     try:
         data = request.get_json()
-        alternate_names = data.get('alternate_names', '')
+        alternate_names = data.get("alternate_names", "")
 
         conn = db_service._get_connection()
         if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
+            return jsonify({"error": "Database connection failed"}), 500
 
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE companies
             SET alternate_names = %s
             WHERE ticker = %s
-        """, (alternate_names, ticker.upper()))
+        """,
+            (alternate_names, ticker.upper()),
+        )
         conn.commit()
 
         updated = cursor.rowcount
         cursor.close()
 
         if updated > 0:
-            return jsonify({
-                'success': True,
-                'ticker': ticker.upper(),
-                'alternate_names': alternate_names
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "ticker": ticker.upper(),
+                    "alternate_names": alternate_names,
+                }
+            )
         else:
-            return jsonify({'error': f'Company {ticker} not found'}), 404
+            return jsonify({"error": f"Company {ticker} not found"}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/admin/build-graph/<ticker>', methods=['POST'])
+@app.route("/api/admin/build-graph/<ticker>", methods=["POST"])
 @require_cognito_auth
 def build_knowledge_graph(ticker):
     """
@@ -1895,13 +2103,19 @@ def build_knowledge_graph(ticker):
         # Check if Neo4j is connected
         neo4j = get_neo4j()
         if not neo4j or not neo4j.is_connected():
-            return jsonify({
-                'error': 'Knowledge graph not available',
-                'message': 'Neo4j service is not connected'
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
 
         # Import and run graph builder
         from services.graph_builder_service import GraphBuilderService
+
         builder = GraphBuilderService()
 
         # Build graph for this ticker
@@ -1909,22 +2123,18 @@ def build_knowledge_graph(ticker):
             ticker=ticker,
             include_entities=True,
             include_concepts=True,
-            include_key_phrases=True
+            include_key_phrases=True,
         )
 
-        return jsonify({
-            'success': True,
-            'ticker': ticker,
-            **result
-        })
+        return jsonify({"success": True, "ticker": ticker, **result})
 
     except Exception as e:
         print(f"Error building knowledge graph: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/admin/build-graph', methods=['POST'])
+@app.route("/api/admin/build-graph", methods=["POST"])
 @require_cognito_auth
 def build_all_knowledge_graphs():
     """
@@ -1936,40 +2146,46 @@ def build_all_knowledge_graphs():
         # Check if Neo4j is connected
         neo4j = get_neo4j()
         if not neo4j or not neo4j.is_connected():
-            return jsonify({
-                'error': 'Knowledge graph not available',
-                'message': 'Neo4j service is not connected'
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
 
         # Get all companies from database
         companies = db_service.get_all_companies()
 
         from services.graph_builder_service import GraphBuilderService
+
         builder = GraphBuilderService()
 
         results = []
         for company in companies:
-            ticker = company.get('ticker')
+            ticker = company.get("ticker")
             if ticker:
                 try:
                     result = builder.build_graph_for_ticker(ticker)
-                    results.append({'ticker': ticker, 'status': 'success', **result})
+                    results.append({"ticker": ticker, "status": "success", **result})
                 except Exception as e:
-                    results.append({'ticker': ticker, 'status': 'error', 'error': str(e)})
+                    results.append(
+                        {"ticker": ticker, "status": "error", "error": str(e)}
+                    )
 
-        return jsonify({
-            'success': True,
-            'companies_processed': len(results),
-            'results': results
-        })
+        return jsonify(
+            {"success": True, "companies_processed": len(results), "results": results}
+        )
 
     except Exception as e:
         print(f"Error building knowledge graphs: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/admin/clear-graph', methods=['POST'])
+@app.route("/api/admin/clear-graph", methods=["POST"])
 @require_cognito_auth
 def clear_knowledge_graph():
     """
@@ -1980,10 +2196,15 @@ def clear_knowledge_graph():
     try:
         neo4j = get_neo4j()
         if not neo4j or not neo4j.is_connected():
-            return jsonify({
-                'error': 'Knowledge graph not available',
-                'message': 'Neo4j service is not connected'
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
 
         # Clear the graph
         result = neo4j.clear_graph()
@@ -1991,19 +2212,21 @@ def clear_knowledge_graph():
         # Create indexes for new schema
         neo4j.create_indexes()
 
-        return jsonify({
-            'success': True,
-            'message': 'Knowledge graph cleared and indexes created',
-            'result': result
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": "Knowledge graph cleared and indexes created",
+                "result": result,
+            }
+        )
 
     except Exception as e:
         print(f"Error clearing knowledge graph: {e}")
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/knowledge-graph/schema', methods=['GET'])
+@app.route("/api/knowledge-graph/schema", methods=["GET"])
 def get_graph_schema():
     """
     Get knowledge graph schema and taxonomy information.
@@ -2013,18 +2236,19 @@ def get_graph_schema():
     try:
         neo4j = get_neo4j()
         if not neo4j:
-            return jsonify({'error': 'Neo4j service not available'}), 503
+            return jsonify({"error": "Neo4j service not available"}), 503
 
         schema = neo4j.get_schema_info()
 
         # Add taxonomy information
         try:
             from data.taxonomy import CYBER_SECTORS, GICS_SECTORS
-            schema['cyber_sectors'] = {
-                key: {'name': val['name'], 'description': val['description']}
+
+            schema["cyber_sectors"] = {
+                key: {"name": val["name"], "description": val["description"]}
                 for key, val in CYBER_SECTORS.items()
             }
-            schema['gics_sectors'] = GICS_SECTORS
+            schema["gics_sectors"] = GICS_SECTORS
         except ImportError:
             pass
 
@@ -2032,24 +2256,26 @@ def get_graph_schema():
 
     except Exception as e:
         print(f"Error getting graph schema: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # ============================================================================
 # PATENT ENDPOINTS
 # ============================================================================
 
+
 def get_patent_service():
     """Lazy load patent service"""
     try:
         from services.patent_service import patent_service
+
         return patent_service
     except Exception as e:
         print(f"Error loading patent service: {e}")
         return None
 
 
-@app.route('/api/patents/search', methods=['GET'])
+@app.route("/api/patents/search", methods=["GET"])
 def search_patents():
     """
     Search for patents by assignee (company) or inventor name
@@ -2067,48 +2293,42 @@ def search_patents():
     try:
         patent_svc = get_patent_service()
         if not patent_svc:
-            return jsonify({'error': 'Patent service not available'}), 503
+            return jsonify({"error": "Patent service not available"}), 503
 
-        assignee = request.args.get('assignee', '').strip()
-        inventor = request.args.get('inventor', '').strip()
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        limit = int(request.args.get('limit', 50))
+        assignee = request.args.get("assignee", "").strip()
+        inventor = request.args.get("inventor", "").strip()
+        start_date = request.args.get("start_date")
+        end_date = request.args.get("end_date")
+        limit = int(request.args.get("limit", 50))
 
         if not assignee and not inventor:
-            return jsonify({'error': 'Either assignee or inventor parameter is required'}), 400
+            return (
+                jsonify({"error": "Either assignee or inventor parameter is required"}),
+                400,
+            )
 
         patents = []
 
         if assignee:
             patents = patent_svc.search_patents_by_assignee(
-                assignee,
-                start_date=start_date,
-                end_date=end_date,
-                limit=limit
+                assignee, start_date=start_date, end_date=end_date, limit=limit
             )
         elif inventor:
             patents = patent_svc.search_patents_by_inventor(
-                inventor,
-                start_date=start_date,
-                end_date=end_date,
-                limit=limit
+                inventor, start_date=start_date, end_date=end_date, limit=limit
             )
 
         # Transform patents for frontend
         transformed = [patent_svc.transform_patent_for_neo4j(p) for p in patents]
 
-        return jsonify({
-            'count': len(transformed),
-            'patents': transformed
-        })
+        return jsonify({"count": len(transformed), "patents": transformed})
 
     except Exception as e:
         print(f"Error searching patents: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/patents/<ticker>/fetch', methods=['POST'])
+@app.route("/api/patents/<ticker>/fetch", methods=["POST"])
 def fetch_patents_for_company(ticker):
     """
     Fetch and store patents for a company
@@ -2132,59 +2352,58 @@ def fetch_patents_for_company(ticker):
 
         patent_svc = get_patent_service()
         if not patent_svc:
-            return jsonify({'error': 'Patent service not available'}), 503
+            return jsonify({"error": "Patent service not available"}), 503
 
         # Get company name from database
         company = db_service.get_company(ticker) if db_service else None
 
         if not company:
-            return jsonify({'error': f'Company {ticker} not found'}), 404
+            return jsonify({"error": f"Company {ticker} not found"}), 404
 
-        company_name = company.get('company_name', '')
+        company_name = company.get("company_name", "")
         if not company_name:
-            return jsonify({'error': f'No company name found for {ticker}'}), 400
+            return jsonify({"error": f"No company name found for {ticker}"}), 400
 
         # Fetch options
-        days_back = int(request.args.get('days_back', 365))
-        save_neo4j = request.args.get('save_neo4j', 'true').lower() == 'true'
-        save_artifacts = request.args.get('save_artifacts', 'true').lower() == 'true'
+        days_back = int(request.args.get("days_back", 365))
+        save_neo4j = request.args.get("save_neo4j", "true").lower() == "true"
+        save_artifacts = request.args.get("save_artifacts", "true").lower() == "true"
 
         # Fetch patents
         result = patent_svc.fetch_patents_for_organization(
-            organization_name=company_name,
-            ticker=ticker,
-            days_back=days_back
+            organization_name=company_name, ticker=ticker, days_back=days_back
         )
 
         # Save to Neo4j if requested
         neo4j_created = 0
-        if save_neo4j and result['neo4j_patents']:
+        if save_neo4j and result["neo4j_patents"]:
             neo4j_created = patent_svc.create_patent_nodes_in_neo4j(
-                result['neo4j_patents'],
-                company_name
+                result["neo4j_patents"], company_name
             )
 
         # Save as artifacts if requested
         artifacts_saved = 0
-        if save_artifacts and result['artifacts']:
-            artifacts_saved = patent_svc.save_patents_as_artifacts(result['artifacts'])
+        if save_artifacts and result["artifacts"]:
+            artifacts_saved = patent_svc.save_patents_as_artifacts(result["artifacts"])
 
-        return jsonify({
-            'ticker': ticker,
-            'company_name': company_name,
-            'patent_count': result['patent_count'],
-            'neo4j_nodes_created': neo4j_created,
-            'artifacts_saved': artifacts_saved,
-            'date_range': result['date_range'],
-            'patents': result['neo4j_patents'][:10]  # Return first 10 for preview
-        })
+        return jsonify(
+            {
+                "ticker": ticker,
+                "company_name": company_name,
+                "patent_count": result["patent_count"],
+                "neo4j_nodes_created": neo4j_created,
+                "artifacts_saved": artifacts_saved,
+                "date_range": result["date_range"],
+                "patents": result["neo4j_patents"][:10],  # Return first 10 for preview
+            }
+        )
 
     except Exception as e:
         print(f"Error fetching patents for {ticker}: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/patents/<patent_number>', methods=['GET'])
+@app.route("/api/patents/<patent_number>", methods=["GET"])
 def get_patent_details(patent_number):
     """
     Get details for a specific patent
@@ -2195,21 +2414,21 @@ def get_patent_details(patent_number):
     try:
         patent_svc = get_patent_service()
         if not patent_svc:
-            return jsonify({'error': 'Patent service not available'}), 503
+            return jsonify({"error": "Patent service not available"}), 503
 
         details = patent_svc.get_patent_details(patent_number)
 
         if not details:
-            return jsonify({'error': f'Patent {patent_number} not found'}), 404
+            return jsonify({"error": f"Patent {patent_number} not found"}), 404
 
         return jsonify(details)
 
     except Exception as e:
         print(f"Error getting patent details: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("Starting Cyber Risk Dashboard API...")
     print("Endpoints:")
     print("   - GET  /health")
@@ -2252,4 +2471,4 @@ if __name__ == '__main__':
     print("   - GET  /api/patents/search?inventor=John+Smith")
     print("   - POST /api/patents/<ticker>/fetch")
     print("   - GET  /api/patents/<patent_number>")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any, List
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
+
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -47,10 +48,10 @@ class GrowthCache:
             print("📦 GrowthCache: psycopg2 not available")
             return
 
-        db_host = os.environ.get('DB_HOST')
-        db_name = os.environ.get('DB_NAME', 'cyberrisk')
-        db_user = os.environ.get('DB_USER', 'cyberrisk_admin')
-        db_password = os.environ.get('DB_PASSWORD')
+        db_host = os.environ.get("DB_HOST")
+        db_name = os.environ.get("DB_NAME", "cyberrisk")
+        db_user = os.environ.get("DB_USER", "cyberrisk_admin")
+        db_password = os.environ.get("DB_PASSWORD")
 
         if not db_host or not db_password:
             print("📦 GrowthCache: DB credentials not configured")
@@ -62,7 +63,7 @@ class GrowthCache:
                 database=db_name,
                 user=db_user,
                 password=db_password,
-                port=5432
+                port=5432,
             )
             self.use_database = True
             print(f"✅ GrowthCache: Connected to RDS PostgreSQL at {db_host}")
@@ -93,7 +94,9 @@ class GrowthCache:
 
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM companies WHERE LOWER(ticker) = LOWER(%s)", (ticker,))
+            cursor.execute(
+                "SELECT id FROM companies WHERE LOWER(ticker) = LOWER(%s)", (ticker,)
+            )
             row = cursor.fetchone()
             cursor.close()
             return row[0] if row else None
@@ -105,9 +108,13 @@ class GrowthCache:
     # EMPLOYEE COUNT TRACKING
     # =========================================================================
 
-    def store_employee_count(self, ticker: str, employee_count: int,
-                             snapshot_date: date = None,
-                             data_source: str = 'explorium') -> bool:
+    def store_employee_count(
+        self,
+        ticker: str,
+        employee_count: int,
+        snapshot_date: date = None,
+        data_source: str = "explorium",
+    ) -> bool:
         """
         Store an employee count snapshot
 
@@ -134,12 +141,15 @@ class GrowthCache:
 
         try:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO employee_counts (company_id, snapshot_date, employee_count, data_source)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (company_id, snapshot_date, data_source) DO UPDATE SET
                     employee_count = EXCLUDED.employee_count
-            """, (company_id, snapshot_date, employee_count, data_source))
+            """,
+                (company_id, snapshot_date, employee_count, data_source),
+            )
 
             conn.commit()
             cursor.close()
@@ -151,7 +161,9 @@ class GrowthCache:
             print(f"⚠️  Error storing employee count: {e}")
             return False
 
-    def get_employee_history(self, ticker: str, days_back: int = 365) -> List[Dict[str, Any]]:
+    def get_employee_history(
+        self, ticker: str, days_back: int = 365
+    ) -> List[Dict[str, Any]]:
         """
         Get employee count history for a company
 
@@ -172,13 +184,16 @@ class GrowthCache:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT snapshot_date, employee_count, data_source
                 FROM employee_counts
                 WHERE company_id = %s
                   AND snapshot_date >= CURRENT_DATE - %s
                 ORDER BY snapshot_date DESC
-            """, (company_id, days_back))
+            """,
+                (company_id, days_back),
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -193,8 +208,9 @@ class GrowthCache:
     # HIRING EVENT TRACKING
     # =========================================================================
 
-    def store_hiring_events(self, ticker: str, events: List[Dict[str, Any]],
-                           data_source: str = 'explorium') -> int:
+    def store_hiring_events(
+        self, ticker: str, events: List[Dict[str, Any]], data_source: str = "explorium"
+    ) -> int:
         """
         Store multiple hiring events
 
@@ -221,22 +237,25 @@ class GrowthCache:
             cursor = conn.cursor()
 
             for event in events:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO hiring_events
                     (company_id, event_date, event_type, department, location,
                      job_title, job_count, description, data_source)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    company_id,
-                    event.get('event_date', date.today()),
-                    event.get('event_type', 'job_posting'),
-                    event.get('department'),
-                    event.get('location'),
-                    event.get('job_title'),
-                    event.get('job_count', 1),
-                    event.get('description'),
-                    data_source
-                ))
+                """,
+                    (
+                        company_id,
+                        event.get("event_date", date.today()),
+                        event.get("event_type", "job_posting"),
+                        event.get("department"),
+                        event.get("location"),
+                        event.get("job_title"),
+                        event.get("job_count", 1),
+                        event.get("description"),
+                        data_source,
+                    ),
+                )
                 stored_count += 1
 
             conn.commit()
@@ -262,17 +281,18 @@ class GrowthCache:
         """
         conn = self._get_connection()
         if not conn:
-            return {'velocity': 0, 'classification': 'unknown'}
+            return {"velocity": 0, "classification": "unknown"}
 
         company_id = self._get_company_id(ticker)
         if not company_id:
-            return {'velocity': 0, 'classification': 'unknown'}
+            return {"velocity": 0, "classification": "unknown"}
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             # Count job postings by period
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     COUNT(*) FILTER (WHERE event_date >= CURRENT_DATE - 30) as last_30_days,
                     COUNT(*) FILTER (WHERE event_date >= CURRENT_DATE - 60 AND event_date < CURRENT_DATE - 30) as prev_30_days,
@@ -281,18 +301,20 @@ class GrowthCache:
                 WHERE company_id = %s
                   AND event_date >= CURRENT_DATE - %s
                   AND event_type = 'job_posting'
-            """, (company_id, days_back))
+            """,
+                (company_id, days_back),
+            )
 
             row = cursor.fetchone()
             cursor.close()
 
-            if not row or row['total'] == 0:
-                return {'velocity': 0, 'classification': 'unknown', 'total_postings': 0}
+            if not row or row["total"] == 0:
+                return {"velocity": 0, "classification": "unknown", "total_postings": 0}
 
             # Calculate velocity and classification
-            last_30 = row['last_30_days'] or 0
-            prev_30 = row['prev_30_days'] or 0
-            total = row['total']
+            last_30 = row["last_30_days"] or 0
+            prev_30 = row["prev_30_days"] or 0
+            total = row["total"]
 
             if prev_30 > 0:
                 velocity = ((last_30 - prev_30) / prev_30) * 100
@@ -300,32 +322,33 @@ class GrowthCache:
                 velocity = 100 if last_30 > 0 else 0
 
             if velocity > 20:
-                classification = 'accelerating'
+                classification = "accelerating"
             elif velocity > -10:
-                classification = 'stable'
+                classification = "stable"
             elif velocity > -30:
-                classification = 'slowing'
+                classification = "slowing"
             else:
-                classification = 'declining'
+                classification = "declining"
 
             return {
-                'velocity': round(velocity, 1),
-                'classification': classification,
-                'last_30_days': last_30,
-                'prev_30_days': prev_30,
-                'total_postings': total
+                "velocity": round(velocity, 1),
+                "classification": classification,
+                "last_30_days": last_30,
+                "prev_30_days": prev_30,
+                "total_postings": total,
             }
 
         except Exception as e:
             print(f"⚠️  Error calculating hiring velocity: {e}")
-            return {'velocity': 0, 'classification': 'unknown'}
+            return {"velocity": 0, "classification": "unknown"}
 
     # =========================================================================
     # GROWTH TREND TRACKING
     # =========================================================================
 
-    def calculate_and_store_trend(self, ticker: str, metric_type: str = 'overall',
-                                  lookback_days: int = 90) -> Optional[str]:
+    def calculate_and_store_trend(
+        self, ticker: str, metric_type: str = "overall", lookback_days: int = 90
+    ) -> Optional[str]:
         """
         Calculate growth trend and store in database
 
@@ -347,14 +370,14 @@ class GrowthCache:
 
         try:
             # Calculate trend based on metric type
-            if metric_type == 'employee_growth':
+            if metric_type == "employee_growth":
                 trend_data = self._calculate_employee_trend(company_id, lookback_days)
-            elif metric_type == 'hiring_velocity':
+            elif metric_type == "hiring_velocity":
                 velocity = self.get_hiring_velocity(ticker, lookback_days)
                 trend_data = {
-                    'classification': velocity['classification'],
-                    'value': velocity['velocity'],
-                    'data_points': velocity.get('total_postings', 0)
+                    "classification": velocity["classification"],
+                    "value": velocity["velocity"],
+                    "data_points": velocity.get("total_postings", 0),
                 }
             else:  # overall
                 emp_trend = self._calculate_employee_trend(company_id, lookback_days)
@@ -368,7 +391,8 @@ class GrowthCache:
 
             # Store the trend
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO growth_trends
                 (company_id, metric_type, trend_classification, trend_value,
                  period_start, period_end, data_points, confidence_score)
@@ -379,28 +403,34 @@ class GrowthCache:
                     data_points = EXCLUDED.data_points,
                     confidence_score = EXCLUDED.confidence_score,
                     computed_at = CURRENT_TIMESTAMP
-            """, (
-                company_id,
-                metric_type,
-                trend_data['classification'],
-                trend_data.get('value'),
-                date.today() - timedelta(days=lookback_days),
-                date.today(),
-                trend_data.get('data_points', 0),
-                trend_data.get('confidence', 0.5)
-            ))
+            """,
+                (
+                    company_id,
+                    metric_type,
+                    trend_data["classification"],
+                    trend_data.get("value"),
+                    date.today() - timedelta(days=lookback_days),
+                    date.today(),
+                    trend_data.get("data_points", 0),
+                    trend_data.get("confidence", 0.5),
+                ),
+            )
 
             conn.commit()
             cursor.close()
 
-            print(f"💾 Stored {metric_type} trend for {ticker}: {trend_data['classification']}")
-            return trend_data['classification']
+            print(
+                f"💾 Stored {metric_type} trend for {ticker}: {trend_data['classification']}"
+            )
+            return trend_data["classification"]
 
         except Exception as e:
             print(f"⚠️  Error calculating trend: {e}")
             return None
 
-    def _calculate_employee_trend(self, company_id: int, lookback_days: int) -> Optional[Dict]:
+    def _calculate_employee_trend(
+        self, company_id: int, lookback_days: int
+    ) -> Optional[Dict]:
         """Calculate employee growth trend"""
         conn = self._get_connection()
         if not conn:
@@ -408,13 +438,16 @@ class GrowthCache:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT employee_count, snapshot_date
                 FROM employee_counts
                 WHERE company_id = %s
                   AND snapshot_date >= CURRENT_DATE - %s
                 ORDER BY snapshot_date ASC
-            """, (company_id, lookback_days))
+            """,
+                (company_id, lookback_days),
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -422,8 +455,8 @@ class GrowthCache:
             if len(rows) < 2:
                 return None
 
-            first_count = rows[0]['employee_count']
-            last_count = rows[-1]['employee_count']
+            first_count = rows[0]["employee_count"]
+            last_count = rows[-1]["employee_count"]
 
             if first_count and first_count > 0:
                 growth_rate = ((last_count - first_count) / first_count) * 100
@@ -431,19 +464,19 @@ class GrowthCache:
                 growth_rate = 0
 
             if growth_rate > 10:
-                classification = 'accelerating'
+                classification = "accelerating"
             elif growth_rate > 0:
-                classification = 'stable'
+                classification = "stable"
             elif growth_rate > -5:
-                classification = 'slowing'
+                classification = "slowing"
             else:
-                classification = 'declining'
+                classification = "declining"
 
             return {
-                'classification': classification,
-                'value': round(growth_rate, 1),
-                'data_points': len(rows),
-                'confidence': min(len(rows) / 10, 1.0)
+                "classification": classification,
+                "value": round(growth_rate, 1),
+                "data_points": len(rows),
+                "confidence": min(len(rows) / 10, 1.0),
             }
 
         except Exception as e:
@@ -453,42 +486,49 @@ class GrowthCache:
     def _combine_trends(self, emp_trend: Optional[Dict], velocity: Dict) -> Dict:
         """Combine employee and hiring trends into overall trend"""
         trend_scores = {
-            'accelerating': 3,
-            'stable': 2,
-            'slowing': 1,
-            'declining': 0,
-            'unknown': 1.5
+            "accelerating": 3,
+            "stable": 2,
+            "slowing": 1,
+            "declining": 0,
+            "unknown": 1.5,
         }
 
         scores = []
         if emp_trend:
-            scores.append(trend_scores.get(emp_trend['classification'], 1.5))
+            scores.append(trend_scores.get(emp_trend["classification"], 1.5))
         if velocity:
-            scores.append(trend_scores.get(velocity['classification'], 1.5))
+            scores.append(trend_scores.get(velocity["classification"], 1.5))
 
         if not scores:
-            return {'classification': 'unknown', 'value': 0, 'data_points': 0, 'confidence': 0}
+            return {
+                "classification": "unknown",
+                "value": 0,
+                "data_points": 0,
+                "confidence": 0,
+            }
 
         avg_score = sum(scores) / len(scores)
 
         if avg_score >= 2.5:
-            classification = 'accelerating'
+            classification = "accelerating"
         elif avg_score >= 1.75:
-            classification = 'stable'
+            classification = "stable"
         elif avg_score >= 1:
-            classification = 'slowing'
+            classification = "slowing"
         else:
-            classification = 'declining'
+            classification = "declining"
 
         return {
-            'classification': classification,
-            'value': round(avg_score, 2),
-            'data_points': (emp_trend.get('data_points', 0) if emp_trend else 0) +
-                          velocity.get('total_postings', 0),
-            'confidence': 0.7 if len(scores) == 2 else 0.5
+            "classification": classification,
+            "value": round(avg_score, 2),
+            "data_points": (emp_trend.get("data_points", 0) if emp_trend else 0)
+            + velocity.get("total_postings", 0),
+            "confidence": 0.7 if len(scores) == 2 else 0.5,
         }
 
-    def get_trend(self, ticker: str, metric_type: str = 'overall') -> Optional[Dict[str, Any]]:
+    def get_trend(
+        self, ticker: str, metric_type: str = "overall"
+    ) -> Optional[Dict[str, Any]]:
         """
         Get stored growth trend for a company
 
@@ -509,14 +549,17 @@ class GrowthCache:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT trend_classification, trend_value, period_start, period_end,
                        data_points, confidence_score, computed_at
                 FROM growth_trends
                 WHERE company_id = %s AND metric_type = %s
                 ORDER BY computed_at DESC
                 LIMIT 1
-            """, (company_id, metric_type))
+            """,
+                (company_id, metric_type),
+            )
 
             row = cursor.fetchone()
             cursor.close()
@@ -531,8 +574,9 @@ class GrowthCache:
     # FULL API RESPONSE CACHE
     # =========================================================================
 
-    def cache_explorium_response(self, ticker: str, request_params: Dict,
-                                 response_data: Dict) -> bool:
+    def cache_explorium_response(
+        self, ticker: str, request_params: Dict, response_data: Dict
+    ) -> bool:
         """
         Cache full Explorium API response
 
@@ -549,23 +593,28 @@ class GrowthCache:
             return False
 
         # Generate cache key from request params
-        cache_key = hashlib.md5(json.dumps(request_params, sort_keys=True).encode()).hexdigest()
+        cache_key = hashlib.md5(
+            json.dumps(request_params, sort_keys=True).encode()
+        ).hexdigest()
 
         try:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO growth_cache (ticker, cache_key, growth_data, expires_at)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (ticker, cache_key) DO UPDATE SET
                     growth_data = EXCLUDED.growth_data,
                     computed_at = CURRENT_TIMESTAMP,
                     expires_at = EXCLUDED.expires_at
-            """, (
-                ticker,
-                cache_key,
-                json.dumps(response_data),
-                datetime.now() + timedelta(hours=self.cache_ttl_hours)
-            ))
+            """,
+                (
+                    ticker,
+                    cache_key,
+                    json.dumps(response_data),
+                    datetime.now() + timedelta(hours=self.cache_ttl_hours),
+                ),
+            )
 
             conn.commit()
             cursor.close()
@@ -577,7 +626,9 @@ class GrowthCache:
             print(f"⚠️  Error caching Explorium response: {e}")
             return False
 
-    def get_cached_explorium_response(self, ticker: str, request_params: Dict) -> Optional[Dict]:
+    def get_cached_explorium_response(
+        self, ticker: str, request_params: Dict
+    ) -> Optional[Dict]:
         """
         Get cached Explorium API response if not expired
 
@@ -592,23 +643,28 @@ class GrowthCache:
         if not conn:
             return None
 
-        cache_key = hashlib.md5(json.dumps(request_params, sort_keys=True).encode()).hexdigest()
+        cache_key = hashlib.md5(
+            json.dumps(request_params, sort_keys=True).encode()
+        ).hexdigest()
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT growth_data, computed_at
                 FROM growth_cache
                 WHERE ticker = %s AND cache_key = %s
                   AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
-            """, (ticker, cache_key))
+            """,
+                (ticker, cache_key),
+            )
 
             row = cursor.fetchone()
             cursor.close()
 
             if row:
                 print(f"✅ Cache HIT (RDS) for Explorium data: {ticker}")
-                return row['growth_data']
+                return row["growth_data"]
             return None
 
         except Exception as e:
@@ -656,26 +712,33 @@ def get_cached_growth(ticker: str) -> Optional[Dict[str, Any]]:
 
     try:
         from psycopg2.extras import RealDictCursor
+
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         # Get latest jobs snapshot
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT employee_count, total_jobs, hiring_intensity, jobs_by_function, jobs_by_seniority, snapshot_date
             FROM company_jobs_snapshot
             WHERE UPPER(ticker) = UPPER(%s)
             ORDER BY snapshot_date DESC
             LIMIT 1
-        """, (ticker,))
+        """,
+            (ticker,),
+        )
         jobs_row = cursor.fetchone()
 
         # Get employee history for growth calculation
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT employee_count, snapshot_date
             FROM company_headcount_history
             WHERE UPPER(ticker) = UPPER(%s)
             ORDER BY snapshot_date DESC
             LIMIT 12
-        """, (ticker,))
+        """,
+            (ticker,),
+        )
         headcount_rows = cursor.fetchall()
         cursor.close()
 
@@ -685,32 +748,50 @@ def get_cached_growth(ticker: str) -> Optional[Dict[str, Any]]:
         # Calculate growth rate from headcount history
         employee_growth_pct = None
         if len(headcount_rows) >= 2:
-            latest = headcount_rows[0]['employee_count']
-            oldest = headcount_rows[-1]['employee_count']
+            latest = headcount_rows[0]["employee_count"]
+            oldest = headcount_rows[-1]["employee_count"]
             if oldest and oldest > 0:
                 employee_growth_pct = round(((latest - oldest) / oldest) * 100, 1)
 
         # Classify hiring intensity
-        hiring_intensity_value = float(jobs_row['hiring_intensity']) if jobs_row and jobs_row.get('hiring_intensity') else 0
+        hiring_intensity_value = (
+            float(jobs_row["hiring_intensity"])
+            if jobs_row and jobs_row.get("hiring_intensity")
+            else 0
+        )
         if hiring_intensity_value > 15:
-            intensity_class = 'high'
+            intensity_class = "high"
         elif hiring_intensity_value > 8:
-            intensity_class = 'moderate'
+            intensity_class = "moderate"
         elif hiring_intensity_value > 3:
-            intensity_class = 'low'
+            intensity_class = "low"
         else:
-            intensity_class = 'minimal'
+            intensity_class = "minimal"
 
         return {
-            'employee_count': jobs_row['employee_count'] if jobs_row else (headcount_rows[0]['employee_count'] if headcount_rows else None),
-            'employee_growth_pct': employee_growth_pct,
-            'hiring_intensity': intensity_class,
-            'hiring_intensity_pct': hiring_intensity_value,
-            'total_jobs': jobs_row['total_jobs'] if jobs_row else 0,
-            'jobs_by_function': dict(jobs_row['jobs_by_function']) if jobs_row and jobs_row.get('jobs_by_function') else {},
-            'jobs_by_seniority': dict(jobs_row['jobs_by_seniority']) if jobs_row and jobs_row.get('jobs_by_seniority') else {},
-            'snapshot_date': jobs_row['snapshot_date'].isoformat() if jobs_row else None,
-            'cached_at': datetime.now().isoformat()
+            "employee_count": (
+                jobs_row["employee_count"]
+                if jobs_row
+                else (headcount_rows[0]["employee_count"] if headcount_rows else None)
+            ),
+            "employee_growth_pct": employee_growth_pct,
+            "hiring_intensity": intensity_class,
+            "hiring_intensity_pct": hiring_intensity_value,
+            "total_jobs": jobs_row["total_jobs"] if jobs_row else 0,
+            "jobs_by_function": (
+                dict(jobs_row["jobs_by_function"])
+                if jobs_row and jobs_row.get("jobs_by_function")
+                else {}
+            ),
+            "jobs_by_seniority": (
+                dict(jobs_row["jobs_by_seniority"])
+                if jobs_row and jobs_row.get("jobs_by_seniority")
+                else {}
+            ),
+            "snapshot_date": (
+                jobs_row["snapshot_date"].isoformat() if jobs_row else None
+            ),
+            "cached_at": datetime.now().isoformat(),
         }
 
     except Exception as e:

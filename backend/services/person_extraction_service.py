@@ -30,38 +30,50 @@ class PersonExtractionService:
 
     # Executive title patterns for role classification
     EXECUTIVE_PATTERNS = {
-        'FOUNDER': ['founder', 'co-founder', 'cofounder'],
-        'CEO': ['chief executive', 'ceo', 'president and ceo'],
-        'CFO': ['chief financial', 'cfo', 'finance officer'],
-        'CTO': ['chief technology', 'cto', 'technology officer'],
-        'COO': ['chief operating', 'coo', 'operations officer'],
-        'CISO': ['chief information security', 'ciso', 'security officer'],
-        'CMO': ['chief marketing', 'cmo', 'marketing officer'],
-        'CRO': ['chief revenue', 'cro', 'revenue officer'],
-        'BOARD': ['director', 'board member', 'chairman', 'board of directors'],
-        'VP': ['vice president', 'vp of', 'senior vice president', 'svp'],
-        'EVP': ['executive vice president', 'evp']
+        "FOUNDER": ["founder", "co-founder", "cofounder"],
+        "CEO": ["chief executive", "ceo", "president and ceo"],
+        "CFO": ["chief financial", "cfo", "finance officer"],
+        "CTO": ["chief technology", "cto", "technology officer"],
+        "COO": ["chief operating", "coo", "operations officer"],
+        "CISO": ["chief information security", "ciso", "security officer"],
+        "CMO": ["chief marketing", "cmo", "marketing officer"],
+        "CRO": ["chief revenue", "cro", "revenue officer"],
+        "BOARD": ["director", "board member", "chairman", "board of directors"],
+        "VP": ["vice president", "vp of", "senior vice president", "svp"],
+        "EVP": ["executive vice president", "evp"],
     }
 
     # Title patterns for speaker extraction from transcripts
     SPEAKER_TITLES = [
-        'CEO', 'CFO', 'CTO', 'COO', 'CISO', 'CMO', 'CRO',
-        'President', 'Chairman', 'Director',
-        'Vice President', 'VP', 'SVP', 'EVP',
-        'Chief', 'Officer', 'Analyst'
+        "CEO",
+        "CFO",
+        "CTO",
+        "COO",
+        "CISO",
+        "CMO",
+        "CRO",
+        "President",
+        "Chairman",
+        "Director",
+        "Vice President",
+        "VP",
+        "SVP",
+        "EVP",
+        "Chief",
+        "Officer",
+        "Analyst",
     ]
 
     def __init__(self):
         """Initialize the person extraction service."""
-        self.region = os.environ.get('AWS_REGION', 'us-west-2')
+        self.region = os.environ.get("AWS_REGION", "us-west-2")
 
         # Initialize AWS Comprehend
         config = Config(
-            region_name=self.region,
-            retries={'max_attempts': 3, 'mode': 'adaptive'}
+            region_name=self.region, retries={"max_attempts": 3, "mode": "adaptive"}
         )
-        self.comprehend = boto3.client('comprehend', config=config)
-        self.s3 = boto3.client('s3', config=config)
+        self.comprehend = boto3.client("comprehend", config=config)
+        self.s3 = boto3.client("s3", config=config)
 
         # Service dependencies (lazy loaded)
         self._neo4j_service = None
@@ -72,6 +84,7 @@ class PersonExtractionService:
         """Lazy load Neo4j service."""
         if self._neo4j_service is None:
             from services.neo4j_service import get_neo4j_service
+
             self._neo4j_service = get_neo4j_service()
         return self._neo4j_service
 
@@ -80,6 +93,7 @@ class PersonExtractionService:
         """Lazy load database service."""
         if self._db_service is None:
             from services.database_service import db_service
+
             self._db_service = db_service
         return self._db_service
 
@@ -101,12 +115,12 @@ class PersonExtractionService:
         logger.info(f"Extracting persons for {ticker}")
 
         results = {
-            'ticker': ticker,
-            'persons_extracted': 0,
-            'executives': 0,
-            'from_sec': 0,
-            'from_transcripts': 0,
-            'errors': []
+            "ticker": ticker,
+            "persons_extracted": 0,
+            "executives": 0,
+            "from_sec": 0,
+            "from_transcripts": 0,
+            "errors": [],
         }
 
         try:
@@ -118,40 +132,49 @@ class PersonExtractionService:
 
             if not artifacts:
                 logger.warning(f"No artifacts found for {ticker}")
-                results['errors'].append('No documents found')
+                results["errors"].append("No documents found")
                 return results
 
             # 3. Process SEC filings
-            sec_artifacts = [a for a in artifacts if '10-K' in a.get('artifact_type', '') or '10-Q' in a.get('artifact_type', '')]
+            sec_artifacts = [
+                a
+                for a in artifacts
+                if "10-K" in a.get("artifact_type", "")
+                or "10-Q" in a.get("artifact_type", "")
+            ]
             for artifact in sec_artifacts:
                 try:
                     persons = self._extract_from_sec_filing(artifact, ticker)
-                    results['from_sec'] += len(persons)
-                    results['persons_extracted'] += len(persons)
+                    results["from_sec"] += len(persons)
+                    results["persons_extracted"] += len(persons)
                 except Exception as e:
                     logger.error(f"Error extracting from SEC: {e}")
-                    results['errors'].append(str(e))
+                    results["errors"].append(str(e))
 
             # 4. Process transcripts
-            transcript_artifacts = [a for a in artifacts if 'transcript' in a.get('artifact_type', '').lower()]
+            transcript_artifacts = [
+                a
+                for a in artifacts
+                if "transcript" in a.get("artifact_type", "").lower()
+            ]
             for artifact in transcript_artifacts:
                 try:
                     persons = self._extract_from_transcript(artifact, ticker)
-                    results['from_transcripts'] += len(persons)
-                    results['persons_extracted'] += len(persons)
+                    results["from_transcripts"] += len(persons)
+                    results["persons_extracted"] += len(persons)
                 except Exception as e:
                     logger.error(f"Error extracting from transcript: {e}")
-                    results['errors'].append(str(e))
+                    results["errors"].append(str(e))
 
             # 5. Count executives
-            results['executives'] = self._count_executives(ticker)
+            results["executives"] = self._count_executives(ticker)
 
             logger.info(f"Person extraction complete for {ticker}: {results}")
             return results
 
         except Exception as e:
             logger.error(f"Error extracting persons for {ticker}: {e}")
-            results['errors'].append(str(e))
+            results["errors"].append(str(e))
             return results
 
     # =========================================================================
@@ -167,8 +190,12 @@ class PersonExtractionService:
         - "Directors" section
         - Signature blocks
         """
-        s3_key = artifact.get('s3_key')
-        doc_id = s3_key.split('/')[-1].replace('.txt', '').replace('.pdf', '') if s3_key else None
+        s3_key = artifact.get("s3_key")
+        doc_id = (
+            s3_key.split("/")[-1].replace(".txt", "").replace(".pdf", "")
+            if s3_key
+            else None
+        )
 
         if not s3_key or not doc_id:
             return []
@@ -184,8 +211,8 @@ class PersonExtractionService:
         comprehend_persons = self._detect_persons(text[:10000])
 
         for person_data in comprehend_persons:
-            name = person_data.get('Text', '').strip()
-            score = person_data.get('Score', 0)
+            name = person_data.get("Text", "").strip()
+            score = person_data.get("Score", 0)
 
             if score < 0.8 or len(name) < 3:
                 continue
@@ -194,16 +221,28 @@ class PersonExtractionService:
             context = self._get_surrounding_context(text, name, window=150)
             role = self._detect_role(context)
             title = self._extract_title(context)
-            is_executive = role in ['CEO', 'CFO', 'CTO', 'COO', 'CISO', 'CMO', 'CRO', 'BOARD', 'FOUNDER', 'VP', 'EVP']
+            is_executive = role in [
+                "CEO",
+                "CFO",
+                "CTO",
+                "COO",
+                "CISO",
+                "CMO",
+                "CRO",
+                "BOARD",
+                "FOUNDER",
+                "VP",
+                "EVP",
+            ]
 
             person = {
-                'name': name,
-                'normalized_name': self._normalize_name(name),
-                'title': title,
-                'role_type': role,
-                'is_executive': is_executive,
-                'source': 'sec_filing',
-                'source_doc': doc_id
+                "name": name,
+                "normalized_name": self._normalize_name(name),
+                "title": title,
+                "role_type": role,
+                "is_executive": is_executive,
+                "source": "sec_filing",
+                "source_doc": doc_id,
             }
 
             persons.append(person)
@@ -225,8 +264,8 @@ class PersonExtractionService:
         - "George Kurtz - CEO"
         - "Operator: Our next question comes from..."
         """
-        s3_key = artifact.get('s3_key')
-        doc_id = s3_key.split('/')[-1].replace('.txt', '') if s3_key else None
+        s3_key = artifact.get("s3_key")
+        doc_id = s3_key.split("/")[-1].replace(".txt", "") if s3_key else None
 
         if not s3_key or not doc_id:
             return []
@@ -238,28 +277,40 @@ class PersonExtractionService:
         persons = []
 
         # Pattern: "Name - Title" or "Name, Title"
-        title_pattern = '|'.join(self.SPEAKER_TITLES)
-        speaker_pattern = rf'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*[-,]\s*([A-Za-z\s]*(?:{title_pattern})[A-Za-z\s]*)'
+        title_pattern = "|".join(self.SPEAKER_TITLES)
+        speaker_pattern = rf"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*[-,]\s*([A-Za-z\s]*(?:{title_pattern})[A-Za-z\s]*)"
 
         for match in re.finditer(speaker_pattern, text, re.IGNORECASE):
             name = match.group(1).strip()
             title = match.group(2).strip()
 
             # Skip common false positives
-            if name.lower() in ['the company', 'our company', 'the board']:
+            if name.lower() in ["the company", "our company", "the board"]:
                 continue
 
             role = self._detect_role(title)
-            is_executive = role in ['CEO', 'CFO', 'CTO', 'COO', 'CISO', 'CMO', 'CRO', 'BOARD', 'FOUNDER', 'VP', 'EVP']
+            is_executive = role in [
+                "CEO",
+                "CFO",
+                "CTO",
+                "COO",
+                "CISO",
+                "CMO",
+                "CRO",
+                "BOARD",
+                "FOUNDER",
+                "VP",
+                "EVP",
+            ]
 
             person = {
-                'name': name,
-                'normalized_name': self._normalize_name(name),
-                'title': title,
-                'role_type': role,
-                'is_executive': is_executive,
-                'source': 'transcript',
-                'source_doc': doc_id
+                "name": name,
+                "normalized_name": self._normalize_name(name),
+                "title": title,
+                "role_type": role,
+                "is_executive": is_executive,
+                "source": "transcript",
+                "source_doc": doc_id,
             }
 
             persons.append(person)
@@ -279,19 +330,19 @@ class PersonExtractionService:
         if company:
             self.neo4j.create_company(
                 ticker=ticker,
-                name=company.get('company_name', ticker),
-                sector=company.get('sector', 'Cybersecurity')
+                name=company.get("company_name", ticker),
+                sector=company.get("sector", "Cybersecurity"),
             )
 
     def _get_document_text(self, s3_key: str) -> Optional[str]:
         """Get document text from S3."""
         try:
-            bucket = os.environ.get('ARTIFACTS_BUCKET', 'cyber-risk-artifacts')
+            bucket = os.environ.get("ARTIFACTS_BUCKET", "cyber-risk-artifacts")
             response = self.s3.get_object(Bucket=bucket, Key=s3_key)
-            content = response['Body'].read()
+            content = response["Body"].read()
 
             try:
-                return content.decode('utf-8')
+                return content.decode("utf-8")
             except UnicodeDecodeError:
                 return None
 
@@ -302,12 +353,11 @@ class PersonExtractionService:
     def _detect_persons(self, text: str) -> List[Dict]:
         """Use Comprehend to detect PERSON entities."""
         try:
-            response = self.comprehend.detect_entities(
-                Text=text,
-                LanguageCode='en'
-            )
+            response = self.comprehend.detect_entities(Text=text, LanguageCode="en")
 
-            return [e for e in response.get('Entities', []) if e.get('Type') == 'PERSON']
+            return [
+                e for e in response.get("Entities", []) if e.get("Type") == "PERSON"
+            ]
 
         except Exception as e:
             logger.error(f"Comprehend error: {e}")
@@ -336,14 +386,14 @@ class PersonExtractionService:
             if any(p in context_lower for p in patterns):
                 return role
 
-        return 'OTHER'
+        return "OTHER"
 
     def _extract_title(self, context: str) -> Optional[str]:
         """Extract job title from context."""
         # Common title patterns
         title_patterns = [
-            r'(?:as|is|,)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Officer|Director|President|VP|CEO|CFO|CTO|COO))',
-            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:of|for)\s+[A-Z][a-z]+)',
+            r"(?:as|is|,)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Officer|Director|President|VP|CEO|CFO|CTO|COO))",
+            r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:of|for)\s+[A-Z][a-z]+)",
         ]
 
         for pattern in title_patterns:
@@ -356,8 +406,10 @@ class PersonExtractionService:
     def _normalize_name(self, name: str) -> str:
         """Normalize name for deduplication."""
         # Remove titles and suffixes
-        name = re.sub(r'\b(Mr|Ms|Mrs|Dr|Jr|Sr|III|II|IV)\.?\b', '', name, flags=re.IGNORECASE)
-        return name.lower().strip().replace(' ', '_').replace('.', '')
+        name = re.sub(
+            r"\b(Mr|Ms|Mrs|Dr|Jr|Sr|III|II|IV)\.?\b", "", name, flags=re.IGNORECASE
+        )
+        return name.lower().strip().replace(" ", "_").replace(".", "")
 
     def _deduplicate(self, persons: List[Dict]) -> List[Dict]:
         """Remove duplicate persons based on normalized name."""
@@ -365,7 +417,7 @@ class PersonExtractionService:
         unique = []
 
         for person in persons:
-            norm = person.get('normalized_name', '')
+            norm = person.get("normalized_name", "")
             if norm and norm not in seen:
                 seen.add(norm)
                 unique.append(person)
@@ -376,15 +428,15 @@ class PersonExtractionService:
         """Add person to Neo4j graph."""
         # Create person node
         self.neo4j.create_person(
-            name=person['name'],
-            title=person.get('title'),
-            normalized_name=person['normalized_name'],
-            role_type=person.get('role_type'),
-            is_executive=person.get('is_executive', False)
+            name=person["name"],
+            title=person.get("title"),
+            normalized_name=person["normalized_name"],
+            role_type=person.get("role_type"),
+            is_executive=person.get("is_executive", False),
         )
 
         # Create relationship based on role
-        if person.get('is_executive'):
+        if person.get("is_executive"):
             query = """
                 MATCH (c:Company {ticker: $ticker})
                 MATCH (p:Person {normalized_name: $person})
@@ -392,12 +444,15 @@ class PersonExtractionService:
                 SET r.title = $title,
                     r.role_type = $role_type
             """
-            self.neo4j.execute_write(query, {
-                'ticker': ticker,
-                'person': person['normalized_name'],
-                'title': person.get('title'),
-                'role_type': person.get('role_type')
-            })
+            self.neo4j.execute_write(
+                query,
+                {
+                    "ticker": ticker,
+                    "person": person["normalized_name"],
+                    "title": person.get("title"),
+                    "role_type": person.get("role_type"),
+                },
+            )
 
         # Link to document
         if doc_id:
@@ -407,11 +462,14 @@ class PersonExtractionService:
                 MERGE (p)-[r:MENTIONED_IN]->(d)
                 SET r.context = $source
             """
-            self.neo4j.execute_write(query, {
-                'person': person['normalized_name'],
-                'doc_id': doc_id,
-                'source': person.get('source', 'document')
-            })
+            self.neo4j.execute_write(
+                query,
+                {
+                    "person": person["normalized_name"],
+                    "doc_id": doc_id,
+                    "source": person.get("source", "document"),
+                },
+            )
 
     def _count_executives(self, ticker: str) -> int:
         """Count executives for a ticker."""
@@ -419,8 +477,8 @@ class PersonExtractionService:
             MATCH (p:Person)-[:EXECUTIVE_OF]->(c:Company {ticker: $ticker})
             RETURN count(DISTINCT p) as count
         """
-        result = self.neo4j.execute_read(query, {'ticker': ticker})
-        return result[0]['count'] if result else 0
+        result = self.neo4j.execute_read(query, {"ticker": ticker})
+        return result[0]["count"] if result else 0
 
 
 # =============================================================================

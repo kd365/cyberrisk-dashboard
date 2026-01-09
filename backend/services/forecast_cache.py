@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
+
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -45,13 +46,15 @@ class ForecastCache:
             print("📦 ForecastCache: Using in-memory cache (psycopg2 not available)")
             return
 
-        db_host = os.environ.get('DB_HOST')
-        db_name = os.environ.get('DB_NAME', 'cyberrisk')
-        db_user = os.environ.get('DB_USER', 'cyberrisk_admin')
-        db_password = os.environ.get('DB_PASSWORD')
+        db_host = os.environ.get("DB_HOST")
+        db_name = os.environ.get("DB_NAME", "cyberrisk")
+        db_user = os.environ.get("DB_USER", "cyberrisk_admin")
+        db_password = os.environ.get("DB_PASSWORD")
 
         if not db_host or not db_password:
-            print("📦 ForecastCache: Using in-memory cache (DB credentials not configured)")
+            print(
+                "📦 ForecastCache: Using in-memory cache (DB credentials not configured)"
+            )
             return
 
         try:
@@ -60,7 +63,7 @@ class ForecastCache:
                 database=db_name,
                 user=db_user,
                 password=db_password,
-                port=5432
+                port=5432,
             )
             self.use_database = True
             print(f"✅ ForecastCache: Connected to RDS PostgreSQL at {db_host}")
@@ -69,7 +72,9 @@ class ForecastCache:
             self._ensure_table_exists()
 
         except Exception as e:
-            print(f"⚠️  ForecastCache: Database connection failed ({e}), using in-memory cache")
+            print(
+                f"⚠️  ForecastCache: Database connection failed ({e}), using in-memory cache"
+            )
             self.use_database = False
 
     def _ensure_table_exists(self):
@@ -80,7 +85,8 @@ class ForecastCache:
         try:
             cursor = self.db_connection.cursor()
             # Create table with model_type column
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS forecast_cache (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(10) NOT NULL,
@@ -90,11 +96,13 @@ class ForecastCache:
                     model_metrics JSONB,
                     computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
-            """)
+            """
+            )
             self.db_connection.commit()
 
             # Add model_type column if it doesn't exist (migration for existing tables)
-            cursor.execute("""
+            cursor.execute(
+                """
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
@@ -105,14 +113,17 @@ class ForecastCache:
                         ADD COLUMN model_type VARCHAR(20) NOT NULL DEFAULT 'prophet';
                     END IF;
                 END $$;
-            """)
+            """
+            )
             self.db_connection.commit()
 
             # Create index including model_type
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_forecast_cache_model_lookup
                     ON forecast_cache(ticker, forecast_days, model_type, computed_at);
-            """)
+            """
+            )
             self.db_connection.commit()
             cursor.close()
         except Exception as e:
@@ -132,12 +143,16 @@ class ForecastCache:
             self._init_database()
             return self.db_connection if self.use_database else None
 
-    def _get_cache_key(self, ticker: str, forecast_days: int, model_type: str = 'prophet') -> str:
+    def _get_cache_key(
+        self, ticker: str, forecast_days: int, model_type: str = "prophet"
+    ) -> str:
         """Generate cache key including model type"""
         today = date.today().isoformat()
         return f"forecast_{ticker}_{forecast_days}_{model_type}_{today}"
 
-    def get(self, ticker: str, forecast_days: int = 30, model_type: str = 'prophet') -> Optional[Dict[str, Any]]:
+    def get(
+        self, ticker: str, forecast_days: int = 30, model_type: str = "prophet"
+    ) -> Optional[Dict[str, Any]]:
         """
         Get cached forecast if available from today
 
@@ -160,11 +175,13 @@ class ForecastCache:
         cache_key = self._get_cache_key(ticker, forecast_days, model_type)
         if cache_key in self.memory_cache:
             print(f"✅ Forecast Cache HIT (memory) for {ticker} [{model_type}]")
-            return self.memory_cache[cache_key]['data']
+            return self.memory_cache[cache_key]["data"]
 
         return None
 
-    def get_all_models(self, ticker: str, forecast_days: int = 30) -> Dict[str, Optional[Dict[str, Any]]]:
+    def get_all_models(
+        self, ticker: str, forecast_days: int = 30
+    ) -> Dict[str, Optional[Dict[str, Any]]]:
         """
         Get cached forecasts for ALL models for a ticker
 
@@ -176,11 +193,13 @@ class ForecastCache:
             Dict with 'prophet' and 'chronos' keys, each containing cached data or None
         """
         return {
-            'prophet': self.get(ticker, forecast_days, 'prophet'),
-            'chronos': self.get(ticker, forecast_days, 'chronos')
+            "prophet": self.get(ticker, forecast_days, "prophet"),
+            "chronos": self.get(ticker, forecast_days, "chronos"),
         }
 
-    def _get_from_db(self, ticker: str, forecast_days: int, model_type: str = 'prophet') -> Optional[Dict[str, Any]]:
+    def _get_from_db(
+        self, ticker: str, forecast_days: int, model_type: str = "prophet"
+    ) -> Optional[Dict[str, Any]]:
         """Get forecast from database (only if computed today)"""
         conn = self._get_db_connection()
         if not conn:
@@ -189,7 +208,8 @@ class ForecastCache:
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             # Only get forecasts computed today for specific model
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT forecast_data, model_metrics, computed_at
                 FROM forecast_cache
                 WHERE ticker = %s
@@ -198,17 +218,19 @@ class ForecastCache:
                   AND DATE(computed_at) = CURRENT_DATE
                 ORDER BY computed_at DESC
                 LIMIT 1
-            """, (ticker, forecast_days, model_type))
+            """,
+                (ticker, forecast_days, model_type),
+            )
 
             row = cursor.fetchone()
             cursor.close()
 
             if row:
-                data = row['forecast_data']
-                if row['model_metrics']:
-                    data['model_metrics'] = row['model_metrics']
-                data['cached_at'] = row['computed_at'].isoformat()
-                data['model_type'] = model_type
+                data = row["forecast_data"]
+                if row["model_metrics"]:
+                    data["model_metrics"] = row["model_metrics"]
+                data["cached_at"] = row["computed_at"].isoformat()
+                data["model_type"] = model_type
                 return data
             return None
 
@@ -216,8 +238,14 @@ class ForecastCache:
             print(f"⚠️  Error reading from forecast_cache: {e}")
             return None
 
-    def set(self, ticker: str, forecast_days: int, data: Dict[str, Any],
-            model_type: str = 'prophet', model_metrics: Optional[Dict] = None):
+    def set(
+        self,
+        ticker: str,
+        forecast_days: int,
+        data: Dict[str, Any],
+        model_type: str = "prophet",
+        model_metrics: Optional[Dict] = None,
+    ):
         """
         Store forecast data in cache
 
@@ -235,16 +263,24 @@ class ForecastCache:
         # Also store in memory for fast access
         cache_key = self._get_cache_key(ticker, forecast_days, model_type)
         self.memory_cache[cache_key] = {
-            'data': data,
-            'timestamp': time.time(),
-            'ticker': ticker,
-            'model_type': model_type
+            "data": data,
+            "timestamp": time.time(),
+            "ticker": ticker,
+            "model_type": model_type,
         }
 
-        print(f"💾 Cached forecast data for {ticker} ({forecast_days} days) [{model_type}]")
+        print(
+            f"💾 Cached forecast data for {ticker} ({forecast_days} days) [{model_type}]"
+        )
 
-    def _set_in_db(self, ticker: str, forecast_days: int, data: Dict[str, Any],
-                   model_type: str = 'prophet', model_metrics: Optional[Dict] = None):
+    def _set_in_db(
+        self,
+        ticker: str,
+        forecast_days: int,
+        data: Dict[str, Any],
+        model_type: str = "prophet",
+        model_metrics: Optional[Dict] = None,
+    ):
         """Store forecast data in database"""
         conn = self._get_db_connection()
         if not conn:
@@ -255,18 +291,23 @@ class ForecastCache:
 
             # Clean the data for JSON serialization
             clean_data = self._clean_for_json(data)
-            clean_metrics = self._clean_for_json(model_metrics) if model_metrics else None
+            clean_metrics = (
+                self._clean_for_json(model_metrics) if model_metrics else None
+            )
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO forecast_cache (ticker, forecast_days, model_type, forecast_data, model_metrics, computed_at)
                 VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-            """, (
-                ticker,
-                forecast_days,
-                model_type,
-                json.dumps(clean_data),
-                json.dumps(clean_metrics) if clean_metrics else None
-            ))
+            """,
+                (
+                    ticker,
+                    forecast_days,
+                    model_type,
+                    json.dumps(clean_data),
+                    json.dumps(clean_metrics) if clean_metrics else None,
+                ),
+            )
 
             conn.commit()
             cursor.close()
@@ -288,11 +329,11 @@ class ForecastCache:
             return {k: self._clean_for_json(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [self._clean_for_json(item) for item in obj]
-        elif hasattr(obj, 'tolist'):  # numpy array
+        elif hasattr(obj, "tolist"):  # numpy array
             return obj.tolist()
-        elif hasattr(obj, 'isoformat'):  # datetime
+        elif hasattr(obj, "isoformat"):  # datetime
             return obj.isoformat()
-        elif hasattr(obj, 'item'):  # numpy scalar
+        elif hasattr(obj, "item"):  # numpy scalar
             return obj.item()
         else:
             return obj
@@ -312,7 +353,8 @@ class ForecastCache:
             print(f"🗑️  Cleared all forecast memory cache ({count} entries)")
         else:
             keys_to_delete = [
-                k for k in self.memory_cache.keys()
+                k
+                for k in self.memory_cache.keys()
                 if ticker in k and (model_type is None or model_type in k)
             ]
             for key in keys_to_delete:
@@ -333,10 +375,15 @@ class ForecastCache:
         try:
             cursor = conn.cursor()
             if ticker and model_type:
-                cursor.execute("DELETE FROM forecast_cache WHERE ticker = %s AND model_type = %s", (ticker, model_type))
+                cursor.execute(
+                    "DELETE FROM forecast_cache WHERE ticker = %s AND model_type = %s",
+                    (ticker, model_type),
+                )
                 print(f"🗑️  Cleared RDS forecast cache for {ticker} [{model_type}]")
             elif ticker:
-                cursor.execute("DELETE FROM forecast_cache WHERE ticker = %s", (ticker,))
+                cursor.execute(
+                    "DELETE FROM forecast_cache WHERE ticker = %s", (ticker,)
+                )
                 print(f"🗑️  Cleared RDS forecast cache for {ticker}")
             else:
                 cursor.execute("DELETE FROM forecast_cache")
@@ -349,8 +396,8 @@ class ForecastCache:
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
         stats = {
-            'memory_entries': len(self.memory_cache),
-            'using_database': self.use_database
+            "memory_entries": len(self.memory_cache),
+            "using_database": self.use_database,
         }
 
         if self.use_database:
@@ -358,29 +405,37 @@ class ForecastCache:
             if conn:
                 try:
                     cursor = conn.cursor(cursor_factory=RealDictCursor)
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         SELECT ticker, forecast_days, COUNT(*) as count,
                                MAX(computed_at) as last_computed
                         FROM forecast_cache
                         GROUP BY ticker, forecast_days
                         ORDER BY last_computed DESC
-                    """)
+                    """
+                    )
                     rows = cursor.fetchall()
                     cursor.close()
 
-                    stats['database_entries'] = sum(row['count'] for row in rows)
-                    stats['database_by_ticker'] = {}
+                    stats["database_entries"] = sum(row["count"] for row in rows)
+                    stats["database_by_ticker"] = {}
                     for row in rows:
-                        ticker = row['ticker']
-                        if ticker not in stats['database_by_ticker']:
-                            stats['database_by_ticker'][ticker] = []
-                        stats['database_by_ticker'][ticker].append({
-                            'forecast_days': row['forecast_days'],
-                            'count': row['count'],
-                            'last_computed': row['last_computed'].isoformat() if row['last_computed'] else None
-                        })
+                        ticker = row["ticker"]
+                        if ticker not in stats["database_by_ticker"]:
+                            stats["database_by_ticker"][ticker] = []
+                        stats["database_by_ticker"][ticker].append(
+                            {
+                                "forecast_days": row["forecast_days"],
+                                "count": row["count"],
+                                "last_computed": (
+                                    row["last_computed"].isoformat()
+                                    if row["last_computed"]
+                                    else None
+                                ),
+                            }
+                        )
                 except Exception as e:
-                    stats['database_error'] = str(e)
+                    stats["database_error"] = str(e)
 
         return stats
 
@@ -390,7 +445,9 @@ forecast_cache = ForecastCache()
 
 
 # Helper functions for LLM chat service
-def get_cached_forecast(ticker: str, model: str = 'prophet', days: int = 30) -> Optional[Dict[str, Any]]:
+def get_cached_forecast(
+    ticker: str, model: str = "prophet", days: int = 30
+) -> Optional[Dict[str, Any]]:
     """Get cached forecast - wrapper for LLM service."""
     return forecast_cache.get(ticker, days, model)
 
@@ -399,19 +456,20 @@ def get_stock_data(ticker: str) -> Optional[Dict[str, Any]]:
     """Get current stock data for a ticker using yfinance."""
     try:
         import yfinance as yf
+
         stock = yf.Ticker(ticker)
-        hist = stock.history(period='5d')
+        hist = stock.history(period="5d")
         if hist.empty:
             return None
 
-        current_price = float(hist['Close'].iloc[-1])
-        prev_close = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current_price
+        current_price = float(hist["Close"].iloc[-1])
+        prev_close = float(hist["Close"].iloc[-2]) if len(hist) > 1 else current_price
         change_pct = ((current_price - prev_close) / prev_close) * 100
 
         return {
-            'current_price': round(current_price, 2),
-            'previous_close': round(prev_close, 2),
-            'change_pct': round(change_pct, 2)
+            "current_price": round(current_price, 2),
+            "previous_close": round(prev_close, 2),
+            "change_pct": round(change_pct, 2),
         }
     except Exception as e:
         print(f"Error fetching stock data for {ticker}: {e}")

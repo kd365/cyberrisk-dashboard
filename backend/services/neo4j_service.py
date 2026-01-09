@@ -52,15 +52,12 @@ def _serialize_neo4j_value(value):
     if isinstance(value, Node):
         # Convert Neo4j Node to dict with labels and properties
         return {
-            'labels': list(value.labels),
-            'properties': _serialize_neo4j_value(dict(value))
+            "labels": list(value.labels),
+            "properties": _serialize_neo4j_value(dict(value)),
         }
     elif isinstance(value, Relationship):
         # Convert Neo4j Relationship to dict
-        return {
-            'type': value.type,
-            'properties': _serialize_neo4j_value(dict(value))
-        }
+        return {"type": value.type, "properties": _serialize_neo4j_value(dict(value))}
     elif isinstance(value, (Neo4jDateTime, Neo4jDate)):
         return value.iso_format()
     elif isinstance(value, (datetime, date)):
@@ -83,8 +80,16 @@ class Neo4jService:
 
     # Keywords blocked in public Cypher queries (prevent destructive operations)
     DANGEROUS_KEYWORDS = [
-        'DELETE', 'REMOVE', 'DROP', 'CREATE', 'SET', 'MERGE',
-        'DETACH', 'CALL', 'LOAD', 'FOREACH'
+        "DELETE",
+        "REMOVE",
+        "DROP",
+        "CREATE",
+        "SET",
+        "MERGE",
+        "DETACH",
+        "CALL",
+        "LOAD",
+        "FOREACH",
     ]
 
     def __init__(self, uri: str = None, username: str = None, password: str = None):
@@ -96,9 +101,9 @@ class Neo4jService:
             username: Neo4j username (default: neo4j)
             password: Neo4j password (from environment)
         """
-        self.uri = uri or os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-        self.username = username or os.environ.get('NEO4J_USERNAME', 'neo4j')
-        self.password = password or os.environ.get('NEO4J_PASSWORD', '')
+        self.uri = uri or os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+        self.username = username or os.environ.get("NEO4J_USERNAME", "neo4j")
+        self.password = password or os.environ.get("NEO4J_PASSWORD", "")
 
         self._driver = None
         self._connected = False
@@ -113,7 +118,7 @@ class Neo4jService:
                     auth=(self.username, self.password),
                     max_connection_lifetime=3600,
                     max_connection_pool_size=50,
-                    connection_acquisition_timeout=60
+                    connection_acquisition_timeout=60,
                 )
                 # Verify connectivity
                 self._driver.verify_connectivity()
@@ -186,11 +191,11 @@ class Neo4jService:
             result = session.run(query, parameters or {})
             summary = result.consume()
             return {
-                'nodes_created': summary.counters.nodes_created,
-                'nodes_deleted': summary.counters.nodes_deleted,
-                'relationships_created': summary.counters.relationships_created,
-                'relationships_deleted': summary.counters.relationships_deleted,
-                'properties_set': summary.counters.properties_set
+                "nodes_created": summary.counters.nodes_created,
+                "nodes_deleted": summary.counters.nodes_deleted,
+                "relationships_created": summary.counters.relationships_created,
+                "relationships_deleted": summary.counters.relationships_deleted,
+                "properties_set": summary.counters.properties_set,
             }
 
     def execute_cypher_safe(self, query: str) -> Dict:
@@ -210,8 +215,15 @@ class Neo4jService:
         for keyword in self.DANGEROUS_KEYWORDS:
             if keyword in query_upper:
                 return {
-                    'error': f'Operation "{keyword}" not allowed in console',
-                    'allowed_operations': ['MATCH', 'RETURN', 'WHERE', 'WITH', 'ORDER BY', 'LIMIT']
+                    "error": f'Operation "{keyword}" not allowed in console',
+                    "allowed_operations": [
+                        "MATCH",
+                        "RETURN",
+                        "WHERE",
+                        "WITH",
+                        "ORDER BY",
+                        "LIMIT",
+                    ],
                 }
 
         try:
@@ -220,7 +232,7 @@ class Neo4jService:
                 records = list(result)
 
                 if not records:
-                    return {'columns': [], 'records': [], 'count': 0}
+                    return {"columns": [], "records": [], "count": 0}
 
                 # Extract column names from first record
                 columns = list(records[0].keys()) if records else []
@@ -234,15 +246,11 @@ class Neo4jService:
                         row[key] = self._serialize_value(value)
                     data.append(row)
 
-                return {
-                    'columns': columns,
-                    'records': data,
-                    'count': len(data)
-                }
+                return {"columns": columns, "records": data, "count": len(data)}
 
         except Exception as e:
             logger.error(f"Cypher execution error: {e}")
-            return {'error': str(e)}
+            return {"error": str(e)}
 
     def _serialize_value(self, value: Any) -> Any:
         """Convert Neo4j values to JSON-serializable format."""
@@ -261,23 +269,19 @@ class Neo4jService:
         if isinstance(value, dict):
             return {k: self._serialize_value(v) for k, v in value.items()}
         # Handle Neo4j Node objects
-        if hasattr(value, 'labels') and hasattr(value, 'items'):
+        if hasattr(value, "labels") and hasattr(value, "items"):
             # Recursively serialize properties to handle DateTime values
-            props = {k: self._serialize_value(v) for k, v in dict(value.items()).items()}
-            return {
-                '_type': 'node',
-                'labels': list(value.labels),
-                'properties': props
+            props = {
+                k: self._serialize_value(v) for k, v in dict(value.items()).items()
             }
+            return {"_type": "node", "labels": list(value.labels), "properties": props}
         # Handle Neo4j Relationship objects
-        if hasattr(value, 'type') and hasattr(value, 'start_node'):
+        if hasattr(value, "type") and hasattr(value, "start_node"):
             # Recursively serialize properties to handle DateTime values
-            props = {k: self._serialize_value(v) for k, v in dict(value.items()).items()}
-            return {
-                '_type': 'relationship',
-                'type': value.type,
-                'properties': props
+            props = {
+                k: self._serialize_value(v) for k, v in dict(value.items()).items()
             }
+            return {"_type": "relationship", "type": value.type, "properties": props}
         # Fallback
         return str(value)
 
@@ -327,24 +331,35 @@ class Neo4jService:
             if results:
                 return results[0]
             return {
-                'organizations': 0, 'tracked_companies': 0, 'documents': 0,
-                'locations': 0, 'events': 0, 'persons': 0, 'concepts': 0,
-                'news': 0, 'patents': 0, 'relationships': 0
+                "organizations": 0,
+                "tracked_companies": 0,
+                "documents": 0,
+                "locations": 0,
+                "events": 0,
+                "persons": 0,
+                "concepts": 0,
+                "news": 0,
+                "patents": 0,
+                "relationships": 0,
             }
         except Exception as e:
             logger.error(f"Error getting graph stats: {e}")
-            return {'error': str(e)}
+            return {"error": str(e)}
 
     # =========================================================================
     # Company Graph Visualization
     # =========================================================================
 
-    def get_company_graph(self, ticker: str, depth: int = 2,
-                          include_organizations: bool = True,
-                          include_locations: bool = True,
-                          include_concepts: bool = True,
-                          include_documents: bool = False,
-                          limit: int = 100) -> Dict:
+    def get_company_graph(
+        self,
+        ticker: str,
+        depth: int = 2,
+        include_organizations: bool = True,
+        include_locations: bool = True,
+        include_concepts: bool = True,
+        include_documents: bool = False,
+        limit: int = 100,
+    ) -> Dict:
         """
         Get graph data for visualization centered on a company.
 
@@ -364,24 +379,24 @@ class Neo4jService:
             Graph data with nodes and links for visualization
         """
         # Build node type filter
-        node_types = ['Organization', 'Person', 'Event', 'Patent']
+        node_types = ["Organization", "Person", "Event", "Patent"]
         if include_locations:
-            node_types.append('Location')
+            node_types.append("Location")
         if include_concepts:
-            node_types.append('Concept')
+            node_types.append("Concept")
         if include_documents:
-            node_types.append('Document')
+            node_types.append("Document")
 
         # First get the tracked company's name
         name_query = """
             MATCH (o:Organization {ticker: $ticker, tracked: true})
             RETURN o.name as name
         """
-        name_result = self.execute_read(name_query, {'ticker': ticker.upper()})
+        name_result = self.execute_read(name_query, {"ticker": ticker.upper()})
         if not name_result:
-            return {'nodes': [], 'links': [], 'ticker': ticker}
+            return {"nodes": [], "links": [], "ticker": ticker}
 
-        company_name = name_result[0]['name']
+        company_name = name_result[0]["name"]
         # Extract core company name (e.g., "CrowdStrike" from "CrowdStrike Holdings")
         core_name = company_name.split()[0] if company_name else ticker
 
@@ -457,21 +472,20 @@ class Neo4jService:
         """
 
         try:
-            results = self.execute_read(fallback_query, {
-                'ticker': ticker.upper(),
-                'core_name': core_name,
-                'limit': limit
-            })
+            results = self.execute_read(
+                fallback_query,
+                {"ticker": ticker.upper(), "core_name": core_name, "limit": limit},
+            )
         except Exception as e:
             logger.error(f"Graph query failed: {e}")
-            return {'nodes': [], 'links': [], 'ticker': ticker}
+            return {"nodes": [], "links": [], "ticker": ticker}
 
         if not results:
-            return {'nodes': [], 'links': []}
+            return {"nodes": [], "links": []}
 
         result = results[0]
-        nodes_data = result.get('nodes', [])
-        rels_data = result.get('relationships', [])
+        nodes_data = result.get("nodes", [])
+        rels_data = result.get("relationships", [])
 
         # Convert to visualization format
         nodes = []
@@ -480,40 +494,46 @@ class Neo4jService:
         for node in nodes_data:
             if node is None:
                 continue
-            node_id = node.element_id if hasattr(node, 'element_id') else str(id(node))
+            node_id = node.element_id if hasattr(node, "element_id") else str(id(node))
             if node_id in node_ids:
                 continue
             node_ids.add(node_id)
 
-            labels = list(node.labels) if hasattr(node, 'labels') else ['Unknown']
-            props = dict(node.items()) if hasattr(node, 'items') else {}
+            labels = list(node.labels) if hasattr(node, "labels") else ["Unknown"]
+            props = dict(node.items()) if hasattr(node, "items") else {}
             # Serialize Neo4j types to JSON-compatible values
             props = _serialize_neo4j_value(props)
 
-            nodes.append({
-                'id': node_id,
-                'labels': labels,
-                'name': props.get('name') or props.get('ticker') or props.get('headline', 'Unknown'),
-                'type': labels[0] if labels else 'Unknown',
-                'properties': props
-            })
+            nodes.append(
+                {
+                    "id": node_id,
+                    "labels": labels,
+                    "name": props.get("name")
+                    or props.get("ticker")
+                    or props.get("headline", "Unknown"),
+                    "type": labels[0] if labels else "Unknown",
+                    "properties": props,
+                }
+            )
 
         links = []
         for rel in rels_data:
             if rel is None:
                 continue
             try:
-                rel_props = dict(rel.items()) if hasattr(rel, 'items') else {}
-                links.append({
-                    'source': rel.start_node.element_id,
-                    'target': rel.end_node.element_id,
-                    'type': rel.type,
-                    'properties': _serialize_neo4j_value(rel_props)
-                })
+                rel_props = dict(rel.items()) if hasattr(rel, "items") else {}
+                links.append(
+                    {
+                        "source": rel.start_node.element_id,
+                        "target": rel.end_node.element_id,
+                        "type": rel.type,
+                        "properties": _serialize_neo4j_value(rel_props),
+                    }
+                )
             except Exception:
                 pass
 
-        return {'nodes': nodes, 'links': links}
+        return {"nodes": nodes, "links": links}
 
     # =========================================================================
     # Semantic Query for GraphRAG
@@ -570,26 +590,31 @@ class Neo4jService:
             """
 
         try:
-            results = self.execute_read(cypher, {
-                'keywords': keywords,
-                'ticker': ticker.upper() if ticker else None
-            })
+            results = self.execute_read(
+                cypher,
+                {"keywords": keywords, "ticker": ticker.upper() if ticker else None},
+            )
 
             # Serialize Neo4j Node/Relationship objects to JSON-serializable dicts
             serialized_results = _serialize_neo4j_value(results)
 
             return {
-                'query': query,
-                'ticker': ticker,
-                'results': serialized_results,
-                'keywords_extracted': keywords
+                "query": query,
+                "ticker": ticker,
+                "results": serialized_results,
+                "keywords_extracted": keywords,
             }
         except Exception as e:
             logger.error(f"Semantic query error: {e}")
-            return {'error': str(e)}
+            return {"error": str(e)}
 
-    def get_patents(self, ticker: str = None, inventor_name: str = None,
-                    search_term: str = None, limit: int = 10) -> Dict:
+    def get_patents(
+        self,
+        ticker: str = None,
+        inventor_name: str = None,
+        search_term: str = None,
+        limit: int = 10,
+    ) -> Dict:
         """
         Query patents from the knowledge graph.
 
@@ -619,7 +644,9 @@ class Neo4jService:
                     ORDER BY p.filing_date DESC
                     LIMIT $limit
                 """
-                results = self.execute_read(query, {'ticker': ticker.upper(), 'limit': limit})
+                results = self.execute_read(
+                    query, {"ticker": ticker.upper(), "limit": limit}
+                )
 
             elif inventor_name:
                 # Get patents by inventor
@@ -637,11 +664,15 @@ class Neo4jService:
                     ORDER BY p.filing_date DESC
                     LIMIT $limit
                 """
-                results = self.execute_read(query, {'inventor_name': inventor_name, 'limit': limit})
+                results = self.execute_read(
+                    query, {"inventor_name": inventor_name, "limit": limit}
+                )
 
             elif search_term:
                 # Search patents by title
-                keywords = [w.strip().lower() for w in search_term.split() if len(w) > 2]
+                keywords = [
+                    w.strip().lower() for w in search_term.split() if len(w) > 2
+                ]
                 query = """
                     MATCH (p:Patent)
                     WHERE any(kw IN $keywords WHERE toLower(p.title) CONTAINS kw)
@@ -657,7 +688,9 @@ class Neo4jService:
                     ORDER BY p.filing_date DESC
                     LIMIT $limit
                 """
-                results = self.execute_read(query, {'keywords': keywords, 'limit': limit})
+                results = self.execute_read(
+                    query, {"keywords": keywords, "limit": limit}
+                )
 
             else:
                 # Get recent patents
@@ -675,40 +708,47 @@ class Neo4jService:
                     ORDER BY p.filing_date DESC
                     LIMIT $limit
                 """
-                results = self.execute_read(query, {'limit': limit})
+                results = self.execute_read(query, {"limit": limit})
 
             # Get total patent count
             count_query = "MATCH (p:Patent) RETURN count(p) as total"
             count_result = self.execute_read(count_query)
-            total_patents = count_result[0]['total'] if count_result else 0
+            total_patents = count_result[0]["total"] if count_result else 0
 
             # Serialize results
             serialized_results = _serialize_neo4j_value(results)
 
             return {
-                'patents': serialized_results,
-                'count': len(serialized_results),
-                'total_patents_in_graph': total_patents,
-                'query_params': {
-                    'ticker': ticker,
-                    'inventor_name': inventor_name,
-                    'search_term': search_term
-                }
+                "patents": serialized_results,
+                "count": len(serialized_results),
+                "total_patents_in_graph": total_patents,
+                "query_params": {
+                    "ticker": ticker,
+                    "inventor_name": inventor_name,
+                    "search_term": search_term,
+                },
             }
 
         except Exception as e:
             logger.error(f"Patent query error: {e}")
-            return {'error': str(e), 'patents': []}
+            return {"error": str(e), "patents": []}
 
     # =========================================================================
     # Node CRUD Operations
     # =========================================================================
 
-    def create_organization(self, name: str, ticker: str = None,
-                             tracked: bool = False, gics_sector: str = None,
-                             gics_industry: str = None, cyber_sector: str = None,
-                             cyber_focus: list = None, description: str = None,
-                             **properties) -> Dict:
+    def create_organization(
+        self,
+        name: str,
+        ticker: str = None,
+        tracked: bool = False,
+        gics_sector: str = None,
+        gics_industry: str = None,
+        cyber_sector: str = None,
+        cyber_focus: list = None,
+        description: str = None,
+        **properties,
+    ) -> Dict:
         """
         Create or update an Organization node.
 
@@ -732,7 +772,7 @@ class Neo4jService:
             """
         else:
             # Mentioned organization - merge on normalized name
-            normalized = name.lower().replace(' ', '_')
+            normalized = name.lower().replace(" ", "_")
             query = """
                 MERGE (o:Organization {normalized_name: $normalized})
                 ON CREATE SET o.name = $name,
@@ -742,22 +782,32 @@ class Neo4jService:
                 ON MATCH SET o.mention_count = o.mention_count + 1
                 RETURN o
             """
-            return self.execute_write(query, {'name': name, 'normalized': normalized})
+            return self.execute_write(query, {"name": name, "normalized": normalized})
 
-        return self.execute_write(query, {
-            'name': name,
-            'ticker': ticker.upper() if ticker else None,
-            'tracked': tracked,
-            'gics_sector': gics_sector,
-            'gics_industry': gics_industry,
-            'cyber_sector': cyber_sector,
-            'cyber_focus': cyber_focus or [],
-            'description': description,
-            'properties': properties
-        })
+        return self.execute_write(
+            query,
+            {
+                "name": name,
+                "ticker": ticker.upper() if ticker else None,
+                "tracked": tracked,
+                "gics_sector": gics_sector,
+                "gics_industry": gics_industry,
+                "cyber_sector": cyber_sector,
+                "cyber_focus": cyber_focus or [],
+                "description": description,
+                "properties": properties,
+            },
+        )
 
-    def create_document(self, doc_id: str, ticker: str, doc_type: str,
-                        s3_key: str, date: str = None, **properties) -> Dict:
+    def create_document(
+        self,
+        doc_id: str,
+        ticker: str,
+        doc_type: str,
+        s3_key: str,
+        date: str = None,
+        **properties,
+    ) -> Dict:
         """Create a Document node linked to a tracked Organization."""
         query = """
             MATCH (o:Organization {ticker: $ticker, tracked: true})
@@ -771,20 +821,24 @@ class Neo4jService:
             MERGE (o)-[:FILED]->(d)
             RETURN d
         """
-        return self.execute_write(query, {
-            'doc_id': doc_id,
-            'ticker': ticker.upper(),
-            'doc_type': doc_type,
-            's3_key': s3_key,
-            'date': date,
-            'properties': properties
-        })
+        return self.execute_write(
+            query,
+            {
+                "doc_id": doc_id,
+                "ticker": ticker.upper(),
+                "doc_type": doc_type,
+                "s3_key": s3_key,
+                "date": date,
+                "properties": properties,
+            },
+        )
 
-    def create_location(self, name: str, normalized_name: str = None,
-                        location_type: str = None) -> Dict:
+    def create_location(
+        self, name: str, normalized_name: str = None, location_type: str = None
+    ) -> Dict:
         """Create a Location node."""
         if not normalized_name:
-            normalized_name = name.lower().replace(' ', '_')
+            normalized_name = name.lower().replace(" ", "_")
 
         query = """
             MERGE (l:Location {normalized_name: $normalized})
@@ -795,17 +849,20 @@ class Neo4jService:
             ON MATCH SET l.mention_count = l.mention_count + 1
             RETURN l
         """
-        return self.execute_write(query, {
-            'name': name,
-            'normalized': normalized_name,
-            'type': location_type
-        })
+        return self.execute_write(
+            query, {"name": name, "normalized": normalized_name, "type": location_type}
+        )
 
-    def create_event(self, name: str, date: str = None,
-                     normalized_name: str = None, event_type: str = None) -> Dict:
+    def create_event(
+        self,
+        name: str,
+        date: str = None,
+        normalized_name: str = None,
+        event_type: str = None,
+    ) -> Dict:
         """Create an Event node."""
         if not normalized_name:
-            normalized_name = name.lower().replace(' ', '_')
+            normalized_name = name.lower().replace(" ", "_")
 
         query = """
             MERGE (e:Event {normalized_name: $normalized})
@@ -817,18 +874,22 @@ class Neo4jService:
             ON MATCH SET e.mention_count = e.mention_count + 1
             RETURN e
         """
-        return self.execute_write(query, {
-            'name': name,
-            'date': date,
-            'normalized': normalized_name,
-            'type': event_type
-        })
+        return self.execute_write(
+            query,
+            {
+                "name": name,
+                "date": date,
+                "normalized": normalized_name,
+                "type": event_type,
+            },
+        )
 
-    def create_person(self, name: str, title: str = None,
-                      normalized_name: str = None, **properties) -> Dict:
+    def create_person(
+        self, name: str, title: str = None, normalized_name: str = None, **properties
+    ) -> Dict:
         """Create a Person node."""
         if not normalized_name:
-            normalized_name = name.lower().replace(' ', '_')
+            normalized_name = name.lower().replace(" ", "_")
 
         query = """
             MERGE (p:Person {normalized_name: $normalized})
@@ -838,17 +899,20 @@ class Neo4jService:
             SET p += $properties
             RETURN p
         """
-        return self.execute_write(query, {
-            'name': name,
-            'title': title,
-            'normalized': normalized_name,
-            'properties': properties
-        })
+        return self.execute_write(
+            query,
+            {
+                "name": name,
+                "title": title,
+                "normalized": normalized_name,
+                "properties": properties,
+            },
+        )
 
     def create_concept(self, name: str, normalized_name: str = None) -> Dict:
         """Create a Concept node (key phrase)."""
         if not normalized_name:
-            normalized_name = name.lower().replace(' ', '_')
+            normalized_name = name.lower().replace(" ", "_")
 
         query = """
             MERGE (c:Concept {normalized_name: $normalized})
@@ -858,13 +922,11 @@ class Neo4jService:
             ON MATCH SET c.mention_count = c.mention_count + 1
             RETURN c
         """
-        return self.execute_write(query, {
-            'name': name,
-            'normalized': normalized_name
-        })
+        return self.execute_write(query, {"name": name, "normalized": normalized_name})
 
-    def link_document_organization(self, doc_id: str, org_normalized: str,
-                                   count: int = 1, sentiment: float = 0.0) -> Dict:
+    def link_document_organization(
+        self, doc_id: str, org_normalized: str, count: int = 1, sentiment: float = 0.0
+    ) -> Dict:
         """Create MENTIONS relationship between Document and Organization."""
         query = """
             MATCH (d:Document {id: $doc_id})
@@ -874,15 +936,19 @@ class Neo4jService:
                 r.sentiment = $sentiment
             RETURN r
         """
-        return self.execute_write(query, {
-            'doc_id': doc_id,
-            'org': org_normalized,
-            'count': count,
-            'sentiment': sentiment
-        })
+        return self.execute_write(
+            query,
+            {
+                "doc_id": doc_id,
+                "org": org_normalized,
+                "count": count,
+                "sentiment": sentiment,
+            },
+        )
 
-    def link_document_location(self, doc_id: str, loc_normalized: str,
-                               count: int = 1) -> Dict:
+    def link_document_location(
+        self, doc_id: str, loc_normalized: str, count: int = 1
+    ) -> Dict:
         """Create MENTIONS relationship between Document and Location."""
         query = """
             MATCH (d:Document {id: $doc_id})
@@ -891,14 +957,17 @@ class Neo4jService:
             SET r.count = $count
             RETURN r
         """
-        return self.execute_write(query, {
-            'doc_id': doc_id,
-            'loc': loc_normalized,
-            'count': count
-        })
+        return self.execute_write(
+            query, {"doc_id": doc_id, "loc": loc_normalized, "count": count}
+        )
 
-    def link_document_concept(self, doc_id: str, concept_normalized: str,
-                              count: int = 1, relevance: float = 0.0) -> Dict:
+    def link_document_concept(
+        self,
+        doc_id: str,
+        concept_normalized: str,
+        count: int = 1,
+        relevance: float = 0.0,
+    ) -> Dict:
         """Create DISCUSSES relationship between Document and Concept."""
         query = """
             MATCH (d:Document {id: $doc_id})
@@ -908,15 +977,19 @@ class Neo4jService:
                 r.relevance = $relevance
             RETURN r
         """
-        return self.execute_write(query, {
-            'doc_id': doc_id,
-            'concept': concept_normalized,
-            'count': count,
-            'relevance': relevance
-        })
+        return self.execute_write(
+            query,
+            {
+                "doc_id": doc_id,
+                "concept": concept_normalized,
+                "count": count,
+                "relevance": relevance,
+            },
+        )
 
-    def link_person_organization(self, person_normalized: str, org_normalized: str,
-                                 role: str = None) -> Dict:
+    def link_person_organization(
+        self, person_normalized: str, org_normalized: str, role: str = None
+    ) -> Dict:
         """Create WORKS_FOR relationship between Person and Organization."""
         query = """
             MATCH (p:Person {normalized_name: $person})
@@ -925,11 +998,9 @@ class Neo4jService:
             SET r.role = $role
             RETURN r
         """
-        return self.execute_write(query, {
-            'person': person_normalized,
-            'org': org_normalized,
-            'role': role
-        })
+        return self.execute_write(
+            query, {"person": person_normalized, "org": org_normalized, "role": role}
+        )
 
     # =========================================================================
     # Graph Management
@@ -965,37 +1036,37 @@ class Neo4jService:
         for idx_query in indexes:
             try:
                 self.execute_write(idx_query)
-                results.append({'query': idx_query, 'status': 'success'})
+                results.append({"query": idx_query, "status": "success"})
             except Exception as e:
-                results.append({'query': idx_query, 'status': 'error', 'error': str(e)})
+                results.append({"query": idx_query, "status": "error", "error": str(e)})
 
-        return {'indexes_created': results}
+        return {"indexes_created": results}
 
     def get_schema_info(self) -> Dict:
         """Get information about the graph schema."""
         return {
-            'version': '2.0',
-            'node_labels': {
-                'Organization': 'Companies and organizations (tracked and mentioned)',
-                'Location': 'Geographic locations mentioned in documents',
-                'Event': 'Events with date attribute',
-                'Person': 'People mentioned in documents',
-                'Concept': 'Key phrases and concepts',
-                'Document': 'SEC filings, transcripts with date attribute',
-                'News': 'News articles with date attribute'
+            "version": "2.0",
+            "node_labels": {
+                "Organization": "Companies and organizations (tracked and mentioned)",
+                "Location": "Geographic locations mentioned in documents",
+                "Event": "Events with date attribute",
+                "Person": "People mentioned in documents",
+                "Concept": "Key phrases and concepts",
+                "Document": "SEC filings, transcripts with date attribute",
+                "News": "News articles with date attribute",
             },
-            'relationships': {
-                'FILED': '(Organization)-[:FILED]->(Document)',
-                'MENTIONS': '(Document)-[:MENTIONS]->(Organization|Location|Person|Event)',
-                'DISCUSSES': '(Document)-[:DISCUSSES]->(Concept)',
-                'COMPETES_WITH': '(Organization)-[:COMPETES_WITH]->(Organization)',
-                'PARTNERS_WITH': '(Organization)-[:PARTNERS_WITH]->(Organization)',
-                'WORKS_FOR': '(Person)-[:WORKS_FOR]->(Organization)'
+            "relationships": {
+                "FILED": "(Organization)-[:FILED]->(Document)",
+                "MENTIONS": "(Document)-[:MENTIONS]->(Organization|Location|Person|Event)",
+                "DISCUSSES": "(Document)-[:DISCUSSES]->(Concept)",
+                "COMPETES_WITH": "(Organization)-[:COMPETES_WITH]->(Organization)",
+                "PARTNERS_WITH": "(Organization)-[:PARTNERS_WITH]->(Organization)",
+                "WORKS_FOR": "(Person)-[:WORKS_FOR]->(Organization)",
             },
-            'taxonomy': {
-                'gics': 'Global Industry Classification Standard (Sector, Industry)',
-                'cyber_sector': 'CyberRisk custom cybersecurity sector classification'
-            }
+            "taxonomy": {
+                "gics": "Global Industry Classification Standard (Sector, Industry)",
+                "cyber_sector": "CyberRisk custom cybersecurity sector classification",
+            },
         }
 
 

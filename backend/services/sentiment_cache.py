@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any, List
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
+
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -49,13 +50,15 @@ class SentimentCache:
             print("📦 SentimentCache: Using in-memory cache (psycopg2 not available)")
             return
 
-        db_host = os.environ.get('DB_HOST')
-        db_name = os.environ.get('DB_NAME', 'cyberrisk')
-        db_user = os.environ.get('DB_USER', 'cyberrisk_admin')
-        db_password = os.environ.get('DB_PASSWORD')
+        db_host = os.environ.get("DB_HOST")
+        db_name = os.environ.get("DB_NAME", "cyberrisk")
+        db_user = os.environ.get("DB_USER", "cyberrisk_admin")
+        db_password = os.environ.get("DB_PASSWORD")
 
         if not db_host or not db_password:
-            print("📦 SentimentCache: Using in-memory cache (DB credentials not configured)")
+            print(
+                "📦 SentimentCache: Using in-memory cache (DB credentials not configured)"
+            )
             return
 
         try:
@@ -64,7 +67,7 @@ class SentimentCache:
                 database=db_name,
                 user=db_user,
                 password=db_password,
-                port=5432
+                port=5432,
             )
             self.use_database = True
             print(f"✅ SentimentCache: Connected to RDS PostgreSQL at {db_host}")
@@ -73,7 +76,9 @@ class SentimentCache:
             self._ensure_table_exists()
 
         except Exception as e:
-            print(f"⚠️  SentimentCache: Database connection failed ({e}), using in-memory cache")
+            print(
+                f"⚠️  SentimentCache: Database connection failed ({e}), using in-memory cache"
+            )
             self.use_database = False
 
     def _ensure_table_exists(self):
@@ -83,7 +88,8 @@ class SentimentCache:
 
         try:
             cursor = self.db_connection.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS sentiment_cache (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(10) NOT NULL,
@@ -94,7 +100,8 @@ class SentimentCache:
                 );
                 CREATE INDEX IF NOT EXISTS idx_sentiment_cache_lookup
                     ON sentiment_cache(ticker, artifact_hash);
-            """)
+            """
+            )
             self.db_connection.commit()
             cursor.close()
         except Exception as e:
@@ -128,11 +135,9 @@ class SentimentCache:
             str: MD5 hash of ticker + artifact keys
         """
         # Create hash of ticker + artifact keys to detect changes
-        artifact_keys = sorted([
-            a.get('s3_key', '')
-            for a in artifacts
-            if a.get('ticker') == ticker
-        ])
+        artifact_keys = sorted(
+            [a.get("s3_key", "") for a in artifacts if a.get("ticker") == ticker]
+        )
         content = f"{ticker}:{':'.join(artifact_keys)}"
         return hashlib.md5(content.encode()).hexdigest()
 
@@ -153,7 +158,9 @@ class SentimentCache:
         if self.use_database:
             result = self._get_from_db(ticker, cache_key)
             if result:
-                print(f"✅ Cache HIT (RDS) for {ticker} - saved AWS Comprehend API calls!")
+                print(
+                    f"✅ Cache HIT (RDS) for {ticker} - saved AWS Comprehend API calls!"
+                )
                 return result
 
         # Fall back to memory cache
@@ -161,9 +168,9 @@ class SentimentCache:
         if memory_key in self.memory_cache:
             cached_item = self.memory_cache[memory_key]
             # Check if expired (only for memory cache)
-            if time.time() - cached_item['timestamp'] <= self.ttl:
+            if time.time() - cached_item["timestamp"] <= self.ttl:
                 print(f"✅ Cache HIT (memory) for {ticker}")
-                return cached_item['data']
+                return cached_item["data"]
             else:
                 del self.memory_cache[memory_key]
 
@@ -177,18 +184,21 @@ class SentimentCache:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT sentiment_data, computed_at
                 FROM sentiment_cache
                 WHERE ticker = %s AND artifact_hash = %s
-            """, (ticker, artifact_hash))
+            """,
+                (ticker, artifact_hash),
+            )
 
             row = cursor.fetchone()
             cursor.close()
 
             if row:
                 # Return the cached data (JSONB is auto-converted to dict)
-                return row['sentiment_data']
+                return row["sentiment_data"]
             return None
 
         except Exception as e:
@@ -213,9 +223,9 @@ class SentimentCache:
         # Also store in memory for fast access
         memory_key = f"sentiment_{ticker}_{cache_key}"
         self.memory_cache[memory_key] = {
-            'data': data,
-            'timestamp': time.time(),
-            'ticker': ticker
+            "data": data,
+            "timestamp": time.time(),
+            "ticker": ticker,
         }
 
         print(f"💾 Cached sentiment data for {ticker}")
@@ -228,14 +238,17 @@ class SentimentCache:
 
         try:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO sentiment_cache (ticker, artifact_hash, sentiment_data, computed_at)
                 VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (ticker, artifact_hash)
                 DO UPDATE SET
                     sentiment_data = EXCLUDED.sentiment_data,
                     computed_at = CURRENT_TIMESTAMP
-            """, (ticker, artifact_hash, json.dumps(data)))
+            """,
+                (ticker, artifact_hash, json.dumps(data)),
+            )
 
             conn.commit()
             cursor.close()
@@ -262,8 +275,9 @@ class SentimentCache:
             print(f"🗑️  Cleared memory cache ({count} entries)")
         else:
             keys_to_delete = [
-                k for k in self.memory_cache.keys()
-                if self.memory_cache[k]['ticker'] == ticker
+                k
+                for k in self.memory_cache.keys()
+                if self.memory_cache[k]["ticker"] == ticker
             ]
             for key in keys_to_delete:
                 del self.memory_cache[key]
@@ -282,7 +296,9 @@ class SentimentCache:
         try:
             cursor = conn.cursor()
             if ticker:
-                cursor.execute("DELETE FROM sentiment_cache WHERE ticker = %s", (ticker,))
+                cursor.execute(
+                    "DELETE FROM sentiment_cache WHERE ticker = %s", (ticker,)
+                )
                 print(f"🗑️  Cleared RDS cache for {ticker}")
             else:
                 cursor.execute("DELETE FROM sentiment_cache")
@@ -300,16 +316,16 @@ class SentimentCache:
             dict: Cache statistics including both memory and DB counts
         """
         stats = {
-            'memory_entries': len(self.memory_cache),
-            'by_ticker': {},
-            'ttl_seconds': self.ttl,
-            'using_database': self.use_database
+            "memory_entries": len(self.memory_cache),
+            "by_ticker": {},
+            "ttl_seconds": self.ttl,
+            "using_database": self.use_database,
         }
 
         # Count memory cache by ticker
         for item in self.memory_cache.values():
-            ticker = item['ticker']
-            stats['by_ticker'][ticker] = stats['by_ticker'].get(ticker, 0) + 1
+            ticker = item["ticker"]
+            stats["by_ticker"][ticker] = stats["by_ticker"].get(ticker, 0) + 1
 
         # Get database stats
         if self.use_database:
@@ -317,24 +333,30 @@ class SentimentCache:
             if conn:
                 try:
                     cursor = conn.cursor(cursor_factory=RealDictCursor)
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         SELECT ticker, COUNT(*) as count, MAX(computed_at) as last_computed
                         FROM sentiment_cache
                         GROUP BY ticker
-                    """)
+                    """
+                    )
                     rows = cursor.fetchall()
                     cursor.close()
 
-                    stats['database_entries'] = sum(row['count'] for row in rows)
-                    stats['database_by_ticker'] = {
-                        row['ticker']: {
-                            'count': row['count'],
-                            'last_computed': row['last_computed'].isoformat() if row['last_computed'] else None
+                    stats["database_entries"] = sum(row["count"] for row in rows)
+                    stats["database_by_ticker"] = {
+                        row["ticker"]: {
+                            "count": row["count"],
+                            "last_computed": (
+                                row["last_computed"].isoformat()
+                                if row["last_computed"]
+                                else None
+                            ),
                         }
                         for row in rows
                     }
                 except Exception as e:
-                    stats['database_error'] = str(e)
+                    stats["database_error"] = str(e)
 
         return stats
 
@@ -350,7 +372,7 @@ class SentimentCache:
         keys_to_delete = []
 
         for key, item in self.memory_cache.items():
-            if current_time - item['timestamp'] > self.ttl:
+            if current_time - item["timestamp"] > self.ttl:
                 keys_to_delete.append(key)
 
         for key in keys_to_delete:

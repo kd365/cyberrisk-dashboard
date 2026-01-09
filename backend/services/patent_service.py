@@ -29,7 +29,7 @@ class PatentService:
 
     def __init__(self):
         """Initialize the patent service"""
-        self.api_key = os.environ.get('USPTO_API_KEY', '')
+        self.api_key = os.environ.get("USPTO_API_KEY", "")
         self.neo4j_service = None
         self.db_service = None
 
@@ -40,11 +40,9 @@ class PatentService:
 
     def _get_headers(self) -> Dict[str, str]:
         """Get request headers with API key"""
-        headers = {
-            'Accept': 'application/json'
-        }
+        headers = {"Accept": "application/json"}
         if self.api_key:
-            headers['X-API-KEY'] = self.api_key
+            headers["X-API-KEY"] = self.api_key
         return headers
 
     def search_patents_by_assignee(
@@ -52,7 +50,7 @@ class PatentService:
         assignee_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """
         Search for patents by assignee (company/organization) name
@@ -74,27 +72,28 @@ class PatentService:
             # Search using the USPTO patent applications search API
             # The API uses simple query string search
             params = {
-                'q': assignee_name,
-                'offset': 0,
-                'limit': min(limit, 100)  # API max is typically 100 per request
+                "q": assignee_name,
+                "offset": 0,
+                "limit": min(limit, 100),  # API max is typically 100 per request
             }
 
             response = requests.get(
-                self.SEARCH_URL,
-                headers=self._get_headers(),
-                params=params,
-                timeout=30
+                self.SEARCH_URL, headers=self._get_headers(), params=params, timeout=30
             )
 
             if response.status_code == 200:
                 data = response.json()
                 # Response structure: {"count": N, "patentFileWrapperDataBag": [...]}
-                patents = data.get('patentFileWrapperDataBag', [])
-                total_count = data.get('count', 0)
-                print(f"✅ Found {len(patents)} patents (total: {total_count}) for {assignee_name}")
+                patents = data.get("patentFileWrapperDataBag", [])
+                total_count = data.get("count", 0)
+                print(
+                    f"✅ Found {len(patents)} patents (total: {total_count}) for {assignee_name}"
+                )
                 return patents
             else:
-                print(f"⚠️  USPTO API returned status {response.status_code}: {response.text[:200]}")
+                print(
+                    f"⚠️  USPTO API returned status {response.status_code}: {response.text[:200]}"
+                )
                 return []
 
         except requests.exceptions.RequestException as e:
@@ -106,7 +105,7 @@ class PatentService:
         inventor_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        limit: int = 50
+        limit: int = 50,
     ) -> List[Dict[str, Any]]:
         """
         Search for patents by inventor name
@@ -125,24 +124,19 @@ class PatentService:
 
         try:
             # Search by inventor name using the applications search API
-            params = {
-                'q': inventor_name,
-                'offset': 0,
-                'limit': min(limit, 100)
-            }
+            params = {"q": inventor_name, "offset": 0, "limit": min(limit, 100)}
 
             response = requests.get(
-                self.SEARCH_URL,
-                headers=self._get_headers(),
-                params=params,
-                timeout=30
+                self.SEARCH_URL, headers=self._get_headers(), params=params, timeout=30
             )
 
             if response.status_code == 200:
                 data = response.json()
-                patents = data.get('patentFileWrapperDataBag', [])
-                total_count = data.get('count', 0)
-                print(f"✅ Found {len(patents)} patents (total: {total_count}) for inventor {inventor_name}")
+                patents = data.get("patentFileWrapperDataBag", [])
+                total_count = data.get("count", 0)
+                print(
+                    f"✅ Found {len(patents)} patents (total: {total_count}) for inventor {inventor_name}"
+                )
                 return patents
             else:
                 print(f"⚠️  USPTO API returned status {response.status_code}")
@@ -167,12 +161,12 @@ class PatentService:
 
         try:
             # Clean patent number
-            clean_number = patent_number.replace('US', '').replace(',', '')
+            clean_number = patent_number.replace("US", "").replace(",", "")
 
             response = requests.get(
                 f"{self.BASE_URL}/patent/grants/{clean_number}",
                 headers=self._get_headers(),
-                timeout=30
+                timeout=30,
             )
 
             if response.status_code == 200:
@@ -196,29 +190,37 @@ class PatentService:
             Transformed patent data for Neo4j
         """
         # Extract application metadata
-        app_meta = patent.get('applicationMetaData', {})
+        app_meta = patent.get("applicationMetaData", {})
 
         # Extract key fields from new API structure
-        application_number = patent.get('applicationNumberText', '')
-        publication_number = app_meta.get('earliestPublicationNumber', '')
+        application_number = patent.get("applicationNumberText", "")
+        publication_number = app_meta.get("earliestPublicationNumber", "")
         patent_number = publication_number or application_number
 
-        title = app_meta.get('inventionTitle', 'Unknown')
+        title = app_meta.get("inventionTitle", "Unknown")
 
         # Parse dates
-        filing_date = app_meta.get('filingDate', '')
-        publication_date = app_meta.get('earliestPublicationDate', '')
+        filing_date = app_meta.get("filingDate", "")
+        publication_date = app_meta.get("earliestPublicationDate", "")
 
         # Get assignees/applicants
-        applicant_bag = app_meta.get('applicantBag', [])
-        assignees = [a.get('applicantNameText', '') for a in applicant_bag if a.get('applicantNameText')]
+        applicant_bag = app_meta.get("applicantBag", [])
+        assignees = [
+            a.get("applicantNameText", "")
+            for a in applicant_bag
+            if a.get("applicantNameText")
+        ]
 
         # Get inventors
-        inventor_bag = app_meta.get('inventorBag', [])
-        inventors = [i.get('inventorNameText', '') for i in inventor_bag if i.get('inventorNameText')]
+        inventor_bag = app_meta.get("inventorBag", [])
+        inventors = [
+            i.get("inventorNameText", "")
+            for i in inventor_bag
+            if i.get("inventorNameText")
+        ]
 
         # Get classification codes
-        cpc_codes = app_meta.get('cpcClassificationBag', [])
+        cpc_codes = app_meta.get("cpcClassificationBag", [])
 
         # Build patent URL
         if publication_number:
@@ -226,28 +228,26 @@ class PatentService:
         elif application_number:
             patent_url = f"https://assignment.uspto.gov/patent/index.html#/patent/search/resultAbstract?id={application_number}"
         else:
-            patent_url = ''
+            patent_url = ""
 
         return {
-            'patent_number': patent_number,
-            'application_number': application_number,
-            'title': title[:200] if title else '',
-            'abstract': '',  # Abstract not in search results, would need separate API call
-            'filing_date': filing_date,
-            'publication_date': publication_date,
-            'grant_date': publication_date,  # Use publication date as grant date
-            'assignees': assignees,
-            'inventors': inventors,
-            'cpc_codes': cpc_codes[:10] if cpc_codes else [],
-            'patent_url': patent_url,
-            'status': app_meta.get('applicationStatusDescriptionText', ''),
-            'source': 'USPTO'
+            "patent_number": patent_number,
+            "application_number": application_number,
+            "title": title[:200] if title else "",
+            "abstract": "",  # Abstract not in search results, would need separate API call
+            "filing_date": filing_date,
+            "publication_date": publication_date,
+            "grant_date": publication_date,  # Use publication date as grant date
+            "assignees": assignees,
+            "inventors": inventors,
+            "cpc_codes": cpc_codes[:10] if cpc_codes else [],
+            "patent_url": patent_url,
+            "status": app_meta.get("applicationStatusDescriptionText", ""),
+            "source": "USPTO",
         }
 
     def transform_patent_for_artifact(
-        self,
-        patent: Dict[str, Any],
-        ticker: str
+        self, patent: Dict[str, Any], ticker: str
     ) -> Dict[str, Any]:
         """
         Transform USPTO patent data into artifact format for PostgreSQL
@@ -262,27 +262,25 @@ class PatentService:
         patent_data = self.transform_patent_for_neo4j(patent)
 
         return {
-            'ticker': ticker,
-            'artifact_type': 'Patent',
-            'title': patent_data['title'],
-            'description': patent_data.get('abstract', ''),
-            'published_date': patent_data.get('publication_date') or patent_data.get('filing_date'),
-            'external_url': patent_data['patent_url'],
-            'metadata': {
-                'patent_number': patent_data['patent_number'],
-                'application_number': patent_data.get('application_number', ''),
-                'filing_date': patent_data['filing_date'],
-                'inventors': patent_data['inventors'],
-                'cpc_codes': patent_data['cpc_codes'],
-                'status': patent_data.get('status', '')
-            }
+            "ticker": ticker,
+            "artifact_type": "Patent",
+            "title": patent_data["title"],
+            "description": patent_data.get("abstract", ""),
+            "published_date": patent_data.get("publication_date")
+            or patent_data.get("filing_date"),
+            "external_url": patent_data["patent_url"],
+            "metadata": {
+                "patent_number": patent_data["patent_number"],
+                "application_number": patent_data.get("application_number", ""),
+                "filing_date": patent_data["filing_date"],
+                "inventors": patent_data["inventors"],
+                "cpc_codes": patent_data["cpc_codes"],
+                "status": patent_data.get("status", ""),
+            },
         }
 
     def fetch_patents_for_organization(
-        self,
-        organization_name: str,
-        ticker: Optional[str] = None,
-        days_back: int = 365
+        self, organization_name: str, ticker: Optional[str] = None, days_back: int = 365
     ) -> Dict[str, Any]:
         """
         Fetch all patents for an organization and prepare for storage
@@ -295,15 +293,12 @@ class PatentService:
         Returns:
             Dict with patents, neo4j_nodes, and artifacts
         """
-        end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y%m%d')
+        end_date = datetime.now().strftime("%Y%m%d")
+        start_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y%m%d")
 
         # Fetch patents from USPTO
         raw_patents = self.search_patents_by_assignee(
-            organization_name,
-            start_date=start_date,
-            end_date=end_date,
-            limit=100
+            organization_name, start_date=start_date, end_date=end_date, limit=100
         )
 
         # Transform for Neo4j and PostgreSQL
@@ -319,21 +314,16 @@ class PatentService:
                 artifacts.append(artifact_data)
 
         return {
-            'organization': organization_name,
-            'ticker': ticker,
-            'patent_count': len(raw_patents),
-            'neo4j_patents': neo4j_patents,
-            'artifacts': artifacts,
-            'date_range': {
-                'start': start_date,
-                'end': end_date
-            }
+            "organization": organization_name,
+            "ticker": ticker,
+            "patent_count": len(raw_patents),
+            "neo4j_patents": neo4j_patents,
+            "artifacts": artifacts,
+            "date_range": {"start": start_date, "end": end_date},
         }
 
     def create_patent_nodes_in_neo4j(
-        self,
-        patents: List[Dict[str, Any]],
-        organization_name: str
+        self, patents: List[Dict[str, Any]], organization_name: str
     ) -> int:
         """
         Create Patent nodes in Neo4j and link to Organization
@@ -348,6 +338,7 @@ class PatentService:
         if not self.neo4j_service:
             try:
                 from services.neo4j_service import neo4j_service
+
                 self.neo4j_service = neo4j_service
             except ImportError:
                 print("⚠️  Neo4j service not available")
@@ -383,31 +374,37 @@ class PatentService:
                 RETURN p.patent_number as patent_number
                 """
 
-                result = self.neo4j_service.run_query(query, {
-                    'patent_number': patent['patent_number'],
-                    'title': patent['title'],
-                    'abstract': patent['abstract'],
-                    'grant_date': patent['grant_date'],
-                    'filing_date': patent['filing_date'],
-                    'patent_url': patent['patent_url'],
-                    'source': patent['source'],
-                    'org_name': organization_name
-                })
+                result = self.neo4j_service.run_query(
+                    query,
+                    {
+                        "patent_number": patent["patent_number"],
+                        "title": patent["title"],
+                        "abstract": patent["abstract"],
+                        "grant_date": patent["grant_date"],
+                        "filing_date": patent["filing_date"],
+                        "patent_url": patent["patent_url"],
+                        "source": patent["source"],
+                        "org_name": organization_name,
+                    },
+                )
 
                 if result:
                     created += 1
 
                 # Link inventors
-                for inventor_name in patent.get('inventors', []):
+                for inventor_name in patent.get("inventors", []):
                     inventor_query = """
                     MATCH (p:Patent {patent_number: $patent_number})
                     MERGE (person:Person {name: $inventor_name})
                     MERGE (person)-[:INVENTED]->(p)
                     """
-                    self.neo4j_service.run_query(inventor_query, {
-                        'patent_number': patent['patent_number'],
-                        'inventor_name': inventor_name
-                    })
+                    self.neo4j_service.run_query(
+                        inventor_query,
+                        {
+                            "patent_number": patent["patent_number"],
+                            "inventor_name": inventor_name,
+                        },
+                    )
 
             except Exception as e:
                 print(f"⚠️  Error creating patent node: {e}")
@@ -416,10 +413,7 @@ class PatentService:
         print(f"✅ Created {created} patent nodes in Neo4j")
         return created
 
-    def save_patents_as_artifacts(
-        self,
-        artifacts: List[Dict[str, Any]]
-    ) -> int:
+    def save_patents_as_artifacts(self, artifacts: List[Dict[str, Any]]) -> int:
         """
         Save patents as artifacts in PostgreSQL
 
@@ -432,6 +426,7 @@ class PatentService:
         if not self.db_service:
             try:
                 from services.database_service import db_service
+
                 self.db_service = db_service
             except ImportError:
                 print("⚠️  Database service not available")
@@ -446,10 +441,10 @@ class PatentService:
         for artifact in artifacts:
             try:
                 result = self.db_service.create_artifact(
-                    ticker=artifact['ticker'],
-                    artifact_type='Patent',
-                    s3_key=artifact.get('external_url', ''),  # Use URL as reference
-                    published_date=artifact.get('published_date')
+                    ticker=artifact["ticker"],
+                    artifact_type="Patent",
+                    s3_key=artifact.get("external_url", ""),  # Use URL as reference
+                    published_date=artifact.get("published_date"),
                 )
 
                 if result:

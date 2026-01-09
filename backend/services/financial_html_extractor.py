@@ -15,21 +15,22 @@ from collections import defaultdict
 from botocore.exceptions import ProfileNotFound
 from .xbrl_parser import XBRLParser
 
+
 class FinancialHtmlExtractor:
     """Extract financial metrics from SEC HTML filings"""
 
     def __init__(self, aws_profile=None):
         """Initialize S3 client and XBRL parser"""
         # Use profile locally, instance role on EC2
-        profile = aws_profile or os.environ.get('AWS_PROFILE', 'cyber-risk')
+        profile = aws_profile or os.environ.get("AWS_PROFILE", "cyber-risk")
         try:
             session = boto3.Session(profile_name=profile)
             session.get_credentials()
-            self.s3 = session.client('s3', region_name='us-east-1')
+            self.s3 = session.client("s3", region_name="us-east-1")
         except (ProfileNotFound, Exception):
-            self.s3 = boto3.client('s3', region_name='us-east-1')
+            self.s3 = boto3.client("s3", region_name="us-east-1")
         # Use ARTIFACTS_BUCKET env var, fallback to old bucket for local dev
-        self.bucket = os.environ.get('ARTIFACTS_BUCKET', 'cyber-risk-artifacts')
+        self.bucket = os.environ.get("ARTIFACTS_BUCKET", "cyber-risk-artifacts")
         self.xbrl_parser = XBRLParser()
 
     def extract_financials_from_html_filing(self, s3_key, filing_date=None):
@@ -48,25 +49,27 @@ class FinancialHtmlExtractor:
         try:
             # Download file from S3
             response = self.s3.get_object(Bucket=self.bucket, Key=s3_key)
-            content = response['Body'].read()
+            content = response["Body"].read()
 
             # Try to decode as text
             try:
-                if content.startswith(b'%PDF'):
+                if content.startswith(b"%PDF"):
                     print(f"  ℹ️  PDF file detected, using text extraction")
                     return self._extract_from_pdf_text(s3_key, filing_date)
                 else:
-                    html = content.decode('utf-8', errors='ignore')
+                    html = content.decode("utf-8", errors="ignore")
             except Exception as e:
                 print(f"  ❌ Could not decode file: {e}")
                 return None
 
             # Parse HTML
-            soup = BeautifulSoup(html, 'lxml')
+            soup = BeautifulSoup(html, "lxml")
 
             # Try XBRL parsing first (more reliable for modern SEC filings)
             print(f"  🔍 Attempting XBRL tag extraction...")
-            xbrl_financials = self.xbrl_parser.extract_financials_from_xbrl(html, filing_date)
+            xbrl_financials = self.xbrl_parser.extract_financials_from_xbrl(
+                html, filing_date
+            )
 
             # Extract financial data from HTML tables (fallback/supplement)
             print(f"  📊 Extracting from HTML tables...")
@@ -74,24 +77,31 @@ class FinancialHtmlExtractor:
 
             # Merge results: prefer XBRL data when available, use table data as fallback
             financials = {
-                'date': filing_date,
-                'revenue': xbrl_financials.get('revenue') or table_financials.get('revenue'),
-                'subscription_revenue': xbrl_financials.get('subscription_revenue') or table_financials.get('subscription_revenue'),
-                'recurring_revenue': table_financials.get('recurring_revenue'),
-                'net_income': xbrl_financials.get('net_income') or table_financials.get('net_income'),
-                'operating_income': xbrl_financials.get('operating_income') or table_financials.get('operating_income'),
-                'eps': xbrl_financials.get('eps') or table_financials.get('eps'),
-                'arr': table_financials.get('arr'),
+                "date": filing_date,
+                "revenue": xbrl_financials.get("revenue")
+                or table_financials.get("revenue"),
+                "subscription_revenue": xbrl_financials.get("subscription_revenue")
+                or table_financials.get("subscription_revenue"),
+                "recurring_revenue": table_financials.get("recurring_revenue"),
+                "net_income": xbrl_financials.get("net_income")
+                or table_financials.get("net_income"),
+                "operating_income": xbrl_financials.get("operating_income")
+                or table_financials.get("operating_income"),
+                "eps": xbrl_financials.get("eps") or table_financials.get("eps"),
+                "arr": table_financials.get("arr"),
             }
 
             print(f"  ✅ Extracted financials (XBRL + HTML tables)")
-            if financials['subscription_revenue']:
-                print(f"     💡 Subscription revenue: ${financials['subscription_revenue']:,.0f}")
+            if financials["subscription_revenue"]:
+                print(
+                    f"     💡 Subscription revenue: ${financials['subscription_revenue']:,.0f}"
+                )
             return financials
 
         except Exception as e:
             print(f"  ❌ Error extracting financials: {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
@@ -113,14 +123,14 @@ class FinancialHtmlExtractor:
         - Revenue tables
         """
         financials = {
-            'date': filing_date,
-            'revenue': None,
-            'subscription_revenue': None,
-            'recurring_revenue': None,
-            'net_income': None,
-            'operating_income': None,
-            'eps': None,
-            'arr': None,
+            "date": filing_date,
+            "revenue": None,
+            "subscription_revenue": None,
+            "recurring_revenue": None,
+            "net_income": None,
+            "operating_income": None,
+            "eps": None,
+            "arr": None,
         }
 
         # Try text-based extraction first (for filings with formatted text instead of tables)
@@ -130,7 +140,7 @@ class FinancialHtmlExtractor:
             financials.update(text_financials)
 
         # Find all tables
-        tables = soup.find_all('table')
+        tables = soup.find_all("table")
         print(f"  ℹ️  Found {len(tables)} tables in filing")
 
         # Try to detect if values are in thousands or millions from table headers
@@ -140,17 +150,17 @@ class FinancialHtmlExtractor:
         for table in tables:
             # Check table caption/headers for scaling info
             table_text = table.get_text().lower()
-            if 'in thousands' in table_text or 'except per share' in table_text:
+            if "in thousands" in table_text or "except per share" in table_text:
                 in_thousands = True
-            if 'in millions' in table_text:
+            if "in millions" in table_text:
                 in_millions = True
 
         for table in tables:
             # Extract text from table rows
-            rows = table.find_all('tr')
+            rows = table.find_all("tr")
 
             for row in rows:
-                cells = row.find_all(['td', 'th'])
+                cells = row.find_all(["td", "th"])
                 if len(cells) < 2:
                     continue
 
@@ -161,54 +171,112 @@ class FinancialHtmlExtractor:
                 values = [c.get_text(strip=True) for c in cells[1:]]
 
                 # Revenue patterns
-                if any(pattern in metric_text for pattern in [
-                    'total revenue', 'total net revenue', 'revenues, net',
-                    'revenue:', 'total revenues'
-                ]) and financials['revenue'] is None:
-                    financials['revenue'] = self._parse_financial_value(values, in_thousands=in_thousands, in_millions=in_millions)
+                if (
+                    any(
+                        pattern in metric_text
+                        for pattern in [
+                            "total revenue",
+                            "total net revenue",
+                            "revenues, net",
+                            "revenue:",
+                            "total revenues",
+                        ]
+                    )
+                    and financials["revenue"] is None
+                ):
+                    financials["revenue"] = self._parse_financial_value(
+                        values, in_thousands=in_thousands, in_millions=in_millions
+                    )
 
                 # Subscription revenue patterns
                 # IMPORTANT: Exclude "cost" rows - we want revenue, not expenses
                 # Match exact "subscription" row (not "subscription cost", etc.)
                 # CrowdStrike labels it as just "Subscription" in the revenue section
-                if financials['subscription_revenue'] is None:
+                if financials["subscription_revenue"] is None:
                     # Check if this is a subscription revenue row
-                    is_subscription_row = (
-                        metric_text in ['subscription', 'subscription revenue', 'subscription and support', 'saas revenue', 'recurring revenue']
-                        or (metric_text.startswith('subscription') and 'cost' not in metric_text and 'expense' not in metric_text and 'defer' not in metric_text)
+                    is_subscription_row = metric_text in [
+                        "subscription",
+                        "subscription revenue",
+                        "subscription and support",
+                        "saas revenue",
+                        "recurring revenue",
+                    ] or (
+                        metric_text.startswith("subscription")
+                        and "cost" not in metric_text
+                        and "expense" not in metric_text
+                        and "defer" not in metric_text
                     )
 
                     if is_subscription_row:
-                        parsed_value = self._parse_financial_value(values, in_thousands=in_thousands, in_millions=in_millions)
+                        parsed_value = self._parse_financial_value(
+                            values, in_thousands=in_thousands, in_millions=in_millions
+                        )
                         if parsed_value and parsed_value > 0:
-                            print(f"  ✅ Found subscription revenue: '{metric_text}' = ${parsed_value:,.0f}")
-                            financials['subscription_revenue'] = parsed_value
+                            print(
+                                f"  ✅ Found subscription revenue: '{metric_text}' = ${parsed_value:,.0f}"
+                            )
+                            financials["subscription_revenue"] = parsed_value
 
                 # ARR
-                if any(pattern in metric_text for pattern in [
-                    'annual recurring revenue', 'arr'
-                ]) and financials['arr'] is None:
-                    financials['arr'] = self._parse_financial_value(values, in_thousands=in_thousands, in_millions=in_millions)
+                if (
+                    any(
+                        pattern in metric_text
+                        for pattern in ["annual recurring revenue", "arr"]
+                    )
+                    and financials["arr"] is None
+                ):
+                    financials["arr"] = self._parse_financial_value(
+                        values, in_thousands=in_thousands, in_millions=in_millions
+                    )
 
                 # Net Income
-                if any(pattern in metric_text for pattern in [
-                    'net income', 'net loss', 'net income (loss)'
-                ]) and 'attributable' not in metric_text and financials['net_income'] is None:
-                    financials['net_income'] = self._parse_financial_value(values, in_thousands=in_thousands, in_millions=in_millions)
+                if (
+                    any(
+                        pattern in metric_text
+                        for pattern in ["net income", "net loss", "net income (loss)"]
+                    )
+                    and "attributable" not in metric_text
+                    and financials["net_income"] is None
+                ):
+                    financials["net_income"] = self._parse_financial_value(
+                        values, in_thousands=in_thousands, in_millions=in_millions
+                    )
 
                 # Operating Income
-                if any(pattern in metric_text for pattern in [
-                    'income from operations', 'operating income (loss)',
-                    'income (loss) from operations'
-                ]) and financials['operating_income'] is None:
-                    financials['operating_income'] = self._parse_financial_value(values, in_thousands=in_thousands, in_millions=in_millions)
+                if (
+                    any(
+                        pattern in metric_text
+                        for pattern in [
+                            "income from operations",
+                            "operating income (loss)",
+                            "income (loss) from operations",
+                        ]
+                    )
+                    and financials["operating_income"] is None
+                ):
+                    financials["operating_income"] = self._parse_financial_value(
+                        values, in_thousands=in_thousands, in_millions=in_millions
+                    )
 
                 # EPS (prefer diluted)
-                if any(pattern in metric_text for pattern in [
-                    'diluted earnings per share', 'diluted (loss) per share',
-                    'diluted net income per share', 'diluted net loss per share'
-                ]) and financials['eps'] is None:
-                    financials['eps'] = self._parse_financial_value(values, is_per_share=True, in_thousands=in_thousands, in_millions=in_millions)
+                if (
+                    any(
+                        pattern in metric_text
+                        for pattern in [
+                            "diluted earnings per share",
+                            "diluted (loss) per share",
+                            "diluted net income per share",
+                            "diluted net loss per share",
+                        ]
+                    )
+                    and financials["eps"] is None
+                ):
+                    financials["eps"] = self._parse_financial_value(
+                        values,
+                        is_per_share=True,
+                        in_thousands=in_thousands,
+                        in_millions=in_millions,
+                    )
 
         # NOTE: If subscription revenue wasn't found but we have total revenue,
         # some companies (like CrowdStrike) may not report it as a separate line item
@@ -238,42 +306,44 @@ class FinancialHtmlExtractor:
         # Look for "Revenue" section followed by "Subscription" line
         # Pattern: Revenue \n Subscription $ 1,168,705
         revenue_section_match = re.search(
-            r'Revenue\s+Subscription\s+\$?\s*([\d,]+)',
+            r"Revenue\s+Subscription\s+\$?\s*([\d,]+)",
             text,
-            re.IGNORECASE | re.MULTILINE
+            re.IGNORECASE | re.MULTILINE,
         )
 
         if revenue_section_match:
-            subscription_value_str = revenue_section_match.group(1).replace(',', '')
+            subscription_value_str = revenue_section_match.group(1).replace(",", "")
             try:
                 subscription_value = float(subscription_value_str)
                 # Values in SEC filings are typically in thousands
                 subscription_value = subscription_value * 1000
-                financials['subscription_revenue'] = subscription_value
-                print(f"  ✅ Found subscription revenue from text: ${subscription_value:,.0f}")
+                financials["subscription_revenue"] = subscription_value
+                print(
+                    f"  ✅ Found subscription revenue from text: ${subscription_value:,.0f}"
+                )
             except (ValueError, TypeError):
                 pass
 
         # Also look for total revenue
         total_revenue_match = re.search(
-            r'Total revenue\s+\$?\s*([\d,]+)',
-            text,
-            re.IGNORECASE
+            r"Total revenue\s+\$?\s*([\d,]+)", text, re.IGNORECASE
         )
 
         if total_revenue_match:
-            total_revenue_str = total_revenue_match.group(1).replace(',', '')
+            total_revenue_str = total_revenue_match.group(1).replace(",", "")
             try:
                 total_revenue = float(total_revenue_str)
                 # Values in SEC filings are typically in thousands
                 total_revenue = total_revenue * 1000
-                financials['revenue'] = total_revenue
+                financials["revenue"] = total_revenue
             except (ValueError, TypeError):
                 pass
 
         return financials if financials else None
 
-    def _parse_financial_value(self, values, is_per_share=False, in_thousands=False, in_millions=False):
+    def _parse_financial_value(
+        self, values, is_per_share=False, in_thousands=False, in_millions=False
+    ):
         """
         Parse a financial value from table cells
 
@@ -298,29 +368,47 @@ class FinancialHtmlExtractor:
             val = val.strip()
 
             # Skip headers and text
-            if any(skip in val.lower() for skip in [
-                'year ended', 'three months', 'six months', 'nine months',
-                'december', 'january', 'february', 'march', 'april', 'may',
-                'june', 'july', 'august', 'september', 'october', 'november',
-                '$', 'in thousands', 'in millions'
-            ]):
+            if any(
+                skip in val.lower()
+                for skip in [
+                    "year ended",
+                    "three months",
+                    "six months",
+                    "nine months",
+                    "december",
+                    "january",
+                    "february",
+                    "march",
+                    "april",
+                    "may",
+                    "june",
+                    "july",
+                    "august",
+                    "september",
+                    "october",
+                    "november",
+                    "$",
+                    "in thousands",
+                    "in millions",
+                ]
+            ):
                 # Only skip if it's purely text (no numbers)
-                if not re.search(r'\d', val):
+                if not re.search(r"\d", val):
                     continue
 
             # Try to parse as number
             try:
                 # Remove $, commas, and whitespace
-                cleaned = val.replace('$', '').replace(',', '').replace(' ', '').strip()
+                cleaned = val.replace("$", "").replace(",", "").replace(" ", "").strip()
 
                 # Handle parentheses (negative)
                 is_negative = False
-                if cleaned.startswith('(') and cleaned.endswith(')'):
+                if cleaned.startswith("(") and cleaned.endswith(")"):
                     is_negative = True
                     cleaned = cleaned[1:-1]
 
                 # Handle dash for zero
-                if cleaned in ['-', '—', '–', '']:
+                if cleaned in ["-", "—", "–", ""]:
                     return 0
 
                 # Try to convert to float
@@ -378,9 +466,9 @@ class FinancialHtmlExtractor:
 
         # Filter for SEC filings only
         sec_filings = [
-            a for a in artifacts
-            if a.get('ticker') == ticker
-            and a.get('type') in ['10-K', '10-Q']
+            a
+            for a in artifacts
+            if a.get("ticker") == ticker and a.get("type") in ["10-K", "10-Q"]
         ]
 
         if not sec_filings:
@@ -390,30 +478,34 @@ class FinancialHtmlExtractor:
         print(f"  📄 Found {len(sec_filings)} SEC filings")
 
         # Sort by date descending to get most recent filings first
-        sec_filings.sort(key=lambda x: x.get('date', ''), reverse=True)
+        sec_filings.sort(key=lambda x: x.get("date", ""), reverse=True)
 
         # Extract financials from each filing
         financials_timeline = []
 
-        for filing in sec_filings[:12]:  # Limit to most recent 12 filings (3 years of quarterly)
-            s3_key = filing.get('s3_key')
-            filing_date = filing.get('date')
-            filing_type = filing.get('type')
+        for filing in sec_filings[
+            :12
+        ]:  # Limit to most recent 12 filings (3 years of quarterly)
+            s3_key = filing.get("s3_key")
+            filing_date = filing.get("date")
+            filing_type = filing.get("type")
 
             print(f"\n  📊 Processing {filing_type} from {filing_date}")
 
             # Extract financials
             financials = self.extract_financials_from_html_filing(s3_key, filing_date)
 
-            if financials and any(financials.get(k) for k in ['revenue', 'net_income', 'operating_income']):
-                financials['type'] = filing_type
-                financials['s3_key'] = s3_key
+            if financials and any(
+                financials.get(k) for k in ["revenue", "net_income", "operating_income"]
+            ):
+                financials["type"] = filing_type
+                financials["s3_key"] = s3_key
                 financials_timeline.append(financials)
             else:
                 print(f"  ⚠️  No financial data extracted from {s3_key}")
 
         # Sort by date
-        financials_timeline.sort(key=lambda x: x.get('date', ''), reverse=False)
+        financials_timeline.sort(key=lambda x: x.get("date", ""), reverse=False)
 
         print(f"\n✅ Extracted financials from {len(financials_timeline)} filings")
 
@@ -434,18 +526,20 @@ class FinancialHtmlExtractor:
             print(f"  ⚠️  Not enough data for {window}-quarter rolling average")
             return financials_timeline
 
-        metrics = ['revenue', 'subscription_revenue', 'net_income', 'operating_income']
+        metrics = ["revenue", "subscription_revenue", "net_income", "operating_income"]
 
         for i in range(window - 1, len(financials_timeline)):
             # Get last 'window' quarters
-            window_data = financials_timeline[i - window + 1:i + 1]
+            window_data = financials_timeline[i - window + 1 : i + 1]
 
             # Calculate rolling averages
             for metric in metrics:
-                values = [d.get(metric) for d in window_data if d.get(metric) is not None]
+                values = [
+                    d.get(metric) for d in window_data if d.get(metric) is not None
+                ]
 
                 if values and len(values) == window:
                     avg = sum(values) / len(values)
-                    financials_timeline[i][f'{metric}_rolling_avg'] = avg
+                    financials_timeline[i][f"{metric}_rolling_avg"] = avg
 
         return financials_timeline

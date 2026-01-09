@@ -15,20 +15,21 @@ from botocore.exceptions import ClientError, ProfileNotFound
 import re
 import json
 
+
 class SecTranscriptScraper:
     def __init__(self):
         # Use profile locally, instance role on EC2
-        profile = os.environ.get('AWS_PROFILE', 'cyber-risk')
+        profile = os.environ.get("AWS_PROFILE", "cyber-risk")
         try:
             session = boto3.Session(profile_name=profile)
             session.get_credentials()
-            self.s3 = session.client('s3')
+            self.s3 = session.client("s3")
         except (ProfileNotFound, Exception):
-            self.s3 = boto3.client('s3')
+            self.s3 = boto3.client("s3")
         # Use ARTIFACTS_BUCKET env var, fallback to old bucket for local dev
-        self.bucket = os.environ.get('ARTIFACTS_BUCKET', 'cyber-risk-artifacts')
+        self.bucket = os.environ.get("ARTIFACTS_BUCKET", "cyber-risk-artifacts")
         self.artifacts = []
-    
+
     def scrape_sec_filings(self, ticker, num_filings=20):
         """
         Fetch SEC 10-K and 10-Q filings for a ticker
@@ -45,52 +46,58 @@ class SecTranscriptScraper:
                 return []
 
             url = f"https://data.sec.gov/submissions/CIK{cik:010d}.json"
-            headers = {'User-Agent': 'Kathleen Hill krande322@gmail.com'}
-            
+            headers = {"User-Agent": "Kathleen Hill krande322@gmail.com"}
+
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
-            
+
             data = response.json()
             filings = []
 
             # Extract 10-K and 10-Q filings separately to ensure we get enough of each
-            recent = data.get('filings', {}).get('recent', {})
-            forms = recent.get('form', [])
-            dates = recent.get('filingDate', [])
-            accessions = recent.get('accessionNumber', [])
+            recent = data.get("filings", {}).get("recent", {})
+            forms = recent.get("form", [])
+            dates = recent.get("filingDate", [])
+            accessions = recent.get("accessionNumber", [])
 
             tenk_count = 0
             tenq_count = 0
 
             for form, date, accession in zip(forms, dates, accessions):
-                if form == '10-K' and tenk_count < num_filings:
-                    filings.append({
-                        'ticker': ticker,
-                        'form': form,
-                        'date': date,
-                        'accession': accession,
-                    })
+                if form == "10-K" and tenk_count < num_filings:
+                    filings.append(
+                        {
+                            "ticker": ticker,
+                            "form": form,
+                            "date": date,
+                            "accession": accession,
+                        }
+                    )
                     tenk_count += 1
-                elif form == '10-Q' and tenq_count < num_filings:
-                    filings.append({
-                        'ticker': ticker,
-                        'form': form,
-                        'date': date,
-                        'accession': accession,
-                    })
+                elif form == "10-Q" and tenq_count < num_filings:
+                    filings.append(
+                        {
+                            "ticker": ticker,
+                            "form": form,
+                            "date": date,
+                            "accession": accession,
+                        }
+                    )
                     tenq_count += 1
 
                 # Stop if we have enough of both types
                 if tenk_count >= num_filings and tenq_count >= num_filings:
                     break
 
-            print(f"  ✅ Found {len(filings)} SEC filings ({tenk_count} 10-K, {tenq_count} 10-Q)")
+            print(
+                f"  ✅ Found {len(filings)} SEC filings ({tenk_count} 10-K, {tenq_count} 10-Q)"
+            )
             return filings
-        
+
         except Exception as e:
             print(f"  ❌ Error fetching SEC filings: {e}")
             return []
-    
+
     def scrape_earnings_transcripts(self, ticker, num_quarters=8):
         """
         Fetch earnings call transcripts using Alpha Vantage API
@@ -110,12 +117,14 @@ class SecTranscriptScraper:
             from datetime import datetime
 
             # Get Alpha Vantage API key from environment
-            api_key = os.environ.get('ALPHAVANTAGE_API_KEY')
+            api_key = os.environ.get("ALPHAVANTAGE_API_KEY")
 
             if not api_key:
                 print(f"  ⚠️  ALPHAVANTAGE_API_KEY not set in environment")
                 print(f"  💡 Set it with: export ALPHAVANTAGE_API_KEY='your-key-here'")
-                print(f"  📝 Get a free key at: https://www.alphavantage.co/support/#api-key")
+                print(
+                    f"  📝 Get a free key at: https://www.alphavantage.co/support/#api-key"
+                )
                 return []
 
             transcripts = []
@@ -148,10 +157,10 @@ class SecTranscriptScraper:
                 try:
                     # Fetch transcript for specific quarter
                     params = {
-                        'function': 'EARNINGS_CALL_TRANSCRIPT',
-                        'symbol': ticker,
-                        'quarter': quarter_str,
-                        'apikey': api_key
+                        "function": "EARNINGS_CALL_TRANSCRIPT",
+                        "symbol": ticker,
+                        "quarter": quarter_str,
+                        "apikey": api_key,
                     }
 
                     response = requests.get(base_url, params=params, timeout=15)
@@ -160,21 +169,21 @@ class SecTranscriptScraper:
                     data = response.json()
 
                     # Check for API errors
-                    if 'Error Message' in data:
+                    if "Error Message" in data:
                         print(f"    ⚠️  {quarter_str}: {data['Error Message']}")
                         continue
 
-                    if 'Note' in data:
+                    if "Note" in data:
                         print(f"  ⚠️  API Rate Limit: {data['Note']}")
                         print(f"  💡 Free tier: 25 requests/day")
                         break  # Stop if rate limited
 
-                    if 'Information' in data:
+                    if "Information" in data:
                         print(f"    ⚠️  {quarter_str}: {data['Information']}")
                         continue
 
                     # Extract transcript (it's an array of speaker objects)
-                    transcript_array = data.get('transcript', [])
+                    transcript_array = data.get("transcript", [])
 
                     if not transcript_array or len(transcript_array) == 0:
                         print(f"    ⏭️  {quarter_str}: No transcript")
@@ -184,10 +193,10 @@ class SecTranscriptScraper:
                     # Each item has: speaker, title, content, sentiment
                     transcript_lines = []
                     for item in transcript_array:
-                        speaker = item.get('speaker', 'Unknown')
-                        title = item.get('title', '')
-                        content = item.get('content', '')
-                        sentiment = item.get('sentiment', '')
+                        speaker = item.get("speaker", "Unknown")
+                        title = item.get("title", "")
+                        content = item.get("content", "")
+                        sentiment = item.get("sentiment", "")
 
                         transcript_lines.append(f"Speaker: {speaker}")
                         if title:
@@ -197,7 +206,7 @@ class SecTranscriptScraper:
                         transcript_lines.append(f"\n{content}\n")
                         transcript_lines.append("-" * 80)
 
-                    transcript_text = '\n'.join(transcript_lines)
+                    transcript_text = "\n".join(transcript_lines)
 
                     # Generate filename
                     filename = f"{ticker}_{quarter_str}_transcript.txt"
@@ -215,27 +224,31 @@ class SecTranscriptScraper:
                     self.s3.put_object(
                         Bucket=self.bucket,
                         Key=s3_key,
-                        Body=transcript_text.encode('utf-8')
+                        Body=transcript_text.encode("utf-8"),
                     )
 
                     # Parse quarter for date metadata
                     year = quarter_str[:4]
                     q = quarter_str[-1]
                     # Approximate date: Q1=03-31, Q2=06-30, Q3=09-30, Q4=12-31
-                    month_map = {'1': '03', '2': '06', '3': '09', '4': '12'}
-                    day_map = {'1': '31', '2': '30', '3': '30', '4': '31'}
+                    month_map = {"1": "03", "2": "06", "3": "09", "4": "12"}
+                    day_map = {"1": "31", "2": "30", "3": "30", "4": "31"}
                     metadata_date = f"{year}-{month_map[q]}-{day_map[q]}"
 
-                    transcripts.append({
-                        'ticker': ticker,
-                        'type': 'transcript',
-                        'date': metadata_date,
-                        'source': 'Alpha Vantage',
-                        's3_key': s3_key,
-                        'filename': filename
-                    })
+                    transcripts.append(
+                        {
+                            "ticker": ticker,
+                            "type": "transcript",
+                            "date": metadata_date,
+                            "source": "Alpha Vantage",
+                            "s3_key": s3_key,
+                            "filename": filename,
+                        }
+                    )
 
-                    print(f"    ✅ {quarter_str}: Downloaded ({len(transcript_text)} chars)")
+                    print(
+                        f"    ✅ {quarter_str}: Downloaded ({len(transcript_text)} chars)"
+                    )
 
                 except Exception as e:
                     print(f"    ❌ {quarter_str}: {e}")
@@ -245,7 +258,9 @@ class SecTranscriptScraper:
                     time.sleep(1.5)
 
             if transcripts:
-                print(f"  ✅ Successfully fetched {len(transcripts)} transcripts for {ticker}")
+                print(
+                    f"  ✅ Successfully fetched {len(transcripts)} transcripts for {ticker}"
+                )
             else:
                 print(f"  ⚠️  No new transcripts downloaded for {ticker}")
 
@@ -254,7 +269,7 @@ class SecTranscriptScraper:
         except Exception as e:
             print(f"  ❌ Error fetching transcripts: {e}")
             return []
-    
+
     def _get_cik_from_ticker(self, ticker):
         """
         Get CIK number from ticker symbol using SEC EDGAR company tickers JSON
@@ -262,7 +277,7 @@ class SecTranscriptScraper:
         try:
             # Use SEC's official company tickers mapping
             url = "https://www.sec.gov/files/company_tickers.json"
-            headers = {'User-Agent': 'Kathleen Hill krande322@gmail.com'}
+            headers = {"User-Agent": "Kathleen Hill krande322@gmail.com"}
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
 
@@ -271,14 +286,14 @@ class SecTranscriptScraper:
             # Search for ticker in the mapping
             ticker_upper = ticker.upper()
             for entry in data.values():
-                if entry.get('ticker', '').upper() == ticker_upper:
-                    return entry.get('cik_str')
+                if entry.get("ticker", "").upper() == ticker_upper:
+                    return entry.get("cik_str")
 
         except Exception as e:
             print(f"  ⚠️  Error looking up CIK: {e}")
 
         return None
-    
+
     def save_raw_files(self, artifacts_list):
         """
         Save raw documents to S3
@@ -289,12 +304,12 @@ class SecTranscriptScraper:
 
         for artifact in artifacts_list:
             try:
-                ticker = artifact['ticker']
-                date = artifact['date'].replace('-', '')
-                artifact_type = artifact.get('type', 'sec')
-                form = artifact.get('form', '').replace('-', '')
+                ticker = artifact["ticker"]
+                date = artifact["date"].replace("-", "")
+                artifact_type = artifact.get("type", "sec")
+                form = artifact.get("form", "").replace("-", "")
 
-                if artifact_type == 'sec':
+                if artifact_type == "sec":
                     key = f"raw/sec/{ticker}_{date}_{form}.txt"
                 else:
                     key = f"raw/transcripts/{ticker}_{date}_transcript.txt"
@@ -309,7 +324,7 @@ class SecTranscriptScraper:
                     pass
 
                 # Fetch actual SEC filing content
-                if artifact_type == 'sec':
+                if artifact_type == "sec":
                     content = self._fetch_sec_filing_text(artifact)
                     if not content:
                         print(f"  ⚠️  Could not fetch content for {key}, skipping")
@@ -322,9 +337,7 @@ class SecTranscriptScraper:
                     content += "Mock content - replace with actual document text\n"
 
                 self.s3.put_object(
-                    Bucket=self.bucket,
-                    Key=key,
-                    Body=content.encode('utf-8')
+                    Bucket=self.bucket, Key=key, Body=content.encode("utf-8")
                 )
 
                 print(f"  ✅ Saved: {key}")
@@ -344,8 +357,8 @@ class SecTranscriptScraper:
         import time
 
         try:
-            ticker = artifact.get('ticker')
-            accession = artifact.get('accession')
+            ticker = artifact.get("ticker")
+            accession = artifact.get("accession")
 
             # Get CIK
             cik = self._get_cik_from_ticker(ticker)
@@ -353,12 +366,12 @@ class SecTranscriptScraper:
                 return None
 
             # Remove dashes from accession
-            accession_no_dash = accession.replace('-', '')
+            accession_no_dash = accession.replace("-", "")
 
             # SEC PDF URL pattern
             url = f"https://www.sec.gov/cgi-bin/viewer?action=view&cik={cik}&accession_number={accession_no_dash}&xbrl_type=v"
 
-            headers = {'User-Agent': 'Kathleen Hill krande322@gmail.com'}
+            headers = {"User-Agent": "Kathleen Hill krande322@gmail.com"}
             response = requests.get(url, headers=headers, timeout=30, stream=True)
             response.raise_for_status()
 
@@ -374,8 +387,8 @@ class SecTranscriptScraper:
             # Fallback: Try alternative PDF URL
             try:
                 # Alternative: Direct document URL
-                accession_dash = artifact.get('accession')
-                accession_no_dash = accession_dash.replace('-', '')
+                accession_dash = artifact.get("accession")
+                accession_no_dash = accession_dash.replace("-", "")
                 url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dash}/{accession_dash}.pdf"
 
                 response = requests.get(url, headers=headers, timeout=30, stream=True)
@@ -400,9 +413,9 @@ class SecTranscriptScraper:
         saved = []
 
         for artifact in artifacts:
-            ticker = artifact.get('ticker')
-            date = artifact.get('date')
-            form = artifact.get('form')
+            ticker = artifact.get("ticker")
+            date = artifact.get("date")
+            form = artifact.get("form")
 
             # Generate S3 key: raw/sec/TICKER_10-K_YYYY-MM-DD.pdf
             filename = f"{ticker}_{form}_{date}.pdf"
@@ -428,7 +441,7 @@ class SecTranscriptScraper:
                         Bucket=self.bucket,
                         Key=key,
                         Body=content,
-                        ContentType='application/pdf'
+                        ContentType="application/pdf",
                     )
                     print(f"  ✅ Saved {key}")
                     saved.append(key)
@@ -451,9 +464,9 @@ class SecTranscriptScraper:
             from bs4 import BeautifulSoup
             import re
 
-            accession = artifact.get('accession', '').replace('-', '')
-            form = artifact.get('form', '')
-            ticker = artifact.get('ticker', '')
+            accession = artifact.get("accession", "").replace("-", "")
+            form = artifact.get("form", "")
+            ticker = artifact.get("ticker", "")
 
             if not accession:
                 return None
@@ -466,7 +479,7 @@ class SecTranscriptScraper:
             # Format: https://www.sec.gov/Archives/edgar/data/CIK/ACCESSIONNODASHES/ACCESSIONWITHDASHES.txt
             url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{artifact.get('accession')}.txt"
 
-            headers = {'User-Agent': 'Kathleen Hill krande322@gmail.com'}
+            headers = {"User-Agent": "Kathleen Hill krande322@gmail.com"}
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
 
@@ -479,7 +492,7 @@ class SecTranscriptScraper:
             # SEC filings have SGML headers followed by HTML documents
             # Extract just the HTML portion(s)
             # Pattern: <DOCUMENT> ... </DOCUMENT> contains the actual filing
-            documents = re.findall(r'<DOCUMENT>(.*?)</DOCUMENT>', full_text, re.DOTALL)
+            documents = re.findall(r"<DOCUMENT>(.*?)</DOCUMENT>", full_text, re.DOTALL)
 
             if not documents:
                 # Fallback: treat entire response as HTML
@@ -489,23 +502,23 @@ class SecTranscriptScraper:
             all_text = []
             for doc in documents:
                 # Use BeautifulSoup to extract text from HTML
-                soup = BeautifulSoup(doc, 'lxml')
+                soup = BeautifulSoup(doc, "lxml")
 
                 # Remove script and style tags
-                for script in soup(['script', 'style', 'noscript']):
+                for script in soup(["script", "style", "noscript"]):
                     script.decompose()
 
                 # Get text
-                text = soup.get_text(separator=' ', strip=True)
+                text = soup.get_text(separator=" ", strip=True)
 
                 # Clean up whitespace
-                text = re.sub(r'\s+', ' ', text)
+                text = re.sub(r"\s+", " ", text)
                 text = text.strip()
 
                 if len(text) > 100:  # Only include substantial text blocks
                     all_text.append(text)
 
-            combined_text = ' '.join(all_text)
+            combined_text = " ".join(all_text)
 
             # Add header
             header = f"SEC FILING: {form}\n"
@@ -520,38 +533,36 @@ class SecTranscriptScraper:
         except Exception as e:
             print(f"  ❌ Error fetching SEC filing: {e}")
             import traceback
+
             traceback.print_exc()
             return None
-    
+
     def generate_artifacts_csv(self, companies_df):
         """
         Generate processed artifacts CSV by scanning S3 raw folder
         and organizing artifacts
         """
         print("📊 Generating artifacts CSV...")
-        
+
         artifacts = []
-        
+
         try:
             # List all raw files
-            paginator = self.s3.get_paginator('list_objects_v2')
-            pages = paginator.paginate(
-                Bucket=self.bucket,
-                Prefix='raw/'
-            )
-            
+            paginator = self.s3.get_paginator("list_objects_v2")
+            pages = paginator.paginate(Bucket=self.bucket, Prefix="raw/")
+
             for page in pages:
-                if 'Contents' not in page:
+                if "Contents" not in page:
                     continue
-                
-                for obj in page['Contents']:
-                    key = obj['Key']
-                    filename = key.split('/')[-1]
+
+                for obj in page["Contents"]:
+                    key = obj["Key"]
+                    filename = key.split("/")[-1]
 
                     # Parse filename: TICKER_DATE_TYPE.txt or TICKER_TYPE_DATE.pdf
                     # Remove extension
-                    name_without_ext = filename.replace('.txt', '').replace('.pdf', '')
-                    parts = name_without_ext.split('_')
+                    name_without_ext = filename.replace(".txt", "").replace(".pdf", "")
+                    parts = name_without_ext.split("_")
 
                     if len(parts) < 3:
                         continue
@@ -559,59 +570,63 @@ class SecTranscriptScraper:
                     ticker = parts[0].upper()
 
                     # Handle different filename patterns
-                    if parts[1] in ['10-K', '10-Q', '10K', '10Q']:
+                    if parts[1] in ["10-K", "10-Q", "10K", "10Q"]:
                         # Pattern: TICKER_10-K_DATE.pdf
                         doc_type = parts[1]
-                        date = parts[2] if len(parts) > 2 else ''
+                        date = parts[2] if len(parts) > 2 else ""
                     else:
                         # Pattern: TICKER_DATE_TYPE.txt
                         date = parts[1]
-                        doc_type = '_'.join(parts[2:])
+                        doc_type = "_".join(parts[2:])
 
                     # Determine artifact type
-                    if '10K' in doc_type or '10-K' in doc_type:
-                        artifact_type = '10-K'
-                    elif '10Q' in doc_type or '10-Q' in doc_type:
-                        artifact_type = '10-Q'
-                    elif 'transcript' in doc_type.lower():
-                        artifact_type = 'Earnings Transcript'
+                    if "10K" in doc_type or "10-K" in doc_type:
+                        artifact_type = "10-K"
+                    elif "10Q" in doc_type or "10-Q" in doc_type:
+                        artifact_type = "10-Q"
+                    elif "transcript" in doc_type.lower():
+                        artifact_type = "Earnings Transcript"
                     else:
-                        artifact_type = 'Other'
-                    
+                        artifact_type = "Other"
+
                     # Get company name
-                    company = companies_df[companies_df['ticker'] == ticker]
-                    company_name = company['name'].values[0] if len(company) > 0 else ticker
-                    
-                    artifacts.append({
-                        'ticker': ticker,
-                        'company_name': company_name,
-                        'type': artifact_type,
-                        'date': self._format_date(date),
-                        's3_key': key,
-                        'document_link': key
-                    })
-            
+                    company = companies_df[companies_df["ticker"] == ticker]
+                    company_name = (
+                        company["name"].values[0] if len(company) > 0 else ticker
+                    )
+
+                    artifacts.append(
+                        {
+                            "ticker": ticker,
+                            "company_name": company_name,
+                            "type": artifact_type,
+                            "date": self._format_date(date),
+                            "s3_key": key,
+                            "document_link": key,
+                        }
+                    )
+
             print(f"✅ Found {len(artifacts)} artifacts in S3")
-            
+
             # Save to CSV
             if artifacts:
                 df = pd.DataFrame(artifacts)
                 csv_buffer = io.StringIO()
                 df.to_csv(csv_buffer, index=False)
-                
+
                 self.s3.put_object(
                     Bucket=self.bucket,
-                    Key='data/processed/artifacts.csv',
-                    Body=csv_buffer.getvalue().encode('utf-8')
+                    Key="data/processed/artifacts.csv",
+                    Body=csv_buffer.getvalue().encode("utf-8"),
                 )
                 print(f"✅ Saved artifacts.csv to S3")
-            
+
             return artifacts
-        
+
         except Exception as e:
             print(f"❌ Error generating artifacts CSV: {e}")
             return []
-    
+
     def _format_date(self, date_str):
         """
         Convert date strings to YYYY-MM-DD format
@@ -622,16 +637,11 @@ class SecTranscriptScraper:
         """
         try:
             # Handle quarter format (e.g., 2024Q1)
-            if 'Q' in date_str and len(date_str) == 6:
+            if "Q" in date_str and len(date_str) == 6:
                 year = date_str[:4]
                 quarter = date_str[-1]
                 # Quarter end dates: Q1=03-31, Q2=06-30, Q3=09-30, Q4=12-31
-                quarter_map = {
-                    '1': '03-31',
-                    '2': '06-30',
-                    '3': '09-30',
-                    '4': '12-31'
-                }
+                quarter_map = {"1": "03-31", "2": "06-30", "3": "09-30", "4": "12-31"}
                 return f"{year}-{quarter_map.get(quarter, '12-31')}"
 
             # Handle YYYYMMDD format
@@ -654,6 +664,7 @@ def main():
 
     # Load companies list
     from s3_service import S3ArtifactService
+
     s3_service = S3ArtifactService()
     companies = s3_service.get_companies()
     companies_df = pd.DataFrame(companies)
@@ -664,7 +675,7 @@ def main():
 
     all_artifacts = []
 
-    for idx, ticker in enumerate(companies_df['ticker'].tolist(), 1):
+    for idx, ticker in enumerate(companies_df["ticker"].tolist(), 1):
         print(f"\n{'='*70}")
         print(f"[{idx}/{len(companies_df)}] Processing {ticker}")
         print(f"{'='*70}")
@@ -692,5 +703,5 @@ def main():
     print("=" * 70)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -11,6 +11,7 @@ from datetime import datetime
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
+
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -34,10 +35,10 @@ class DatabaseService:
             print("📦 DatabaseService: psycopg2 not available")
             return
 
-        db_host = os.environ.get('DB_HOST')
-        db_name = os.environ.get('DB_NAME', 'cyberrisk')
-        db_user = os.environ.get('DB_USER', 'cyberrisk_admin')
-        db_password = os.environ.get('DB_PASSWORD')
+        db_host = os.environ.get("DB_HOST")
+        db_name = os.environ.get("DB_NAME", "cyberrisk")
+        db_user = os.environ.get("DB_USER", "cyberrisk_admin")
+        db_password = os.environ.get("DB_PASSWORD")
 
         if not db_host or not db_password:
             print("📦 DatabaseService: DB credentials not configured")
@@ -49,7 +50,7 @@ class DatabaseService:
                 database=db_name,
                 user=db_user,
                 password=db_password,
-                port=5432
+                port=5432,
             )
             self.connected = True
             print(f"✅ DatabaseService: Connected to RDS at {db_host}")
@@ -65,7 +66,8 @@ class DatabaseService:
 
         try:
             cursor = self.connection.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS companies (
                     id SERIAL PRIMARY KEY,
                     company_name VARCHAR(255) NOT NULL,
@@ -77,7 +79,8 @@ class DatabaseService:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX IF NOT EXISTS idx_companies_ticker ON companies(ticker);
-            """)
+            """
+            )
             self.connection.commit()
             cursor.close()
         except Exception as e:
@@ -102,8 +105,9 @@ class DatabaseService:
     # COMPANY CRUD OPERATIONS
     # =========================================================================
 
-    def create_company(self, company_name: str, ticker: str,
-                       sector: str = "Cybersecurity") -> Optional[Dict[str, Any]]:
+    def create_company(
+        self, company_name: str, ticker: str, sector: str = "Cybersecurity"
+    ) -> Optional[Dict[str, Any]]:
         """
         Create a new company
 
@@ -121,11 +125,14 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO companies (company_name, ticker, sector)
                 VALUES (%s, %s, %s)
                 RETURNING id, company_name, ticker, sector, created_at
-            """, (company_name, ticker.upper(), sector))
+            """,
+                (company_name, ticker.upper(), sector),
+            )
 
             company = dict(cursor.fetchone())
             conn.commit()
@@ -159,11 +166,14 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, company_name, ticker, sector, description, exchange, location, alternate_names, created_at
                 FROM companies
                 WHERE ticker = %s
-            """, (ticker.upper(),))
+            """,
+                (ticker.upper(),),
+            )
 
             row = cursor.fetchone()
             cursor.close()
@@ -187,11 +197,13 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, company_name, ticker, sector, description, exchange, location, alternate_names, created_at
                 FROM companies
                 ORDER BY ticker
-            """)
+            """
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -202,8 +214,9 @@ class DatabaseService:
             print(f"⚠️  Error getting companies: {e}")
             return []
 
-    def update_company(self, ticker: str, company_name: str = None,
-                       sector: str = None) -> Optional[Dict[str, Any]]:
+    def update_company(
+        self, ticker: str, company_name: str = None, sector: str = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Update a company
 
@@ -237,12 +250,15 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 UPDATE companies
                 SET {', '.join(updates)}
                 WHERE ticker = %s
                 RETURNING id, company_name, ticker, sector, description, exchange, location, created_at
-            """, params)
+            """,
+                params,
+            )
 
             row = cursor.fetchone()
             conn.commit()
@@ -274,10 +290,13 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM companies
                 WHERE ticker = %s
-            """, (ticker.upper(),))
+            """,
+                (ticker.upper(),),
+            )
 
             deleted = cursor.rowcount > 0
             conn.commit()
@@ -316,7 +335,8 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     a.id,
                     c.ticker,
@@ -329,7 +349,8 @@ class DatabaseService:
                 FROM artifacts a
                 JOIN companies c ON a.company_id = c.id
                 ORDER BY a.published_date DESC
-            """)
+            """
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -338,8 +359,8 @@ class DatabaseService:
             artifacts = []
             for row in rows:
                 artifact = dict(row)
-                if artifact.get('date'):
-                    artifact['date'] = artifact['date'].isoformat()
+                if artifact.get("date"):
+                    artifact["date"] = artifact["date"].isoformat()
                 artifacts.append(artifact)
 
             return artifacts
@@ -364,7 +385,8 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     a.id,
                     c.ticker,
@@ -378,7 +400,9 @@ class DatabaseService:
                 JOIN companies c ON a.company_id = c.id
                 WHERE c.ticker = %s
                 ORDER BY a.published_date DESC
-            """, (ticker.upper(),))
+            """,
+                (ticker.upper(),),
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -387,8 +411,8 @@ class DatabaseService:
             artifacts = []
             for row in rows:
                 artifact = dict(row)
-                if artifact.get('date'):
-                    artifact['date'] = artifact['date'].isoformat()
+                if artifact.get("date"):
+                    artifact["date"] = artifact["date"].isoformat()
                 artifacts.append(artifact)
 
             return artifacts
@@ -413,7 +437,8 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     a.artifact_type as type,
                     COUNT(*) as count
@@ -421,19 +446,22 @@ class DatabaseService:
                 JOIN companies c ON a.company_id = c.id
                 WHERE c.ticker = %s
                 GROUP BY a.artifact_type
-            """, (ticker.upper(),))
+            """,
+                (ticker.upper(),),
+            )
 
             rows = cursor.fetchall()
             cursor.close()
 
-            return {row['type']: row['count'] for row in rows}
+            return {row["type"]: row["count"] for row in rows}
 
         except Exception as e:
             print(f"⚠️  Error getting artifact counts for {ticker}: {e}")
             return {}
 
-    def create_artifact(self, ticker: str, artifact_type: str, s3_key: str,
-                       published_date: str = None) -> Optional[Dict[str, Any]]:
+    def create_artifact(
+        self, ticker: str, artifact_type: str, s3_key: str, published_date: str = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Create a new artifact
 
@@ -458,14 +486,17 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO artifacts (company_id, artifact_type, s3_key, published_date)
                 VALUES (%s, %s, %s, %s)
                 RETURNING id, company_id, artifact_type as type, s3_key, published_date as date, created_at
-            """, (company['id'], artifact_type, s3_key, published_date))
+            """,
+                (company["id"], artifact_type, s3_key, published_date),
+            )
 
             artifact = dict(cursor.fetchone())
-            artifact['ticker'] = ticker
+            artifact["ticker"] = ticker
             conn.commit()
             cursor.close()
 

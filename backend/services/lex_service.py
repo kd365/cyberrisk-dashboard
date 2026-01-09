@@ -8,10 +8,11 @@ import os
 import uuid
 from botocore.exceptions import ClientError
 
+
 class LexService:
     """Service for interacting with Amazon Lex V2 chatbot"""
 
-    def __init__(self, bot_id=None, bot_alias_id=None, locale_id='en_US'):
+    def __init__(self, bot_id=None, bot_alias_id=None, locale_id="en_US"):
         """
         Initialize the Lex service
 
@@ -20,14 +21,13 @@ class LexService:
             bot_alias_id: The Lex bot alias ID (from Terraform output or env var)
             locale_id: The locale for the bot (default: en_US)
         """
-        self.bot_id = bot_id or os.environ.get('LEX_BOT_ID')
-        self.bot_alias_id = bot_alias_id or os.environ.get('LEX_BOT_ALIAS_ID')
+        self.bot_id = bot_id or os.environ.get("LEX_BOT_ID")
+        self.bot_alias_id = bot_alias_id or os.environ.get("LEX_BOT_ALIAS_ID")
         self.locale_id = locale_id
 
         # Initialize the Lex Runtime V2 client
         self.client = boto3.client(
-            'lexv2-runtime',
-            region_name=os.environ.get('AWS_REGION', 'us-west-2')
+            "lexv2-runtime", region_name=os.environ.get("AWS_REGION", "us-west-2")
         )
 
     def send_message(self, message: str, session_id: str = None) -> dict:
@@ -55,21 +55,27 @@ class LexService:
                 botAliasId=self.bot_alias_id,
                 localeId=self.locale_id,
                 sessionId=session_id,
-                text=message
+                text=message,
             )
 
             # Extract the response message
-            messages = response.get('messages', [])
+            messages = response.get("messages", [])
             if messages:
-                bot_message = ' '.join([m.get('content', '') for m in messages])
+                bot_message = " ".join([m.get("content", "") for m in messages])
             else:
-                bot_message = "I'm sorry, I didn't understand that. Could you please rephrase?"
+                bot_message = (
+                    "I'm sorry, I didn't understand that. Could you please rephrase?"
+                )
 
             return {
-                'message': bot_message,
-                'session_id': session_id,
-                'intent': response.get('sessionState', {}).get('intent', {}).get('name'),
-                'slots': response.get('sessionState', {}).get('intent', {}).get('slots', {})
+                "message": bot_message,
+                "session_id": session_id,
+                "intent": response.get("sessionState", {})
+                .get("intent", {})
+                .get("name"),
+                "slots": response.get("sessionState", {})
+                .get("intent", {})
+                .get("slots", {}),
             }
 
         except ClientError as e:
@@ -92,7 +98,9 @@ class LexService:
         message_lower = message.lower()
 
         # Simple pattern matching for fallback responses
-        if any(word in message_lower for word in ['hello', 'hi', 'hey', 'help', 'start']):
+        if any(
+            word in message_lower for word in ["hello", "hi", "hey", "help", "start"]
+        ):
             response = """Welcome to the CyberRisk Dashboard Assistant! I can help you with:
 
 - List available companies
@@ -103,20 +111,27 @@ class LexService:
 
 Just ask me something like "What companies are available?" or "Tell me about CrowdStrike"."""
 
-        elif 'companies' in message_lower or 'list' in message_lower or 'tracked' in message_lower:
+        elif (
+            "companies" in message_lower
+            or "list" in message_lower
+            or "tracked" in message_lower
+        ):
             # Try to get companies from database
             try:
                 import psycopg2
-                db_host = os.environ.get('DB_HOST', '').split(':')[0]
+
+                db_host = os.environ.get("DB_HOST", "").split(":")[0]
                 conn = psycopg2.connect(
                     host=db_host,
-                    database=os.environ.get('DB_NAME'),
-                    user=os.environ.get('DB_USER'),
-                    password=os.environ.get('DB_PASSWORD'),
-                    port=5432
+                    database=os.environ.get("DB_NAME"),
+                    user=os.environ.get("DB_USER"),
+                    password=os.environ.get("DB_PASSWORD"),
+                    port=5432,
                 )
                 cursor = conn.cursor()
-                cursor.execute("SELECT company_name, ticker FROM companies ORDER BY company_name")
+                cursor.execute(
+                    "SELECT company_name, ticker FROM companies ORDER BY company_name"
+                )
                 companies = cursor.fetchall()
                 cursor.close()
                 conn.close()
@@ -125,7 +140,9 @@ Just ask me something like "What companies are available?" or "Tell me about Cro
                     company_list = "\n".join([f"- {c[0]} ({c[1]})" for c in companies])
                     response = f"The dashboard tracks {len(companies)} cybersecurity companies:\n\n{company_list}\n\nAsk me about any of these companies for more details!"
                 else:
-                    response = "No companies are currently loaded. Please check the database."
+                    response = (
+                        "No companies are currently loaded. Please check the database."
+                    )
             except Exception as e:
                 print(f"Database error in fallback: {e}")
                 # Fallback if database not available
@@ -133,7 +150,7 @@ Just ask me something like "What companies are available?" or "Tell me about Cro
 
 Use the Companies list in the dashboard to see all available companies, or say "list companies" to try again."""
 
-        elif 'crowdstrike' in message_lower or 'crwd' in message_lower:
+        elif "crowdstrike" in message_lower or "crwd" in message_lower:
             response = """CrowdStrike (CRWD) is a leading cybersecurity company specializing in endpoint protection.
 
 The dashboard provides:
@@ -144,7 +161,7 @@ The dashboard provides:
 
 Navigate to the Sentiment Analysis tab to see how market sentiment has trended for CrowdStrike."""
 
-        elif 'palo alto' in message_lower or 'panw' in message_lower:
+        elif "palo alto" in message_lower or "panw" in message_lower:
             response = """Palo Alto Networks (PANW) is a multinational cybersecurity company.
 
 The dashboard provides:
@@ -155,7 +172,7 @@ The dashboard provides:
 
 Check the Forecast tab to see price predictions for PANW."""
 
-        elif 'sentiment' in message_lower:
+        elif "sentiment" in message_lower:
             response = """The Sentiment Analysis feature uses AWS Comprehend to analyze:
 
 - SEC filings (10-K, 10-Q, 8-K reports)
@@ -169,28 +186,42 @@ It provides:
 
 Visit the Sentiment Analysis tab and select a company to see detailed analysis."""
 
-        elif 'forecast' in message_lower or 'predict' in message_lower:
+        elif "forecast" in message_lower or "predict" in message_lower:
             # Check if user specified a model
-            use_chronos = 'chronos' in message_lower
-            use_prophet = 'prophet' in message_lower
+            use_chronos = "chronos" in message_lower
+            use_prophet = "prophet" in message_lower
 
             if use_chronos or use_prophet:
-                model_name = 'Chronos-Bolt' if use_chronos else 'Prophet'
-                model_param = 'chronos' if use_chronos else 'prophet'
+                model_name = "Chronos-Bolt" if use_chronos else "Prophet"
+                model_param = "chronos" if use_chronos else "prophet"
 
                 # Try to get forecast data
                 try:
                     import requests
-                    ticker = 'CRWD'  # Default ticker
-                    for t in ['CRWD', 'ZS', 'NET', 'PANW', 'FTNT', 'OKTA', 'CYBR', 'TENB', 'SPLK']:
+
+                    ticker = "CRWD"  # Default ticker
+                    for t in [
+                        "CRWD",
+                        "ZS",
+                        "NET",
+                        "PANW",
+                        "FTNT",
+                        "OKTA",
+                        "CYBR",
+                        "TENB",
+                        "SPLK",
+                    ]:
                         if t.lower() in message_lower:
                             ticker = t
                             break
 
-                    resp = requests.get(f'http://localhost:5000/api/forecast?ticker={ticker}&model={model_param}&days=30', timeout=30)
+                    resp = requests.get(
+                        f"http://localhost:5000/api/forecast?ticker={ticker}&model={model_param}&days=30",
+                        timeout=30,
+                    )
                     if resp.status_code == 200:
                         data = resp.json()
-                        from_cache = data.get('from_cache', False)
+                        from_cache = data.get("from_cache", False)
                         cache_note = " (from cache)" if from_cache else ""
 
                         response = f"""Here's the {model_name} forecast for {ticker}{cache_note}:
@@ -219,19 +250,24 @@ Which model would you like to use? You can say:
 
 Note: Forecasts are for educational purposes and should not be considered financial advice."""
 
-        elif 'growth' in message_lower or 'hiring' in message_lower or 'workforce' in message_lower or 'employee' in message_lower:
+        elif (
+            "growth" in message_lower
+            or "hiring" in message_lower
+            or "workforce" in message_lower
+            or "employee" in message_lower
+        ):
             # Company growth analysis - with full company names
             GROWTH_COMPANIES = {
-                'CRWD': 'CrowdStrike',
-                'ZS': 'Zscaler',
-                'NET': 'Cloudflare',
-                'PANW': 'Palo Alto Networks',
-                'FTNT': 'Fortinet',
-                'OKTA': 'Okta',
-                'S': 'SentinelOne',
-                'CYBR': 'CyberArk',
-                'TENB': 'Tenable',
-                'SPLK': 'Splunk'
+                "CRWD": "CrowdStrike",
+                "ZS": "Zscaler",
+                "NET": "Cloudflare",
+                "PANW": "Palo Alto Networks",
+                "FTNT": "Fortinet",
+                "OKTA": "Okta",
+                "S": "SentinelOne",
+                "CYBR": "CyberArk",
+                "TENB": "Tenable",
+                "SPLK": "Splunk",
             }
 
             # Check if user specified a company
@@ -245,18 +281,30 @@ Note: Forecasts are for educational purposes and should not be considered financ
                 # Try to get growth data
                 try:
                     import requests
-                    resp = requests.get(f'http://localhost:5000/api/company-growth/{found_ticker}', timeout=30)
+
+                    resp = requests.get(
+                        f"http://localhost:5000/api/company-growth/{found_ticker}",
+                        timeout=30,
+                    )
                     if resp.status_code == 200:
                         data = resp.json()
-                        company_name = data.get('company', {}).get('name', GROWTH_COMPANIES[found_ticker])
-                        employee_count = data.get('company', {}).get('employee_count', 0)
-                        total_jobs = data.get('total_jobs', 0)
-                        hiring_intensity = data.get('hiring_intensity', 0)
+                        company_name = data.get("company", {}).get(
+                            "name", GROWTH_COMPANIES[found_ticker]
+                        )
+                        employee_count = data.get("company", {}).get(
+                            "employee_count", 0
+                        )
+                        total_jobs = data.get("total_jobs", 0)
+                        hiring_intensity = data.get("hiring_intensity", 0)
 
                         # Get top hiring functions
-                        jobs_by_function = data.get('jobs_by_function', {})
-                        top_functions = sorted(jobs_by_function.items(), key=lambda x: x[1], reverse=True)[:3]
-                        top_funcs_str = ", ".join([f"{f[0]} ({f[1]})" for f in top_functions])
+                        jobs_by_function = data.get("jobs_by_function", {})
+                        top_functions = sorted(
+                            jobs_by_function.items(), key=lambda x: x[1], reverse=True
+                        )[:3]
+                        top_funcs_str = ", ".join(
+                            [f"{f[0]} ({f[1]})" for f in top_functions]
+                        )
 
                         response = f"""Here's the workforce analysis for **{company_name}** ({found_ticker}):
 
@@ -274,7 +322,9 @@ Visit the Company Growth tab to see detailed charts comparing multiple companies
                     response = f"I couldn't retrieve growth data. Please try the Company Growth tab directly."
             else:
                 # Ask user to select a company using full names
-                company_list = "\n".join([f"- {name}" for name in GROWTH_COMPANIES.values()])
+                company_list = "\n".join(
+                    [f"- {name}" for name in GROWTH_COMPANIES.values()]
+                )
                 response = f"""Company Growth analysis is available for these cybersecurity companies:
 
 {company_list}
@@ -286,7 +336,11 @@ Which company would you like to analyze? You can say things like:
 
 Visit the Company Growth tab to compare multiple companies side-by-side."""
 
-        elif 'features' in message_lower or 'dashboard' in message_lower or 'tabs' in message_lower:
+        elif (
+            "features" in message_lower
+            or "dashboard" in message_lower
+            or "tabs" in message_lower
+        ):
             response = """The CyberRisk Dashboard has five main sections:
 
 1. **Data Collection** - View and manage SEC filings and earnings transcripts
@@ -315,10 +369,10 @@ Navigate using the sidebar to explore each feature."""
 Or just say "help" to see all options."""
 
         return {
-            'message': response,
-            'session_id': session_id,
-            'intent': 'FallbackIntent',
-            'slots': {}
+            "message": response,
+            "session_id": session_id,
+            "intent": "FallbackIntent",
+            "slots": {},
         }
 
     def end_session(self, session_id: str) -> bool:
@@ -339,7 +393,7 @@ Or just say "help" to see all options."""
                 botId=self.bot_id,
                 botAliasId=self.bot_alias_id,
                 localeId=self.locale_id,
-                sessionId=session_id
+                sessionId=session_id,
             )
             return True
         except Exception as e:

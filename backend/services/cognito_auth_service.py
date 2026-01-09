@@ -33,18 +33,18 @@ class CognitoAuthService:
 
     def __init__(self):
         """Initialize with Cognito configuration from environment."""
-        self.region = os.environ.get('AWS_REGION', 'us-west-2')
-        self.user_pool_id = os.environ.get('COGNITO_USER_POOL_ID', '')
-        self.client_id = os.environ.get('COGNITO_CLIENT_ID', '')
+        self.region = os.environ.get("AWS_REGION", "us-west-2")
+        self.user_pool_id = os.environ.get("COGNITO_USER_POOL_ID", "")
+        self.client_id = os.environ.get("COGNITO_CLIENT_ID", "")
 
         # JWKS URL for token verification
         if self.user_pool_id:
             self.jwks_url = (
-                f'https://cognito-idp.{self.region}.amazonaws.com/'
-                f'{self.user_pool_id}/.well-known/jwks.json'
+                f"https://cognito-idp.{self.region}.amazonaws.com/"
+                f"{self.user_pool_id}/.well-known/jwks.json"
             )
             self.issuer = (
-                f'https://cognito-idp.{self.region}.amazonaws.com/{self.user_pool_id}'
+                f"https://cognito-idp.{self.region}.amazonaws.com/{self.user_pool_id}"
             )
         else:
             self.jwks_url = None
@@ -59,6 +59,7 @@ class CognitoAuthService:
         self._jose_available = False
         try:
             from jose import jwt, jwk
+
             self._jose_available = True
         except ImportError:
             logger.warning(
@@ -79,8 +80,10 @@ class CognitoAuthService:
         current_time = time.time()
 
         # Return cached keys if still valid
-        if (self._jwks is not None and
-                current_time - self._jwks_last_fetched < self._jwks_cache_duration):
+        if (
+            self._jwks is not None
+            and current_time - self._jwks_last_fetched < self._jwks_cache_duration
+        ):
             return self._jwks
 
         try:
@@ -116,7 +119,7 @@ class CognitoAuthService:
 
             # Get the key ID from token header
             headers = jwt.get_unverified_headers(token)
-            kid = headers.get('kid')
+            kid = headers.get("kid")
 
             if not kid:
                 logger.warning("Token missing key ID")
@@ -129,8 +132,8 @@ class CognitoAuthService:
                 return None
 
             key = None
-            for k in jwks.get('keys', []):
-                if k.get('kid') == kid:
+            for k in jwks.get("keys", []):
+                if k.get("kid") == kid:
                     key = k
                     break
 
@@ -142,14 +145,14 @@ class CognitoAuthService:
             claims = jwt.decode(
                 token,
                 key,
-                algorithms=['RS256'],
+                algorithms=["RS256"],
                 audience=self.client_id,
                 issuer=self.issuer,
-                options={'verify_at_hash': False}
+                options={"verify_at_hash": False},
             )
 
             # Additional expiration check
-            if claims.get('exp', 0) < time.time():
+            if claims.get("exp", 0) < time.time():
                 logger.warning("Token expired")
                 return None
 
@@ -171,7 +174,7 @@ class CognitoAuthService:
         """
         claims = self.verify_token(token)
         if claims:
-            return claims.get('email')
+            return claims.get("email")
         return None
 
     def get_token_from_request(self) -> Optional[str]:
@@ -181,10 +184,10 @@ class CognitoAuthService:
         Returns:
             Token string or None
         """
-        auth_header = request.headers.get('Authorization', '')
+        auth_header = request.headers.get("Authorization", "")
 
-        if auth_header.startswith('Bearer '):
-            return auth_header.split(' ', 1)[1]
+        if auth_header.startswith("Bearer "):
+            return auth_header.split(" ", 1)[1]
 
         return None
 
@@ -222,31 +225,42 @@ def require_cognito_auth(f):
             user_email = request.cognito_user.get('email')
             ...
     """
+
     @wraps(f)
     def decorated(*args, **kwargs):
         # Get token from Authorization header
         token = cognito_auth.get_token_from_request()
 
         if not token:
-            return jsonify({
-                'error': 'Authentication required',
-                'message': 'Please sign in to perform this action.',
-                'code': 'AUTH_REQUIRED'
-            }), 401
+            return (
+                jsonify(
+                    {
+                        "error": "Authentication required",
+                        "message": "Please sign in to perform this action.",
+                        "code": "AUTH_REQUIRED",
+                    }
+                ),
+                401,
+            )
 
         # Verify token
         claims = cognito_auth.verify_token(token)
 
         if not claims:
-            return jsonify({
-                'error': 'Invalid or expired token',
-                'message': 'Please sign in again.',
-                'code': 'INVALID_TOKEN'
-            }), 401
+            return (
+                jsonify(
+                    {
+                        "error": "Invalid or expired token",
+                        "message": "Please sign in again.",
+                        "code": "INVALID_TOKEN",
+                    }
+                ),
+                401,
+            )
 
         # Add user info to request context
         request.cognito_user = claims
-        g.user_email = claims.get('email')
+        g.user_email = claims.get("email")
 
         return f(*args, **kwargs)
 
@@ -259,6 +273,7 @@ def optional_cognito_auth(f):
 
     Populates request.cognito_user if authenticated, otherwise None.
     """
+
     @wraps(f)
     def decorated(*args, **kwargs):
         token = cognito_auth.get_token_from_request()
@@ -266,7 +281,7 @@ def optional_cognito_auth(f):
         if token:
             claims = cognito_auth.verify_token(token)
             request.cognito_user = claims
-            g.user_email = claims.get('email') if claims else None
+            g.user_email = claims.get("email") if claims else None
         else:
             request.cognito_user = None
             g.user_email = None
@@ -280,6 +295,7 @@ def optional_cognito_auth(f):
 # Auth Status Endpoint Helper
 # =============================================================================
 
+
 def get_auth_status() -> Dict:
     """
     Get current authentication status.
@@ -290,16 +306,16 @@ def get_auth_status() -> Dict:
     token = cognito_auth.get_token_from_request()
 
     if not token:
-        return {'authenticated': False}
+        return {"authenticated": False}
 
     claims = cognito_auth.verify_token(token)
 
     if claims:
         return {
-            'authenticated': True,
-            'email': claims.get('email'),
-            'expires_at': claims.get('exp'),
-            'user_pool_id': cognito_auth.user_pool_id
+            "authenticated": True,
+            "email": claims.get("email"),
+            "expires_at": claims.get("exp"),
+            "user_pool_id": cognito_auth.user_pool_id,
         }
 
-    return {'authenticated': False}
+    return {"authenticated": False}

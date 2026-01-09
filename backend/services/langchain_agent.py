@@ -66,29 +66,27 @@ Provide investment-relevant analysis with appropriate caveats about market risks
 
     def __init__(self):
         """Initialize the LangChain agent service."""
-        self.region = os.environ.get('AWS_REGION', 'us-west-2')
+        self.region = os.environ.get("AWS_REGION", "us-west-2")
 
         # Initialize Claude 3.5 Sonnet via Bedrock
         self.llm = ChatBedrock(
             model_id=self.MODEL_ID,
             region_name=self.region,
-            model_kwargs={
-                "max_tokens": 4096,
-                "temperature": 0.7,
-                "top_p": 0.9
-            }
+            model_kwargs={"max_tokens": 4096, "temperature": 0.7, "top_p": 0.9},
         )
 
         # Get all tools
         self.tools = get_all_tools()
 
         # Create prompt template
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", self.SYSTEM_PROMPT),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ]
+        )
 
         # Create the agent
         self.agent = create_tool_calling_agent(self.llm, self.tools, self.prompt)
@@ -100,7 +98,7 @@ Provide investment-relevant analysis with appropriate caveats about market risks
             verbose=False,
             max_iterations=5,
             handle_parsing_errors=True,
-            return_intermediate_steps=True
+            return_intermediate_steps=True,
         )
 
         # Memory service (lazy loaded)
@@ -112,14 +110,19 @@ Provide investment-relevant analysis with appropriate caveats about market risks
         if self._memory_service is None:
             try:
                 from services.memory_service import get_memory_service
+
                 self._memory_service = get_memory_service()
             except Exception as e:
                 logger.warning(f"Memory service not available: {e}")
         return self._memory_service
 
-    def chat(self, message: str, session_id: str,
-             user_email: str = None,
-             auth_token: str = None) -> Dict:
+    def chat(
+        self,
+        message: str,
+        session_id: str,
+        user_email: str = None,
+        auth_token: str = None,
+    ) -> Dict:
         """
         Process a chat message and return response.
 
@@ -137,10 +140,9 @@ Provide investment-relevant analysis with appropriate caveats about market risks
             chat_history = self._get_chat_history(session_id)
 
             # Invoke the agent
-            result = self.executor.invoke({
-                "input": message,
-                "chat_history": chat_history
-            })
+            result = self.executor.invoke(
+                {"input": message, "chat_history": chat_history}
+            )
 
             # Extract response
             response_text = result.get("output", "I'm not sure how to respond to that.")
@@ -148,27 +150,27 @@ Provide investment-relevant analysis with appropriate caveats about market risks
             # Extract tools used from intermediate steps
             tools_used = []
             for step in result.get("intermediate_steps", []):
-                if hasattr(step[0], 'tool'):
+                if hasattr(step[0], "tool"):
                     tools_used.append(step[0].tool)
 
             # Save to memory
             self._save_to_memory(session_id, message, response_text)
 
             return {
-                'response': response_text,
-                'session_id': session_id,
-                'tools_used': tools_used,
-                'model': 'claude-3.5-sonnet',
-                'timestamp': datetime.now().isoformat()
+                "response": response_text,
+                "session_id": session_id,
+                "tools_used": tools_used,
+                "model": "claude-3.5-sonnet",
+                "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
             logger.error(f"Agent error: {e}")
             return {
-                'response': f"I apologize, but I encountered an error. Please try again.",
-                'session_id': session_id,
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
+                "response": f"I apologize, but I encountered an error. Please try again.",
+                "session_id": session_id,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat(),
             }
 
     def _get_chat_history(self, session_id: str) -> List:
@@ -181,10 +183,10 @@ Provide investment-relevant analysis with appropriate caveats about market risks
                 # Convert to LangChain message format
                 messages = []
                 for msg in raw_history:
-                    if msg['role'] == 'user':
-                        messages.append(HumanMessage(content=msg['content']))
-                    elif msg['role'] == 'assistant':
-                        messages.append(AIMessage(content=msg['content']))
+                    if msg["role"] == "user":
+                        messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        messages.append(AIMessage(content=msg["content"]))
                 return messages
         except Exception as e:
             logger.warning(f"Could not get chat history: {e}")
@@ -194,8 +196,8 @@ Provide investment-relevant analysis with appropriate caveats about market risks
         """Save messages to conversation memory."""
         try:
             if self.memory_service:
-                self.memory_service.add_message(session_id, 'user', user_msg)
-                self.memory_service.add_message(session_id, 'assistant', assistant_msg)
+                self.memory_service.add_message(session_id, "user", user_msg)
+                self.memory_service.add_message(session_id, "assistant", assistant_msg)
         except Exception as e:
             logger.warning(f"Could not save to memory: {e}")
 

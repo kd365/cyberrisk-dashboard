@@ -39,6 +39,7 @@ class GraphEnrichmentService:
         """Lazy load Neo4j service."""
         if self._neo4j_service is None:
             from services.neo4j_service import get_neo4j_service
+
             self._neo4j_service = get_neo4j_service()
         return self._neo4j_service
 
@@ -47,6 +48,7 @@ class GraphEnrichmentService:
         """Lazy load database service."""
         if self._db_service is None:
             from services.database_service import db_service
+
             self._db_service = db_service
         return self._db_service
 
@@ -68,13 +70,13 @@ class GraphEnrichmentService:
         logger.info(f"Enriching graph with RDS data for {ticker}")
 
         results = {
-            'ticker': ticker,
-            'sentiment_snapshots': 0,
-            'growth_snapshots': 0,
-            'forecast_snapshots': 0,
-            'headcount_points': 0,
-            'job_functions': 0,
-            'errors': []
+            "ticker": ticker,
+            "sentiment_snapshots": 0,
+            "growth_snapshots": 0,
+            "forecast_snapshots": 0,
+            "headcount_points": 0,
+            "job_functions": 0,
+            "errors": [],
         }
 
         try:
@@ -83,45 +85,45 @@ class GraphEnrichmentService:
 
             # 2. Add sentiment snapshots
             try:
-                results['sentiment_snapshots'] = self._add_sentiment_snapshots(ticker)
+                results["sentiment_snapshots"] = self._add_sentiment_snapshots(ticker)
             except Exception as e:
                 logger.error(f"Error adding sentiment: {e}")
-                results['errors'].append(f"sentiment: {str(e)}")
+                results["errors"].append(f"sentiment: {str(e)}")
 
             # 3. Add growth snapshots
             try:
-                results['growth_snapshots'] = self._add_growth_snapshots(ticker)
+                results["growth_snapshots"] = self._add_growth_snapshots(ticker)
             except Exception as e:
                 logger.error(f"Error adding growth: {e}")
-                results['errors'].append(f"growth: {str(e)}")
+                results["errors"].append(f"growth: {str(e)}")
 
             # 4. Add forecast snapshots
             try:
-                results['forecast_snapshots'] = self._add_forecast_snapshots(ticker)
+                results["forecast_snapshots"] = self._add_forecast_snapshots(ticker)
             except Exception as e:
                 logger.error(f"Error adding forecasts: {e}")
-                results['errors'].append(f"forecasts: {str(e)}")
+                results["errors"].append(f"forecasts: {str(e)}")
 
             # 5. Add headcount history
             try:
-                results['headcount_points'] = self._add_headcount_history(ticker)
+                results["headcount_points"] = self._add_headcount_history(ticker)
             except Exception as e:
                 logger.error(f"Error adding headcount: {e}")
-                results['errors'].append(f"headcount: {str(e)}")
+                results["errors"].append(f"headcount: {str(e)}")
 
             # 6. Add job function data
             try:
-                results['job_functions'] = self._add_job_functions(ticker)
+                results["job_functions"] = self._add_job_functions(ticker)
             except Exception as e:
                 logger.error(f"Error adding jobs: {e}")
-                results['errors'].append(f"jobs: {str(e)}")
+                results["errors"].append(f"jobs: {str(e)}")
 
             logger.info(f"Graph enrichment complete for {ticker}: {results}")
             return results
 
         except Exception as e:
             logger.error(f"Error enriching graph for {ticker}: {e}")
-            results['errors'].append(str(e))
+            results["errors"].append(str(e))
             return results
 
     def enrich_all_tickers(self) -> Dict:
@@ -135,7 +137,7 @@ class GraphEnrichmentService:
         all_results = {}
 
         for company in companies:
-            ticker = company.get('ticker', '').upper()
+            ticker = company.get("ticker", "").upper()
             if ticker:
                 all_results[ticker] = self.enrich_graph_for_ticker(ticker)
 
@@ -151,8 +153,8 @@ class GraphEnrichmentService:
         if company:
             self.neo4j.create_company(
                 ticker=ticker,
-                name=company.get('company_name', ticker),
-                sector=company.get('sector', 'Cybersecurity')
+                name=company.get("company_name", ticker),
+                sector=company.get("sector", "Cybersecurity"),
             )
 
     def _add_sentiment_snapshots(self, ticker: str) -> int:
@@ -167,13 +169,16 @@ class GraphEnrichmentService:
 
         try:
             # Query sentiment_cache table
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT cache_key, sentiment_data, cached_at
                 FROM sentiment_cache
                 WHERE cache_key LIKE %s
                 ORDER BY cached_at DESC
                 LIMIT 10
-            """, (f"{ticker}_%",))
+            """,
+                (f"{ticker}_%",),
+            )
 
             rows = cursor.fetchall()
             count = 0
@@ -186,12 +191,13 @@ class GraphEnrichmentService:
 
                 # Parse sentiment data (assuming JSON)
                 import json
+
                 if isinstance(sentiment_data, str):
                     data = json.loads(sentiment_data)
                 else:
                     data = sentiment_data
 
-                overall = data.get('overall', {})
+                overall = data.get("overall", {})
 
                 # Create snapshot node
                 query = """
@@ -207,17 +213,24 @@ class GraphEnrichmentService:
                     MERGE (c)-[:HAS_SENTIMENT]->(s)
                 """
 
-                self.neo4j.execute_write(query, {
-                    'ticker': ticker,
-                    'cache_key': cache_key,
-                    'dominant': overall.get('dominant', 'NEUTRAL'),
-                    'confidence': overall.get('confidence', 0),
-                    'positive': overall.get('positive', 0),
-                    'negative': overall.get('negative', 0),
-                    'neutral': overall.get('neutral', 0),
-                    'mixed': overall.get('mixed', 0),
-                    'cached_at': cached_at.isoformat() if cached_at else datetime.now().isoformat()
-                })
+                self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "cache_key": cache_key,
+                        "dominant": overall.get("dominant", "NEUTRAL"),
+                        "confidence": overall.get("confidence", 0),
+                        "positive": overall.get("positive", 0),
+                        "negative": overall.get("negative", 0),
+                        "neutral": overall.get("neutral", 0),
+                        "mixed": overall.get("mixed", 0),
+                        "cached_at": (
+                            cached_at.isoformat()
+                            if cached_at
+                            else datetime.now().isoformat()
+                        ),
+                    },
+                )
 
                 count += 1
 
@@ -238,13 +251,16 @@ class GraphEnrichmentService:
 
         try:
             # Query growth_cache table
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT ticker, snapshot_date, employee_count, hiring_intensity
                 FROM growth_cache
                 WHERE ticker = %s
                 ORDER BY snapshot_date DESC
                 LIMIT 10
-            """, (ticker,))
+            """,
+                (ticker,),
+            )
 
             rows = cursor.fetchall()
             count = 0
@@ -255,7 +271,11 @@ class GraphEnrichmentService:
                 if not snapshot_date:
                     continue
 
-                date_str = snapshot_date.isoformat() if hasattr(snapshot_date, 'isoformat') else str(snapshot_date)
+                date_str = (
+                    snapshot_date.isoformat()
+                    if hasattr(snapshot_date, "isoformat")
+                    else str(snapshot_date)
+                )
 
                 # Create growth snapshot node
                 query = """
@@ -266,12 +286,15 @@ class GraphEnrichmentService:
                     MERGE (c)-[:HAS_GROWTH_DATA]->(g)
                 """
 
-                self.neo4j.execute_write(query, {
-                    'ticker': ticker,
-                    'date': date_str[:10],  # YYYY-MM-DD
-                    'employee_count': employee_count or 0,
-                    'hiring_intensity': hiring_intensity or 0
-                })
+                self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "date": date_str[:10],  # YYYY-MM-DD
+                        "employee_count": employee_count or 0,
+                        "hiring_intensity": hiring_intensity or 0,
+                    },
+                )
 
                 count += 1
 
@@ -292,13 +315,16 @@ class GraphEnrichmentService:
 
         try:
             # Query forecast_cache table
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT cache_key, forecast_data, cached_at
                 FROM forecast_cache
                 WHERE cache_key LIKE %s
                 ORDER BY cached_at DESC
                 LIMIT 5
-            """, (f"{ticker}_%",))
+            """,
+                (f"{ticker}_%",),
+            )
 
             rows = cursor.fetchall()
             count = 0
@@ -311,13 +337,14 @@ class GraphEnrichmentService:
 
                 # Parse forecast data
                 import json
+
                 if isinstance(forecast_data, str):
                     data = json.loads(forecast_data)
                 else:
                     data = forecast_data
 
-                model = data.get('model', 'prophet')
-                forecast_days = data.get('forecast_days', 30)
+                model = data.get("model", "prophet")
+                forecast_days = data.get("forecast_days", 30)
 
                 # Create forecast snapshot node
                 query = """
@@ -333,16 +360,23 @@ class GraphEnrichmentService:
                     MERGE (c)-[:HAS_FORECAST]->(f)
                 """
 
-                self.neo4j.execute_write(query, {
-                    'ticker': ticker,
-                    'cache_key': cache_key,
-                    'model': model,
-                    'forecast_days': forecast_days,
-                    'current_price': data.get('current_price', 0),
-                    'predicted_price': data.get('predicted_price', 0),
-                    'expected_return': data.get('expected_return_pct', 0),
-                    'cached_at': cached_at.isoformat() if cached_at else datetime.now().isoformat()
-                })
+                self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "cache_key": cache_key,
+                        "model": model,
+                        "forecast_days": forecast_days,
+                        "current_price": data.get("current_price", 0),
+                        "predicted_price": data.get("predicted_price", 0),
+                        "expected_return": data.get("expected_return_pct", 0),
+                        "cached_at": (
+                            cached_at.isoformat()
+                            if cached_at
+                            else datetime.now().isoformat()
+                        ),
+                    },
+                )
 
                 count += 1
 
@@ -363,12 +397,14 @@ class GraphEnrichmentService:
 
         try:
             # Query headcount_history table (if exists)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables
                     WHERE table_name = 'headcount_history'
                 )
-            """)
+            """
+            )
 
             table_exists = cursor.fetchone()[0]
 
@@ -376,13 +412,16 @@ class GraphEnrichmentService:
                 logger.info("headcount_history table does not exist")
                 return 0
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT ticker, snapshot_date, employee_count
                 FROM headcount_history
                 WHERE ticker = %s
                 ORDER BY snapshot_date DESC
                 LIMIT 50
-            """, (ticker,))
+            """,
+                (ticker,),
+            )
 
             rows = cursor.fetchall()
             count = 0
@@ -393,7 +432,11 @@ class GraphEnrichmentService:
                 if not snapshot_date or not employee_count:
                     continue
 
-                date_str = snapshot_date.isoformat() if hasattr(snapshot_date, 'isoformat') else str(snapshot_date)
+                date_str = (
+                    snapshot_date.isoformat()
+                    if hasattr(snapshot_date, "isoformat")
+                    else str(snapshot_date)
+                )
 
                 # Create headcount point node
                 query = """
@@ -403,11 +446,14 @@ class GraphEnrichmentService:
                     MERGE (c)-[:HEADCOUNT_HISTORY]->(h)
                 """
 
-                self.neo4j.execute_write(query, {
-                    'ticker': ticker,
-                    'date': date_str[:10],
-                    'employee_count': employee_count
-                })
+                self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "date": date_str[:10],
+                        "employee_count": employee_count,
+                    },
+                )
 
                 count += 1
 
@@ -428,14 +474,17 @@ class GraphEnrichmentService:
 
         try:
             # Get latest growth data with jobs breakdown
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT jobs_by_function, snapshot_date
                 FROM growth_cache
                 WHERE ticker = %s
                   AND jobs_by_function IS NOT NULL
                 ORDER BY snapshot_date DESC
                 LIMIT 1
-            """, (ticker,))
+            """,
+                (ticker,),
+            )
 
             row = cursor.fetchone()
 
@@ -449,13 +498,18 @@ class GraphEnrichmentService:
 
             # Parse jobs data
             import json
+
             if isinstance(jobs_by_function, str):
                 jobs = json.loads(jobs_by_function)
             else:
                 jobs = jobs_by_function
 
             count = 0
-            date_str = snapshot_date.isoformat()[:10] if snapshot_date else datetime.now().isoformat()[:10]
+            date_str = (
+                snapshot_date.isoformat()[:10]
+                if snapshot_date
+                else datetime.now().isoformat()[:10]
+            )
 
             for function_name, open_positions in jobs.items():
                 if not function_name or open_positions is None:
@@ -470,12 +524,15 @@ class GraphEnrichmentService:
                         r.snapshot_date = date($date)
                 """
 
-                self.neo4j.execute_write(query, {
-                    'ticker': ticker,
-                    'function_name': function_name,
-                    'open_positions': open_positions,
-                    'date': date_str
-                })
+                self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "function_name": function_name,
+                        "open_positions": open_positions,
+                        "date": date_str,
+                    },
+                )
 
                 count += 1
 

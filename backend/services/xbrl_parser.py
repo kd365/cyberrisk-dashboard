@@ -16,27 +16,27 @@ class XBRLParser:
     def __init__(self):
         # Common XBRL namespaces
         self.namespaces = {
-            'us-gaap': 'http://fasb.org/us-gaap/',
-            'dei': 'http://xbrl.sec.gov/dei/',
-            'ix': 'http://www.xbrl.org/2013/inlineXBRL'
+            "us-gaap": "http://fasb.org/us-gaap/",
+            "dei": "http://xbrl.sec.gov/dei/",
+            "ix": "http://www.xbrl.org/2013/inlineXBRL",
         }
 
         # Revenue-related XBRL tags to search for
         self.revenue_tags = [
-            'Revenues',
-            'RevenueFromContractWithCustomerExcludingAssessedTax',
-            'RevenueFromContractWithCustomerIncludingAssessedTax',
-            'SalesRevenueNet',
-            'RevenueNotFromContractWithCustomer',
+            "Revenues",
+            "RevenueFromContractWithCustomerExcludingAssessedTax",
+            "RevenueFromContractWithCustomerIncludingAssessedTax",
+            "SalesRevenueNet",
+            "RevenueNotFromContractWithCustomer",
         ]
 
         # Subscription revenue tags (including common company-specific extensions)
         self.subscription_tags = [
-            'RevenueFromSubscriptionServices',
-            'SubscriptionRevenue',
-            'SoftwareAsAServiceRevenue',
-            'RecurringRevenue',
-            'SubscriptionAndSupportRevenue',
+            "RevenueFromSubscriptionServices",
+            "SubscriptionRevenue",
+            "SoftwareAsAServiceRevenue",
+            "RecurringRevenue",
+            "SubscriptionAndSupportRevenue",
             # CrowdStrike might use custom extension tags
         ]
 
@@ -55,57 +55,65 @@ class XBRLParser:
         Returns:
             dict: Mapping of context IDs to their metadata
         """
-        soup = BeautifulSoup(html_content, 'lxml')
+        soup = BeautifulSoup(html_content, "lxml")
         contexts = {}
 
         # Find all context elements in the XBRL instance
-        context_elements = soup.find_all('xbrli:context') or soup.find_all('context')
+        context_elements = soup.find_all("xbrli:context") or soup.find_all("context")
 
         for ctx in context_elements:
-            ctx_id = ctx.get('id', '')
+            ctx_id = ctx.get("id", "")
             if not ctx_id:
                 continue
 
             context_info = {
-                'id': ctx_id,
-                'period': {},
-                'entity': None,
-                'dimensions': {}
+                "id": ctx_id,
+                "period": {},
+                "entity": None,
+                "dimensions": {},
             }
 
             # Parse period information
-            period = ctx.find('xbrli:period') or ctx.find('period')
+            period = ctx.find("xbrli:period") or ctx.find("period")
             if period:
-                start_date = period.find('xbrli:startdate') or period.find('startdate')
-                end_date = period.find('xbrli:enddate') or period.find('enddate')
-                instant = period.find('xbrli:instant') or period.find('instant')
+                start_date = period.find("xbrli:startdate") or period.find("startdate")
+                end_date = period.find("xbrli:enddate") or period.find("enddate")
+                instant = period.find("xbrli:instant") or period.find("instant")
 
                 if start_date and end_date:
-                    context_info['period'] = {
-                        'type': 'duration',
-                        'start': start_date.get_text(strip=True),
-                        'end': end_date.get_text(strip=True)
+                    context_info["period"] = {
+                        "type": "duration",
+                        "start": start_date.get_text(strip=True),
+                        "end": end_date.get_text(strip=True),
                     }
                 elif instant:
-                    context_info['period'] = {
-                        'type': 'instant',
-                        'date': instant.get_text(strip=True)
+                    context_info["period"] = {
+                        "type": "instant",
+                        "date": instant.get_text(strip=True),
                     }
 
             # Parse segment dimensions (this is where SubscriptionAndCirculationMember lives)
-            segment = ctx.find('xbrli:segment') or ctx.find('segment')
+            segment = ctx.find("xbrli:segment") or ctx.find("segment")
             if segment:
                 # Find all explicit members (dimension values)
-                members = segment.find_all('xbrldi:explicitmember') or segment.find_all('explicitmember')
+                members = segment.find_all("xbrldi:explicitmember") or segment.find_all(
+                    "explicitmember"
+                )
                 for member in members:
-                    dimension = member.get('dimension', '')
+                    dimension = member.get("dimension", "")
                     member_value = member.get_text(strip=True)
 
                     # Extract local names
-                    dim_local = dimension.split(':')[-1] if ':' in dimension else dimension
-                    member_local = member_value.split(':')[-1] if ':' in member_value else member_value
+                    dim_local = (
+                        dimension.split(":")[-1] if ":" in dimension else dimension
+                    )
+                    member_local = (
+                        member_value.split(":")[-1]
+                        if ":" in member_value
+                        else member_value
+                    )
 
-                    context_info['dimensions'][dim_local] = member_local
+                    context_info["dimensions"][dim_local] = member_local
 
             contexts[ctx_id] = context_info
 
@@ -121,36 +129,33 @@ class XBRLParser:
         Returns:
             dict: Extracted financial facts with contexts
         """
-        soup = BeautifulSoup(html_content, 'lxml')
+        soup = BeautifulSoup(html_content, "lxml")
 
-        facts = {
-            'revenue': [],
-            'subscription_revenue': [],
-            'contexts': {},
-            'units': {}
-        }
+        facts = {"revenue": [], "subscription_revenue": [], "contexts": {}, "units": {}}
 
         # Parse contexts first to understand dimensions
         contexts = self.parse_xbrl_contexts(html_content)
-        facts['contexts'] = contexts
+        facts["contexts"] = contexts
 
         # Find all inline XBRL elements (ix:nonFraction, ix:nonNumeric, etc.)
         # Modern SEC filings use inline XBRL tags
-        xbrl_elements = soup.find_all(['ix:nonfraction', 'ix:nonnumeric', 'span', 'td', 'div'])
+        xbrl_elements = soup.find_all(
+            ["ix:nonfraction", "ix:nonnumeric", "span", "td", "div"]
+        )
 
         for elem in xbrl_elements:
             # Check if element has XBRL attributes
-            elem_name = elem.get('name', '')
-            context_ref = elem.get('contextref', '')
-            unit_ref = elem.get('unitref', '')
-            decimals = elem.get('decimals', '')
-            scale = elem.get('scale', '')
+            elem_name = elem.get("name", "")
+            context_ref = elem.get("contextref", "")
+            unit_ref = elem.get("unitref", "")
+            decimals = elem.get("decimals", "")
+            scale = elem.get("scale", "")
 
             if not elem_name:
                 continue
 
             # Extract the local name (remove namespace prefix)
-            local_name = elem_name.split(':')[-1] if ':' in elem_name else elem_name
+            local_name = elem_name.split(":")[-1] if ":" in elem_name else elem_name
 
             # Get the value
             value_text = elem.get_text(strip=True)
@@ -160,16 +165,21 @@ class XBRLParser:
             # Try to parse as number
             try:
                 # Remove formatting
-                cleaned = value_text.replace(',', '').replace('$', '').replace(' ', '').strip()
+                cleaned = (
+                    value_text.replace(",", "")
+                    .replace("$", "")
+                    .replace(" ", "")
+                    .strip()
+                )
 
                 # Handle parentheses (negative)
                 is_negative = False
-                if cleaned.startswith('(') and cleaned.endswith(')'):
+                if cleaned.startswith("(") and cleaned.endswith(")"):
                     is_negative = True
                     cleaned = cleaned[1:-1]
 
                 # Handle dashes
-                if cleaned in ['-', '—', '–', '']:
+                if cleaned in ["-", "—", "–", ""]:
                     value = 0
                 else:
                     value = float(cleaned)
@@ -180,38 +190,43 @@ class XBRLParser:
                 if scale:
                     try:
                         scale_factor = int(scale)
-                        value = value * (10 ** scale_factor)
+                        value = value * (10**scale_factor)
                     except ValueError:
                         pass
 
                 # Get context information to check for subscription dimension
                 context_info = contexts.get(context_ref, {})
-                dimensions = context_info.get('dimensions', {})
+                dimensions = context_info.get("dimensions", {})
 
                 # Check if this fact has a subscription-related dimension
                 is_subscription_dimension = any(
-                    'subscription' in dim.lower() or 'subscription' in member.lower()
+                    "subscription" in dim.lower() or "subscription" in member.lower()
                     for dim, member in dimensions.items()
                 )
 
                 # Categorize by tag name and context dimensions
-                if any(tag.lower() in local_name.lower() for tag in ['revenue', 'sales']):
+                if any(
+                    tag.lower() in local_name.lower() for tag in ["revenue", "sales"]
+                ):
                     fact_data = {
-                        'name': local_name,
-                        'value': value,
-                        'context': context_ref,
-                        'context_info': context_info,
-                        'dimensions': dimensions,
-                        'unit': unit_ref,
-                        'scale': scale,
-                        'element': elem_name
+                        "name": local_name,
+                        "value": value,
+                        "context": context_ref,
+                        "context_info": context_info,
+                        "dimensions": dimensions,
+                        "unit": unit_ref,
+                        "scale": scale,
+                        "element": elem_name,
                     }
 
                     # If it has subscription dimension OR subscription in the tag name
-                    if is_subscription_dimension or any(sub in local_name.lower() for sub in ['subscription', 'saas', 'recurring']):
-                        facts['subscription_revenue'].append(fact_data)
+                    if is_subscription_dimension or any(
+                        sub in local_name.lower()
+                        for sub in ["subscription", "saas", "recurring"]
+                    ):
+                        facts["subscription_revenue"].append(fact_data)
                     else:
-                        facts['revenue'].append(fact_data)
+                        facts["revenue"].append(fact_data)
 
             except (ValueError, TypeError):
                 continue
@@ -232,21 +247,23 @@ class XBRLParser:
         Returns:
             float: Subscription revenue if found, None otherwise
         """
-        soup = BeautifulSoup(html_content, 'lxml')
+        soup = BeautifulSoup(html_content, "lxml")
 
         # Look for revenue disaggregation tables
         # These often have segments like "Subscription" and "Professional Services"
-        tables = soup.find_all('table')
+        tables = soup.find_all("table")
 
         for table in tables:
             table_text = table.get_text().lower()
 
             # Check if this table discusses revenue disaggregation
-            if 'subscription' in table_text and ('revenue' in table_text or 'sales' in table_text):
-                rows = table.find_all('tr')
+            if "subscription" in table_text and (
+                "revenue" in table_text or "sales" in table_text
+            ):
+                rows = table.find_all("tr")
 
                 for row in rows:
-                    cells = row.find_all(['td', 'th'])
+                    cells = row.find_all(["td", "th"])
                     if len(cells) < 2:
                         continue
 
@@ -254,25 +271,36 @@ class XBRLParser:
 
                     # Look for subscription revenue row
                     # Check for exact matches to avoid "subscription cost"
-                    if first_cell in ['subscription', 'subscription revenue', 'subscriptions']:
+                    if first_cell in [
+                        "subscription",
+                        "subscription revenue",
+                        "subscriptions",
+                    ]:
                         # Get the value from the first numeric column
                         for cell in cells[1:]:
                             # Check if cell has XBRL tags
-                            xbrl_elem = cell.find(['ix:nonfraction', 'span', 'td'])
+                            xbrl_elem = cell.find(["ix:nonfraction", "span", "td"])
                             if xbrl_elem:
                                 value_text = xbrl_elem.get_text(strip=True)
-                                scale = xbrl_elem.get('scale', '')
+                                scale = xbrl_elem.get("scale", "")
 
                                 try:
-                                    cleaned = value_text.replace(',', '').replace('$', '').replace(' ', '').strip()
+                                    cleaned = (
+                                        value_text.replace(",", "")
+                                        .replace("$", "")
+                                        .replace(" ", "")
+                                        .strip()
+                                    )
 
                                     # Handle negatives
                                     is_negative = False
-                                    if cleaned.startswith('(') and cleaned.endswith(')'):
+                                    if cleaned.startswith("(") and cleaned.endswith(
+                                        ")"
+                                    ):
                                         is_negative = True
                                         cleaned = cleaned[1:-1]
 
-                                    if cleaned in ['-', '—', '–', '']:
+                                    if cleaned in ["-", "—", "–", ""]:
                                         continue
 
                                     value = float(cleaned)
@@ -283,7 +311,7 @@ class XBRLParser:
                                     if scale:
                                         try:
                                             scale_factor = int(scale)
-                                            value = value * (10 ** scale_factor)
+                                            value = value * (10**scale_factor)
                                         except ValueError:
                                             # Scale might be in thousands by default
                                             value = value * 1000
@@ -313,12 +341,12 @@ class XBRLParser:
         print(f"  🔍 Parsing XBRL tags from filing...")
 
         financials = {
-            'date': filing_date,
-            'revenue': None,
-            'subscription_revenue': None,
-            'net_income': None,
-            'operating_income': None,
-            'eps': None,
+            "date": filing_date,
+            "revenue": None,
+            "subscription_revenue": None,
+            "net_income": None,
+            "operating_income": None,
+            "eps": None,
         }
 
         # Try XBRL fact extraction
@@ -334,10 +362,10 @@ class XBRLParser:
             # Get all unique periods
             periods = {}
             for fact in fact_list:
-                context_info = fact.get('context_info', {})
-                period = context_info.get('period', {})
-                if period.get('type') == 'duration' and period.get('end'):
-                    end_date = period['end']
+                context_info = fact.get("context_info", {})
+                period = context_info.get("period", {})
+                if period.get("type") == "duration" and period.get("end"):
+                    end_date = period["end"]
                     if end_date not in periods:
                         periods[end_date] = []
                     periods[end_date].append(fact)
@@ -351,44 +379,61 @@ class XBRLParser:
             return periods[most_recent_date]
 
         # Find total revenue (filter to most recent period)
-        if facts['revenue']:
-            recent_revenue_facts = filter_most_recent_period(facts['revenue'])
+        if facts["revenue"]:
+            recent_revenue_facts = filter_most_recent_period(facts["revenue"])
 
             # For total revenue, we want facts WITHOUT dimension breakdowns
             # (dimension breakdowns are for segments like subscription vs professional services)
             total_revenue_facts = [
-                f for f in recent_revenue_facts
-                if not f.get('dimensions', {})  # No dimensions = total revenue
+                f
+                for f in recent_revenue_facts
+                if not f.get("dimensions", {})  # No dimensions = total revenue
             ]
 
             if total_revenue_facts:
                 # Get the highest value (most likely to be total)
-                revenue_facts = sorted(total_revenue_facts, key=lambda x: x['value'], reverse=True)
-                financials['revenue'] = revenue_facts[0]['value']
-                print(f"     ✅ Found total revenue from XBRL: ${financials['revenue']:,.0f}")
+                revenue_facts = sorted(
+                    total_revenue_facts, key=lambda x: x["value"], reverse=True
+                )
+                financials["revenue"] = revenue_facts[0]["value"]
+                print(
+                    f"     ✅ Found total revenue from XBRL: ${financials['revenue']:,.0f}"
+                )
                 print(f"        Context: {revenue_facts[0].get('context')}")
 
         # Find subscription revenue (filter to most recent period)
-        if facts['subscription_revenue']:
-            recent_sub_facts = filter_most_recent_period(facts['subscription_revenue'])
+        if facts["subscription_revenue"]:
+            recent_sub_facts = filter_most_recent_period(facts["subscription_revenue"])
 
             if recent_sub_facts:
                 # Get subscription revenue (should have dimension or tag indicating subscription)
-                sub_facts = sorted(recent_sub_facts, key=lambda x: x['value'], reverse=True)
-                financials['subscription_revenue'] = sub_facts[0]['value']
+                sub_facts = sorted(
+                    recent_sub_facts, key=lambda x: x["value"], reverse=True
+                )
+                financials["subscription_revenue"] = sub_facts[0]["value"]
 
-                dimensions = sub_facts[0].get('dimensions', {})
-                dim_str = ', '.join([f"{k}={v}" for k, v in dimensions.items()]) if dimensions else "tag-based"
+                dimensions = sub_facts[0].get("dimensions", {})
+                dim_str = (
+                    ", ".join([f"{k}={v}" for k, v in dimensions.items()])
+                    if dimensions
+                    else "tag-based"
+                )
 
-                print(f"     ✅ Found subscription revenue from XBRL: ${financials['subscription_revenue']:,.0f}")
+                print(
+                    f"     ✅ Found subscription revenue from XBRL: ${financials['subscription_revenue']:,.0f}"
+                )
                 print(f"        Dimension: {dim_str}")
                 print(f"        Context: {sub_facts[0].get('context')}")
 
         # If no subscription revenue found via tags, try segment analysis
-        if not financials['subscription_revenue']:
-            subscription_from_segment = self.find_subscription_revenue_by_segment(html_content, filing_date)
+        if not financials["subscription_revenue"]:
+            subscription_from_segment = self.find_subscription_revenue_by_segment(
+                html_content, filing_date
+            )
             if subscription_from_segment:
-                financials['subscription_revenue'] = subscription_from_segment
-                print(f"     ✅ Found subscription revenue from segment table: ${subscription_from_segment:,.0f}")
+                financials["subscription_revenue"] = subscription_from_segment
+                print(
+                    f"     ✅ Found subscription revenue from segment table: ${subscription_from_segment:,.0f}"
+                )
 
         return financials

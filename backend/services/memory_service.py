@@ -35,6 +35,7 @@ def _load_mem0():
         return MEM0_AVAILABLE
     try:
         from mem0 import Memory as Mem0Memory
+
         Memory = Mem0Memory
         MEM0_AVAILABLE = True
         logger.info("mem0 library loaded successfully")
@@ -54,8 +55,13 @@ class MemoryService:
     - Long-term semantic memory (using mem0 with pgvector + AWS Bedrock)
     """
 
-    def __init__(self, db_host: str = None, db_name: str = None,
-                 db_user: str = None, db_password: str = None):
+    def __init__(
+        self,
+        db_host: str = None,
+        db_name: str = None,
+        db_user: str = None,
+        db_password: str = None,
+    ):
         """
         Initialize memory service with database connection.
 
@@ -65,11 +71,11 @@ class MemoryService:
             db_user: Database username
             db_password: Database password
         """
-        self.db_host = db_host or os.environ.get('DB_HOST', 'localhost')
-        self.db_name = db_name or os.environ.get('DB_NAME', 'cyberrisk')
-        self.db_user = db_user or os.environ.get('DB_USER', 'cyberrisk_admin')
-        self.db_password = db_password or os.environ.get('DB_PASSWORD', '')
-        self.db_port = os.environ.get('DB_PORT', '5432')
+        self.db_host = db_host or os.environ.get("DB_HOST", "localhost")
+        self.db_name = db_name or os.environ.get("DB_NAME", "cyberrisk")
+        self.db_user = db_user or os.environ.get("DB_USER", "cyberrisk_admin")
+        self.db_password = db_password or os.environ.get("DB_PASSWORD", "")
+        self.db_port = os.environ.get("DB_PORT", "5432")
 
         self._connection = None
         self._mem0 = None
@@ -82,7 +88,7 @@ class MemoryService:
                 host=self.db_host,
                 database=self.db_name,
                 user=self.db_user,
-                password=self.db_password
+                password=self.db_password,
             )
             self._connection.autocommit = True
         return self._connection
@@ -97,8 +103,8 @@ class MemoryService:
 
         try:
             # Ensure AWS_REGION is set for Bedrock (uses boto3 session)
-            if not os.environ.get('AWS_REGION'):
-                os.environ['AWS_REGION'] = 'us-west-2'
+            if not os.environ.get("AWS_REGION"):
+                os.environ["AWS_REGION"] = "us-west-2"
 
             # Configure mem0 with AWS Bedrock for LLM and embeddings
             # No external API keys needed - uses IAM role credentials
@@ -111,7 +117,7 @@ class MemoryService:
                         "model": "anthropic.claude-3-5-haiku-20241022-v1:0",
                         "temperature": 0.1,
                         "max_tokens": 1000,
-                    }
+                    },
                 },
                 "embedder": {
                     "provider": "aws_bedrock",
@@ -119,7 +125,7 @@ class MemoryService:
                         # Amazon Titan v2 embeddings (1024 dimensions)
                         "model": "amazon.titan-embed-text-v2:0",
                         "embedding_dims": 1024,
-                    }
+                    },
                 },
                 "vector_store": {
                     "provider": "pgvector",
@@ -130,8 +136,8 @@ class MemoryService:
                         "password": self.db_password,
                         "dbname": self.db_name,
                         "embedding_model_dims": 1024,
-                    }
-                }
+                    },
+                },
             }
 
             self._mem0 = Memory.from_config(config)
@@ -167,7 +173,8 @@ class MemoryService:
             cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
             # Chat sessions table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     id SERIAL PRIMARY KEY,
                     session_id VARCHAR(255) NOT NULL UNIQUE,
@@ -183,10 +190,12 @@ class MemoryService:
                     ON chat_sessions(user_email);
                 CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_active
                     ON chat_sessions(last_active);
-            """)
+            """
+            )
 
             # Chat messages table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS chat_messages (
                     id SERIAL PRIMARY KEY,
                     session_id VARCHAR(255) NOT NULL,
@@ -203,10 +212,12 @@ class MemoryService:
                     ON chat_messages(session_id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at
                     ON chat_messages(created_at);
-            """)
+            """
+            )
 
             # User memory table (for simple long-term preferences, fallback if mem0 unavailable)
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS user_memory (
                     id SERIAL PRIMARY KEY,
                     user_email VARCHAR(255),
@@ -222,7 +233,8 @@ class MemoryService:
                     ON user_memory(user_email);
                 CREATE INDEX IF NOT EXISTS idx_user_memory_type
                     ON user_memory(memory_type);
-            """)
+            """
+            )
 
             logger.info("Chat memory schema initialized (with pgvector)")
 
@@ -242,9 +254,9 @@ class MemoryService:
     # Session Management
     # =========================================================================
 
-    def create_session(self, session_id: str = None,
-                       user_email: str = None,
-                       metadata: Dict = None) -> str:
+    def create_session(
+        self, session_id: str = None, user_email: str = None, metadata: Dict = None
+    ) -> str:
         """
         Create a new chat session.
 
@@ -263,13 +275,16 @@ class MemoryService:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO chat_sessions (session_id, user_email, metadata)
                 VALUES (%s, %s, %s)
                 ON CONFLICT (session_id) DO UPDATE
                 SET last_active = NOW()
                 RETURNING session_id
-            """, (session_id, user_email, json.dumps(metadata or {})))
+            """,
+                (session_id, user_email, json.dumps(metadata or {})),
+            )
 
             result = cursor.fetchone()
             return result[0]
@@ -283,11 +298,14 @@ class MemoryService:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT session_id, user_email, created_at, last_active, metadata
                 FROM chat_sessions
                 WHERE session_id = %s
-            """, (session_id,))
+            """,
+                (session_id,),
+            )
 
             result = cursor.fetchone()
             return dict(result) if result else None
@@ -301,11 +319,14 @@ class MemoryService:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE chat_sessions
                 SET last_active = NOW()
                 WHERE session_id = %s
-            """, (session_id,))
+            """,
+                (session_id,),
+            )
         finally:
             cursor.close()
 
@@ -315,9 +336,12 @@ class MemoryService:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM chat_sessions WHERE session_id = %s
-            """, (session_id,))
+            """,
+                (session_id,),
+            )
         finally:
             cursor.close()
 
@@ -328,10 +352,13 @@ class MemoryService:
 
         try:
             cutoff = datetime.now() - timedelta(days=days)
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM chat_sessions
                 WHERE last_active < %s
-            """, (cutoff,))
+            """,
+                (cutoff,),
+            )
             deleted = cursor.rowcount
             logger.info(f"Cleaned up {deleted} old chat sessions")
             return deleted
@@ -342,8 +369,9 @@ class MemoryService:
     # Message Management
     # =========================================================================
 
-    def add_message(self, session_id: str, role: str, content: str,
-                    metadata: Dict = None) -> int:
+    def add_message(
+        self, session_id: str, role: str, content: str, metadata: Dict = None
+    ) -> int:
         """
         Add a message to conversation history.
 
@@ -364,11 +392,14 @@ class MemoryService:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO chat_messages (session_id, role, content, metadata)
                 VALUES (%s, %s, %s, %s)
                 RETURNING id
-            """, (session_id, role, content, json.dumps(metadata or {})))
+            """,
+                (session_id, role, content, json.dumps(metadata or {})),
+            )
 
             message_id = cursor.fetchone()[0]
 
@@ -380,9 +411,9 @@ class MemoryService:
         finally:
             cursor.close()
 
-    def get_session_history(self, session_id: str,
-                            limit: int = 10,
-                            include_metadata: bool = False) -> List[Dict]:
+    def get_session_history(
+        self, session_id: str, limit: int = 10, include_metadata: bool = False
+    ) -> List[Dict]:
         """
         Get recent conversation history for a session.
 
@@ -398,13 +429,16 @@ class MemoryService:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT role, content, created_at, metadata
                 FROM chat_messages
                 WHERE session_id = %s
                 ORDER BY created_at DESC
                 LIMIT %s
-            """, (session_id, limit))
+            """,
+                (session_id, limit),
+            )
 
             messages = cursor.fetchall()
 
@@ -414,12 +448,14 @@ class MemoryService:
             result = []
             for msg in messages:
                 item = {
-                    'role': msg['role'],
-                    'content': msg['content'],
-                    'created_at': msg['created_at'].isoformat() if msg['created_at'] else None
+                    "role": msg["role"],
+                    "content": msg["content"],
+                    "created_at": (
+                        msg["created_at"].isoformat() if msg["created_at"] else None
+                    ),
                 }
                 if include_metadata:
-                    item['metadata'] = msg['metadata']
+                    item["metadata"] = msg["metadata"]
                 result.append(item)
 
             return result
@@ -433,9 +469,12 @@ class MemoryService:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT COUNT(*) FROM chat_messages WHERE session_id = %s
-            """, (session_id,))
+            """,
+                (session_id,),
+            )
             return cursor.fetchone()[0]
         finally:
             cursor.close()
@@ -444,9 +483,9 @@ class MemoryService:
     # Context Building for LLM
     # =========================================================================
 
-    def get_context_for_llm(self, session_id: str,
-                            max_messages: int = 5,
-                            max_tokens: int = 2000) -> List[Dict]:
+    def get_context_for_llm(
+        self, session_id: str, max_messages: int = 5, max_tokens: int = 2000
+    ) -> List[Dict]:
         """
         Get formatted conversation context for LLM prompt.
 
@@ -468,22 +507,18 @@ class MemoryService:
         char_limit = max_tokens * 4  # Rough: 1 token ≈ 4 chars
 
         for msg in reversed(messages):
-            content_len = len(msg['content'])
+            content_len = len(msg["content"])
             if total_chars + content_len > char_limit:
                 # Truncate this message
                 remaining = char_limit - total_chars
                 if remaining > 100:
-                    truncated_content = msg['content'][:remaining] + "..."
-                    result.insert(0, {
-                        'role': msg['role'],
-                        'content': truncated_content
-                    })
+                    truncated_content = msg["content"][:remaining] + "..."
+                    result.insert(
+                        0, {"role": msg["role"], "content": truncated_content}
+                    )
                 break
 
-            result.insert(0, {
-                'role': msg['role'],
-                'content': msg['content']
-            })
+            result.insert(0, {"role": msg["role"], "content": msg["content"]})
             total_chars += content_len
 
         return result
@@ -492,8 +527,9 @@ class MemoryService:
     # Semantic Memory (mem0 with pgvector + AWS Bedrock)
     # =========================================================================
 
-    def add_semantic_memory(self, user_id: str, messages: List[Dict],
-                            metadata: Dict = None) -> Optional[Dict]:
+    def add_semantic_memory(
+        self, user_id: str, messages: List[Dict], metadata: Dict = None
+    ) -> Optional[Dict]:
         """
         Add semantic memories from a conversation using mem0.
 
@@ -521,8 +557,9 @@ class MemoryService:
             logger.error(f"Failed to add semantic memory: {e}")
             return None
 
-    def search_semantic_memory(self, query: str, user_id: str = None,
-                               limit: int = 5) -> List[Dict]:
+    def search_semantic_memory(
+        self, query: str, user_id: str = None, limit: int = 5
+    ) -> List[Dict]:
         """
         Search semantic memories using similarity search.
 
@@ -540,7 +577,7 @@ class MemoryService:
 
         try:
             results = mem0.search(query, user_id=user_id, limit=limit)
-            return results.get('results', []) if isinstance(results, dict) else results
+            return results.get("results", []) if isinstance(results, dict) else results
         except Exception as e:
             logger.error(f"Failed to search semantic memory: {e}")
             return []
@@ -561,7 +598,7 @@ class MemoryService:
 
         try:
             results = mem0.get_all(user_id=user_id)
-            return results.get('results', []) if isinstance(results, dict) else results
+            return results.get("results", []) if isinstance(results, dict) else results
         except Exception as e:
             logger.error(f"Failed to get semantic memories: {e}")
             return []
@@ -583,9 +620,14 @@ class MemoryService:
     # User Memory (Simple PostgreSQL fallback)
     # =========================================================================
 
-    def save_user_memory(self, user_email: str, memory_type: str,
-                         content: str, importance: float = 0.5,
-                         metadata: Dict = None) -> int:
+    def save_user_memory(
+        self,
+        user_email: str,
+        memory_type: str,
+        content: str,
+        importance: float = 0.5,
+        metadata: Dict = None,
+    ) -> int:
         """
         Save a long-term memory for a user (simple PostgreSQL storage).
 
@@ -603,22 +645,30 @@ class MemoryService:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO user_memory
                     (user_email, memory_type, content, importance, metadata)
                 VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
-            """, (user_email, memory_type, content, importance,
-                  json.dumps(metadata or {})))
+            """,
+                (
+                    user_email,
+                    memory_type,
+                    content,
+                    importance,
+                    json.dumps(metadata or {}),
+                ),
+            )
 
             return cursor.fetchone()[0]
 
         finally:
             cursor.close()
 
-    def get_user_memories(self, user_email: str,
-                          memory_type: str = None,
-                          limit: int = 10) -> List[Dict]:
+    def get_user_memories(
+        self, user_email: str, memory_type: str = None, limit: int = 10
+    ) -> List[Dict]:
         """
         Get user's long-term memories.
 
@@ -635,21 +685,27 @@ class MemoryService:
 
         try:
             if memory_type:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT id, memory_type, content, importance, created_at
                     FROM user_memory
                     WHERE user_email = %s AND memory_type = %s
                     ORDER BY importance DESC, accessed_at DESC
                     LIMIT %s
-                """, (user_email, memory_type, limit))
+                """,
+                    (user_email, memory_type, limit),
+                )
             else:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT id, memory_type, content, importance, created_at
                     FROM user_memory
                     WHERE user_email = %s
                     ORDER BY importance DESC, accessed_at DESC
                     LIMIT %s
-                """, (user_email, limit))
+                """,
+                    (user_email, limit),
+                )
 
             return [dict(row) for row in cursor.fetchall()]
 
@@ -662,11 +718,14 @@ class MemoryService:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE user_memory
                 SET accessed_at = NOW()
                 WHERE id = %s
-            """, (memory_id,))
+            """,
+                (memory_id,),
+            )
         finally:
             cursor.close()
 
