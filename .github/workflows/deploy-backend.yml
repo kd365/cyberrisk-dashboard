@@ -58,12 +58,14 @@ jobs:
             --parameters "commands=[
               'set -e',
               'echo \"Starting deployment...\"',
+              'sudo systemctl stop gunicorn || true',
+              'sudo systemctl disable gunicorn || true',
               'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}',
               'docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest',
               'docker stop cyberrisk-backend || true',
               'docker rm cyberrisk-backend || true',
               'docker run -d --name cyberrisk-backend --restart unless-stopped -p 5000:5000 --env-file /opt/cyberrisk/.env ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest',
-              'sleep 10',
+              'sleep 15',
               'curl -f http://localhost:5000/api/health || exit 1',
               'docker image prune -f',
               'echo \"Deployment complete!\"'
