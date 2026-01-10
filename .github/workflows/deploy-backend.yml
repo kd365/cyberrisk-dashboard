@@ -66,7 +66,7 @@ jobs:
               'docker rm cyberrisk-backend || true',
               'docker run -d --name cyberrisk-backend --restart unless-stopped -p 5000:5000 --env-file /opt/cyberrisk/.env ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest',
               'sleep 15',
-              'curl -f http://localhost:5000/api/health || exit 1',
+              'curl -f http://localhost:5000/health || exit 1',
               'docker image prune -f',
               'echo \"Deployment complete!\"'
             ]" \
