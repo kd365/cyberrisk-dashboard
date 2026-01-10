@@ -13,7 +13,7 @@ const D3GraphVisualization = ({
   ticker,
   onNodeClick,
   width = 800,
-  height = 500,
+  height = 700,
   nodeColors = {
     Organization: '#10b981',
     Person: '#f59e0b',
@@ -113,12 +113,12 @@ const D3GraphVisualization = ({
 
     const { width: w, height: h } = dimensions;
 
-    // Create zoom behavior - filter to not activate when dragging nodes
+    // Create zoom behavior - only on scroll wheel, not on drag/click
     const zoom = d3.zoom()
       .scaleExtent([0.3, 3])
       .filter((event) => {
-        // Allow zoom on scroll wheel or when not clicking on a node
-        return event.type === 'wheel' || !event.target.closest('.node');
+        // Only allow zoom on scroll wheel - let drag events pass through to nodes
+        return event.type === 'wheel';
       })
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
@@ -300,14 +300,15 @@ const D3GraphVisualization = ({
     container: {
       position: 'relative',
       width: '100%',
-      height: typeof height === 'number' ? `${height}px` : height,
+      minHeight: typeof height === 'number' ? `${height}px` : height,
       background: '#f8fafc',
       borderRadius: '8px',
-      overflow: 'hidden'
+      overflow: 'visible'
     },
     svg: {
       width: '100%',
-      height: '100%'
+      height: typeof height === 'number' ? `${height}px` : height,
+      display: 'block'
     },
     loading: {
       position: 'absolute',

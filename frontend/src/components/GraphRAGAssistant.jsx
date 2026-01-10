@@ -610,9 +610,9 @@ function KnowledgeGraphViz({ ticker }) {
     },
     graphArea: {
       flex: 1,
-      minHeight: '400px',
+      minHeight: '600px',
       borderRadius: '8px',
-      overflow: 'hidden'
+      overflow: 'auto'
     }
   };
 
@@ -630,7 +630,7 @@ function KnowledgeGraphViz({ ticker }) {
           <D3GraphVisualization
             ticker={ticker}
             onNodeClick={handleNodeClick}
-            height={450}
+            height={600}
           />
         </GraphErrorBoundary>
       </div>
