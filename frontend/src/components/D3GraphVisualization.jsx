@@ -113,18 +113,19 @@ const D3GraphVisualization = ({
 
     const { width: w, height: h } = dimensions;
 
-    // Create zoom behavior - only on scroll wheel, not on drag/click
+    // Create zoom behavior - scroll to zoom, Ctrl/Cmd+drag to pan
     const zoom = d3.zoom()
       .scaleExtent([0.3, 3])
       .filter((event) => {
-        // Only allow zoom on scroll wheel - let drag events pass through to nodes
-        return event.type === 'wheel';
+        // Allow zoom on scroll wheel, or pan with Ctrl/Cmd held
+        return event.type === 'wheel' || event.ctrlKey || event.metaKey;
       })
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
       });
 
-    svg.call(zoom);
+    svg.call(zoom)
+      .on('dblclick.zoom', null); // Disable double-click zoom
 
     // Create main group for zoom/pan
     const g = svg.append('g');
@@ -177,13 +178,17 @@ const D3GraphVisualization = ({
       .attr('class', 'node')
       .style('cursor', 'grab');
 
-    // Drag behavior - applied directly to node groups
+    // Drag behavior - with proper container scoping
     const drag = d3.drag()
+      .container(function() { return svg.node(); })
+      .subject(function(event, d) {
+        return d;
+      })
       .on('start', function(event, d) {
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
         d.fy = d.y;
-        d3.select(this).style('cursor', 'grabbing');
+        d3.select(this).raise().style('cursor', 'grabbing');
       })
       .on('drag', function(event, d) {
         d.fx = event.x;
@@ -191,9 +196,6 @@ const D3GraphVisualization = ({
       })
       .on('end', function(event, d) {
         if (!event.active) simulation.alphaTarget(0);
-        // Keep node fixed after dragging (comment out next two lines to release)
-        // d.fx = null;
-        // d.fy = null;
         d3.select(this).style('cursor', 'grab');
       });
 
@@ -467,7 +469,7 @@ const D3GraphVisualization = ({
 
       {/* Hint */}
       <div style={styles.hint}>
-        Drag nodes to reposition • Scroll to zoom • Drag background to pan
+        Drag nodes to reposition • Scroll to zoom • Ctrl/Cmd+drag to pan
       </div>
 
       {/* Selected node info */}
