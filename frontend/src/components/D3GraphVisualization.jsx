@@ -175,60 +175,51 @@ const D3GraphVisualization = ({
       .data(graphData.nodes)
       .enter()
       .append('g')
-      .attr('class', 'node')
-      .style('cursor', 'grab');
+      .attr('class', 'node');
 
-    // Drag behavior - with proper container scoping
-    const drag = d3.drag()
-      .container(function() { return svg.node(); })
-      .subject(function(event, d) {
-        return d;
-      })
-      .on('start', function(event, d) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-        d3.select(this).raise().style('cursor', 'grabbing');
-      })
-      .on('drag', function(event, d) {
-        d.fx = event.x;
-        d.fy = event.y;
-      })
-      .on('end', function(event, d) {
-        if (!event.active) simulation.alphaTarget(0);
-        d3.select(this).style('cursor', 'grab');
-      });
-
-    node.call(drag);
-
-    // Draw circles
-    node.append('circle')
+    // Draw circles first
+    const circles = node.append('circle')
       .attr('r', d => d.radius)
       .attr('fill', d => nodeColors[d.type] || '#94a3b8')
       .attr('stroke', '#fff')
       .attr('stroke-width', 2)
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        setSelectedNode(d);
-        if (onNodeClick) onNodeClick(d);
+      .style('cursor', 'grab');
 
-        // Highlight selected node
-        node.selectAll('circle')
-          .attr('stroke', n => n.id === d.id ? '#1e293b' : '#fff')
-          .attr('stroke-width', n => n.id === d.id ? 3 : 2);
-      })
-      .on('mouseover', function(event, d) {
-        d3.select(this)
-          .transition()
-          .duration(150)
-          .attr('r', d.radius * 1.2);
-      })
-      .on('mouseout', function(event, d) {
-        d3.select(this)
-          .transition()
-          .duration(150)
-          .attr('r', d.radius);
-      });
+    // Drag behavior - applied directly to circles
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+      d3.select(this).style('cursor', 'grabbing');
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d3.select(this).style('cursor', 'grab');
+    }
+
+    circles.call(d3.drag()
+      .on('start', dragstarted)
+      .on('drag', dragged)
+      .on('end', dragended));
+
+    // Click handler for selection (separate from drag)
+    circles.on('click', (event, d) => {
+      // Only handle click if not dragging
+      if (event.defaultPrevented) return;
+      setSelectedNode(d);
+      if (onNodeClick) onNodeClick(d);
+
+      // Highlight selected node
+      circles
+        .attr('stroke', n => n.id === d.id ? '#1e293b' : '#fff')
+        .attr('stroke-width', n => n.id === d.id ? 3 : 2);
+    });
 
     // Draw labels
     node.append('text')
@@ -259,11 +250,14 @@ const D3GraphVisualization = ({
     });
 
     // Click on background to deselect
-    svg.on('click', () => {
-      setSelectedNode(null);
-      node.selectAll('circle')
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 2);
+    svg.on('click', (event) => {
+      // Only deselect if clicking directly on SVG background
+      if (event.target === svg.node()) {
+        setSelectedNode(null);
+        circles
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 2);
+      }
     });
 
     // Cleanup
