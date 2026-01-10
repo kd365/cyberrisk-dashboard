@@ -113,9 +113,13 @@ const D3GraphVisualization = ({
 
     const { width: w, height: h } = dimensions;
 
-    // Create zoom behavior
+    // Create zoom behavior - filter to not activate when dragging nodes
     const zoom = d3.zoom()
       .scaleExtent([0.3, 3])
+      .filter((event) => {
+        // Allow zoom on scroll wheel or when not clicking on a node
+        return event.type === 'wheel' || !event.target.closest('.node');
+      })
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
       });
@@ -173,24 +177,24 @@ const D3GraphVisualization = ({
       .attr('class', 'node')
       .style('cursor', 'grab');
 
-    // Drag behavior
+    // Drag behavior - applied directly to node groups
     const drag = d3.drag()
-      .on('start', (event, d) => {
+      .on('start', function(event, d) {
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
         d.fy = d.y;
-        d3.select(event.sourceEvent.target.parentNode).style('cursor', 'grabbing');
+        d3.select(this).style('cursor', 'grabbing');
       })
-      .on('drag', (event, d) => {
+      .on('drag', function(event, d) {
         d.fx = event.x;
         d.fy = event.y;
       })
-      .on('end', (event, d) => {
+      .on('end', function(event, d) {
         if (!event.active) simulation.alphaTarget(0);
         // Keep node fixed after dragging (comment out next two lines to release)
         // d.fx = null;
         // d.fy = null;
-        d3.select(event.sourceEvent.target.parentNode).style('cursor', 'grab');
+        d3.select(this).style('cursor', 'grab');
       });
 
     node.call(drag);
