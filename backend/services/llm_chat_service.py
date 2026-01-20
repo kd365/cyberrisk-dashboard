@@ -317,9 +317,14 @@ class LLMChatService:
         """Get recent conversation history for context."""
         try:
             if self.memory_service:
-                return self.memory_service.get_context_for_llm(
+                history = self.memory_service.get_context_for_llm(
                     session_id, max_messages=5
                 )
+                # Bedrock Converse API requires conversations to start with user message
+                # Filter out any leading assistant messages
+                while history and history[0].get("role") == "assistant":
+                    history = history[1:]
+                return history
         except Exception as e:
             logger.warning(f"Could not get conversation context: {e}")
         return []
