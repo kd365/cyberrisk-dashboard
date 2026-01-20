@@ -1,62 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, Component } from 'react';
-import D3GraphVisualization from './D3GraphVisualization';
-
-// Error boundary to catch ForceGraph crashes
-class GraphErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('Graph visualization error:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{
-          padding: '40px',
-          textAlign: 'center',
-          color: '#64748b',
-          background: '#f8fafc',
-          borderRadius: '8px',
-          margin: '16px'
-        }}>
-          <p style={{ marginBottom: '12px', fontWeight: '500' }}>
-            Unable to load graph visualization
-          </p>
-          <p style={{ fontSize: '13px' }}>
-            Try refreshing the page or use the Cypher Console tab to query the graph directly.
-          </p>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            style={{
-              marginTop: '16px',
-              padding: '8px 16px',
-              borderRadius: '6px',
-              background: '#3c50e0',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            Try Again
-          </button>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
+import React, { useState, useEffect, useRef } from 'react';
 
 // ============================================================================
-// GraphRAG Assistant - AI Chat + Knowledge Graph + Cypher Console
+// GraphRAG Assistant - AI Chat + Cypher Console
 // ============================================================================
 
 // Icons
@@ -82,16 +27,6 @@ const Icons = {
       <circle cx="12" cy="7" r="4" />
     </svg>
   ),
-  Graph: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="6" cy="6" r="3" />
-      <circle cx="18" cy="18" r="3" />
-      <circle cx="18" cy="6" r="3" />
-      <circle cx="6" cy="18" r="3" />
-      <line x1="8.5" y1="8.5" x2="15.5" y2="15.5" />
-      <line x1="15.5" y1="8.5" x2="8.5" y2="15.5" />
-    </svg>
-  ),
   Terminal: () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points="4 17 10 11 4 5" />
@@ -103,12 +38,6 @@ const Icons = {
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   ),
-  Refresh: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="23 4 23 10 17 10" />
-      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-    </svg>
-  ),
   Play: () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polygon points="5 3 19 12 5 21 5 3" />
@@ -118,6 +47,20 @@ const Icons = {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  ),
+  Code: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
+    </svg>
+  ),
+  Table: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="3" y1="15" x2="21" y2="15" />
+      <line x1="9" y1="3" x2="9" y2="21" />
     </svg>
   )
 };
@@ -150,8 +93,7 @@ function GraphRAGAssistant({ ticker = 'CRWD', authToken = null }) {
   }, []);
 
   const subTabs = [
-    { id: 'chat', label: 'AI Chat', icon: Icons.Chat },
-    { id: 'graph', label: 'Knowledge Graph', icon: Icons.Graph },
+    { id: 'chat', label: 'GraphRAG Chat', icon: Icons.Chat },
     { id: 'cypher', label: 'Cypher Console', icon: Icons.Terminal }
   ];
 
@@ -285,9 +227,6 @@ function GraphRAGAssistant({ ticker = 'CRWD', authToken = null }) {
       <div style={styles.content}>
         {activeSubTab === 'chat' && (
           <ChatInterface ticker={ticker} authToken={authToken} />
-        )}
-        {activeSubTab === 'graph' && (
-          <KnowledgeGraphViz ticker={ticker} />
         )}
         {activeSubTab === 'cypher' && (
           <CypherConsole />
@@ -582,63 +521,6 @@ What would you like to know about ${ticker} or other tracked companies?`
 }
 
 // ============================================================================
-// Knowledge Graph Visualization (using Neo4j NVL for native graph rendering)
-// ============================================================================
-
-function KnowledgeGraphViz({ ticker }) {
-  const handleNodeClick = useCallback((node) => {
-    console.log('Node clicked:', node);
-  }, []);
-
-  const styles = {
-    container: {
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '16px'
-    },
-    header: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '16px'
-    },
-    title: {
-      fontSize: '16px',
-      fontWeight: '600',
-      color: '#1e293b'
-    },
-    graphArea: {
-      flex: 1,
-      minHeight: '600px',
-      borderRadius: '8px',
-      overflow: 'auto'
-    }
-  };
-
-  return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h3 style={styles.title}>Knowledge Graph for {ticker}</h3>
-        <span style={{ fontSize: '12px', color: '#64748b' }}>
-          Powered by D3.js • Drag nodes to reposition
-        </span>
-      </div>
-
-      <div style={styles.graphArea}>
-        <GraphErrorBoundary>
-          <D3GraphVisualization
-            ticker={ticker}
-            onNodeClick={handleNodeClick}
-            height={600}
-          />
-        </GraphErrorBoundary>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
 // Cypher Console
 // ============================================================================
 
@@ -648,6 +530,7 @@ function CypherConsole() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
+  const [viewMode, setViewMode] = useState('table'); // 'table' or 'json'
 
   const exampleQueries = [
     { label: 'Tracked Companies', query: 'MATCH (o:Organization {tracked: true}) RETURN o.ticker, o.name' },
@@ -800,6 +683,36 @@ function CypherConsole() {
       padding: '32px',
       textAlign: 'center',
       color: '#64748b'
+    },
+    viewToggle: {
+      display: 'flex',
+      gap: '4px',
+      marginLeft: 'auto'
+    },
+    viewButton: (active) => ({
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '6px 12px',
+      borderRadius: '6px',
+      background: active ? '#3c50e0' : '#f1f5f9',
+      color: active ? '#fff' : '#64748b',
+      border: 'none',
+      cursor: 'pointer',
+      fontSize: '12px',
+      fontWeight: '500'
+    }),
+    jsonView: {
+      padding: '16px',
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word',
+      background: '#1e293b',
+      color: '#e2e8f0',
+      borderRadius: '0 0 8px 8px',
+      overflow: 'auto',
+      maxHeight: '400px'
     }
   };
 
@@ -849,35 +762,55 @@ function CypherConsole() {
 
         {results && !error && (
           <>
-            <div style={styles.resultHeader}>
-              {results.count} row{results.count !== 1 ? 's' : ''} returned
+            <div style={{ ...styles.resultHeader, display: 'flex', alignItems: 'center' }}>
+              <span>{results.count} row{results.count !== 1 ? 's' : ''} returned</span>
+              <div style={styles.viewToggle}>
+                <button
+                  style={styles.viewButton(viewMode === 'table')}
+                  onClick={() => setViewMode('table')}
+                >
+                  <Icons.Table /> Table
+                </button>
+                <button
+                  style={styles.viewButton(viewMode === 'json')}
+                  onClick={() => setViewMode('json')}
+                >
+                  <Icons.Code /> JSON
+                </button>
+              </div>
             </div>
 
-            {results.records?.length > 0 ? (
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    {results.columns?.map((col, idx) => (
-                      <th key={idx} style={styles.th}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.records.map((row, rowIdx) => (
-                    <tr key={rowIdx}>
-                      {results.columns?.map((col, colIdx) => (
-                        <td key={colIdx} style={styles.td}>
-                          {typeof row[col] === 'object'
-                            ? JSON.stringify(row[col])
-                            : String(row[col] ?? '')}
-                        </td>
+            {viewMode === 'table' ? (
+              results.records?.length > 0 ? (
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      {results.columns?.map((col, idx) => (
+                        <th key={idx} style={styles.th}>{col}</th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {results.records.map((row, rowIdx) => (
+                      <tr key={rowIdx}>
+                        {results.columns?.map((col, colIdx) => (
+                          <td key={colIdx} style={styles.td}>
+                            {typeof row[col] === 'object'
+                              ? JSON.stringify(row[col])
+                              : String(row[col] ?? '')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={styles.empty}>No results returned</div>
+              )
             ) : (
-              <div style={styles.empty}>No results returned</div>
+              <div style={styles.jsonView}>
+                {JSON.stringify(results, null, 2)}
+              </div>
             )}
           </>
         )}

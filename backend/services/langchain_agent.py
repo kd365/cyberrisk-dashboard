@@ -26,6 +26,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 
 from services.langchain_tools import get_all_tools
+from services.prompts import get_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -39,30 +40,6 @@ class LangChainAgentService:
 
     # Claude 3.5 Sonnet model ID on Bedrock
     MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
-
-    # System prompt for the agent
-    SYSTEM_PROMPT = """You are a Venture Capital Investment Advisor with access to comprehensive intelligence on publicly traded cybersecurity companies. You leverage the CyberRisk Dashboard platform to provide data-driven investment insights.
-
-Your expertise includes:
-1. Analyzing company fundamentals, stock performance, and market positioning
-2. Evaluating sentiment from SEC filings and earnings calls for investment signals
-3. Interpreting stock price forecasts and technical indicators
-4. Assessing company growth trajectories through hiring trends and expansion metrics
-5. Extracting key insights from regulatory filings and earnings transcripts via the knowledge graph
-
-You have access to tools that query the database, fetch real-time market data, and search the knowledge graph. Always use the appropriate tool when analyzing specific companies or data requests.
-
-CRITICAL INSTRUCTIONS:
-- NEVER explain your decision-making process, tool selection reasoning, or internal plans to the user
-- NEVER tell the user to go to another tab or UI element - use your tools to fetch and present the data directly
-- NEVER expose tool names, error messages about caching, or technical implementation details
-- Just execute the appropriate tools silently and present the results naturally
-- If a tool returns an error, gracefully handle it and provide what information you can
-- Present data conversationally as if you already know it
-
-When discussing companies, reference them by ticker symbol (e.g., CRWD for CrowdStrike, PANW for Palo Alto Networks) and provide context on their market segment within cybersecurity.
-
-Provide investment-relevant analysis with appropriate caveats about market risks. Be direct and data-driven."""
 
     def __init__(self):
         """Initialize the LangChain agent service."""
@@ -78,10 +55,13 @@ Provide investment-relevant analysis with appropriate caveats about market risks
         # Get all tools
         self.tools = get_all_tools()
 
+        # Get system prompt (dynamically loads companies from RDS)
+        self.system_prompt = get_system_prompt()
+
         # Create prompt template
         self.prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", self.SYSTEM_PROMPT),
+                ("system", self.system_prompt),
                 MessagesPlaceholder(variable_name="chat_history"),
                 ("human", "{input}"),
                 MessagesPlaceholder(variable_name="agent_scratchpad"),

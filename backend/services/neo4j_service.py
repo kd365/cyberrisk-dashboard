@@ -747,6 +747,10 @@ class Neo4jService:
         cyber_sector: str = None,
         cyber_focus: list = None,
         description: str = None,
+        exchange: str = None,
+        location: str = None,
+        domain: str = None,
+        alternate_names: list = None,
         **properties,
     ) -> Dict:
         """
@@ -754,6 +758,9 @@ class Neo4jService:
 
         For tracked companies (our analysis targets), set tracked=True and provide ticker.
         For mentioned organizations, set tracked=False.
+
+        Args:
+            alternate_names: List of aliases for entity resolution (e.g., ["Palo Alto", "PANW", "PAN"])
         """
         if ticker:
             # Tracked company - merge on ticker
@@ -766,6 +773,10 @@ class Neo4jService:
                     o.cyber_sector = $cyber_sector,
                     o.cyber_focus = $cyber_focus,
                     o.description = $description,
+                    o.exchange = $exchange,
+                    o.location = $location,
+                    o.domain = $domain,
+                    o.alternate_names = $alternate_names,
                     o.updated_at = datetime()
                 SET o += $properties
                 RETURN o
@@ -795,6 +806,10 @@ class Neo4jService:
                 "cyber_sector": cyber_sector,
                 "cyber_focus": cyber_focus or [],
                 "description": description,
+                "exchange": exchange,
+                "location": location,
+                "domain": domain,
+                "alternate_names": alternate_names or [],
                 "properties": properties,
             },
         )

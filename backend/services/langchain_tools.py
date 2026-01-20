@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Lazy-loaded service references
 _db_service = None
 _neo4j_service = None
+_rag_service = None
 
 
 def get_db_service():
@@ -39,6 +40,19 @@ def get_neo4j_service():
         except Exception as e:
             logger.warning(f"Neo4j service not available: {e}")
     return _neo4j_service
+
+
+def get_rag_service():
+    """Get RAG service singleton."""
+    global _rag_service
+    if _rag_service is None:
+        try:
+            from services.rag_service import RAGService
+
+            _rag_service = RAGService()
+        except Exception as e:
+            logger.warning(f"RAG service not available: {e}")
+    return _rag_service
 
 
 # =============================================================================
@@ -355,6 +369,103 @@ def get_patents(
 
 
 # =============================================================================
+# RAG Tools
+# =============================================================================
+
+
+@tool
+def search_documents(query: str, ticker: Optional[str] = None, top_k: int = 5) -> dict:
+    """Search indexed SEC filings and documents using semantic similarity.
+
+    Args:
+        query: Natural language query to search for (e.g., "cloud security revenue growth")
+        ticker: Optional ticker to limit search to specific company
+        top_k: Number of relevant passages to return (default: 5)
+
+    Use this tool when asked about specific information from SEC filings, 10-K reports,
+    10-Q reports, or earnings transcripts. Returns relevant text passages with sources.
+    This is different from query_knowledge_graph - use this for full-text semantic search.
+    """
+    rag = get_rag_service()
+    if not rag:
+        return {
+            "error": "RAG service not available",
+            "message": "Document search is not connected",
+        }
+
+    try:
+        ticker = ticker.upper() if ticker else None
+        results = rag.search(query, ticker=ticker, top_k=top_k)
+
+        if not results:
+            return {
+                "query": query,
+                "ticker": ticker,
+                "results": [],
+                "message": "No matching documents found. Try a different query or check if documents have been indexed.",
+            }
+
+        return {
+            "query": query,
+            "ticker": ticker,
+            "results": [
+                {
+                    "content": r["content"],
+                    "source": r["metadata"].get("source", "Unknown"),
+                    "ticker": r["metadata"].get("ticker"),
+                    "document_type": r["metadata"].get("document_type"),
+                    "chunk_index": r["metadata"].get("chunk_index"),
+                    "similarity_score": r.get("score"),
+                }
+                for r in results
+            ],
+            "count": len(results),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@tool
+def get_document_context(query: str, ticker: Optional[str] = None) -> dict:
+    """Get formatted context from documents for answering a question.
+
+    Args:
+        query: The question to find context for
+        ticker: Optional ticker to limit to specific company
+
+    Returns formatted text context suitable for answering questions.
+    Use this before answering detailed questions about SEC filings or earnings.
+    """
+    rag = get_rag_service()
+    if not rag:
+        return {
+            "error": "RAG service not available",
+            "message": "Document context is not connected",
+        }
+
+    try:
+        ticker = ticker.upper() if ticker else None
+        context = rag.get_context_for_query(query, ticker=ticker, top_k=5)
+
+        if not context or context == "No relevant context found.":
+            return {
+                "query": query,
+                "ticker": ticker,
+                "context": None,
+                "message": "No relevant context found in indexed documents.",
+            }
+
+        return {
+            "query": query,
+            "ticker": ticker,
+            "context": context,
+            "message": "Use this context to answer the user's question accurately.",
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# =============================================================================
 # Help Tool
 # =============================================================================
 
@@ -424,5 +535,7 @@ def get_all_tools():
         get_documents,
         query_knowledge_graph,
         get_patents,
+        search_documents,
+        get_document_context,
         get_dashboard_help,
     ]

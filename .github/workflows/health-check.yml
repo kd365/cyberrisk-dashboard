@@ -1,0 +1,186 @@
+name: Infrastructure Health Check
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  AWS_REGION: us-west-2
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check EC2 Flask Backend
+        id: ec2-check
+        run: |
+          echo "=== EC2 Flask Backend Status ==="
+          INSTANCE_ID="${{ secrets.EC2_INSTANCE_ID }}"
+
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "Warning: EC2_INSTANCE_ID secret not set"
+            echo "status=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          STATUS=$(aws ec2 describe-instance-status \
+            --instance-ids "$INSTANCE_ID" \
+            --query 'InstanceStatuses[0].InstanceState.Name' \
+            --output text 2>/dev/null || echo "not-found")
+
+          echo "Instance ID: $INSTANCE_ID"
+          echo "Status: $STATUS"
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+          if [ "$STATUS" = "running" ]; then
+            echo "EC2 instance is healthy"
+          else
+            echo "Warning: EC2 instance is not running"
+          fi
+
+      - name: Check Backend API Health
+        id: api-check
+        run: |
+          echo "=== Backend API Health Check ==="
+          API_URL="${{ secrets.REACT_APP_API_URL }}"
+
+          if [ -z "$API_URL" ]; then
+            echo "Warning: REACT_APP_API_URL secret not set"
+            echo "status=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Checking: $API_URL/health"
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health" --connect-timeout 10 || echo "000")
+
+          echo "HTTP Response Code: $HTTP_CODE"
+          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "API is healthy"
+            echo "status=healthy" >> $GITHUB_OUTPUT
+          else
+            echo "Warning: API returned $HTTP_CODE"
+            echo "status=unhealthy" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check RDS Database
+        id: rds-check
+        run: |
+          echo "=== RDS Database Status ==="
+
+          STATUS=$(aws rds describe-db-instances \
+            --db-instance-identifier cyberrisk-dev-kh-postgres \
+            --query 'DBInstances[0].DBInstanceStatus' \
+            --output text 2>/dev/null || echo "not-found")
+
+          echo "RDS Status: $STATUS"
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+          if [ "$STATUS" = "available" ]; then
+            echo "RDS is healthy"
+          else
+            echo "Warning: RDS is not available"
+          fi
+
+      - name: Check S3 Buckets
+        id: s3-check
+        run: |
+          echo "=== S3 Buckets Status ==="
+
+          FRONTEND_BUCKET="${{ secrets.S3_BUCKET_NAME }}"
+
+          if [ -n "$FRONTEND_BUCKET" ]; then
+            if aws s3 ls "s3://$FRONTEND_BUCKET" --max-items 1 &>/dev/null; then
+              echo "Frontend bucket accessible: $FRONTEND_BUCKET"
+              echo "frontend=accessible" >> $GITHUB_OUTPUT
+            else
+              echo "Warning: Cannot access frontend bucket"
+              echo "frontend=inaccessible" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Warning: S3_BUCKET_NAME secret not set"
+          fi
+
+      - name: Check CloudFront Distribution
+        id: cloudfront-check
+        run: |
+          echo "=== CloudFront Distribution Status ==="
+
+          DIST_ID="${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}"
+
+          if [ -z "$DIST_ID" ]; then
+            echo "Warning: CLOUDFRONT_DISTRIBUTION_ID secret not set"
+            echo "status=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          STATUS=$(aws cloudfront get-distribution \
+            --id "$DIST_ID" \
+            --query 'Distribution.Status' \
+            --output text 2>/dev/null || echo "not-found")
+
+          echo "Distribution ID: $DIST_ID"
+          echo "Status: $STATUS"
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Generate Health Report
+        run: |
+          echo "=============================================="
+          echo "       CYBERRISK HEALTH CHECK REPORT          "
+          echo "=============================================="
+          echo ""
+          echo "Timestamp: $(date -u)"
+          echo ""
+          echo "Component Status:"
+          echo "  - EC2 Flask Backend: ${{ steps.ec2-check.outputs.status }}"
+          echo "  - Backend API:       ${{ steps.api-check.outputs.status }} (HTTP ${{ steps.api-check.outputs.http_code }})"
+          echo "  - RDS PostgreSQL:    ${{ steps.rds-check.outputs.status }}"
+          echo "  - S3 Frontend:       ${{ steps.s3-check.outputs.frontend }}"
+          echo "  - CloudFront:        ${{ steps.cloudfront-check.outputs.status }}"
+          echo ""
+          echo "=============================================="
+
+      - name: Fail if critical services down
+        run: |
+          EC2_STATUS="${{ steps.ec2-check.outputs.status }}"
+          API_STATUS="${{ steps.api-check.outputs.status }}"
+          RDS_STATUS="${{ steps.rds-check.outputs.status }}"
+
+          FAILED=0
+
+          if [ "$EC2_STATUS" != "running" ] && [ "$EC2_STATUS" != "unknown" ]; then
+            echo "CRITICAL: EC2 instance is not running"
+            FAILED=1
+          fi
+
+          if [ "$API_STATUS" = "unhealthy" ]; then
+            echo "CRITICAL: Backend API is not responding"
+            FAILED=1
+          fi
+
+          if [ "$RDS_STATUS" != "available" ] && [ "$RDS_STATUS" != "not-found" ]; then
+            echo "CRITICAL: RDS database is not available"
+            FAILED=1
+          fi
+
+          if [ $FAILED -eq 1 ]; then
+            echo "One or more critical services are down!"
+            exit 1
+          fi
+
+          echo "All critical services are healthy!"

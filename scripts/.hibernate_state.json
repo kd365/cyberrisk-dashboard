@@ -1,0 +1,12 @@
+{
+    "hibernated_at": "2026-01-19T17:58:30Z",
+    "aws_region": "us-west-2",
+    "aws_profile": "cyber-risk",
+    "flask_instance_id": "i-0bdafbb7e0387b4cb",
+    "neo4j_instance_id": "i-0aefeaee10f6fdeea",
+    "rds_instance_id": "cyberrisk-dev-kh-postgres",
+    "nat_gateway_ids": "nat-08acb9f814521c08a	nat-0e9dd8a17255983d0",
+    "nat_gateway_id": "nat-08acb9f814521c08a",
+    "nat_eip_allocation_id": "eipalloc-066399103dc7e5098",
+    "nat_subnet_id": "subnet-0eaedeb46ada60d2a"
+}

@@ -1586,13 +1586,21 @@ _neo4j_service = None
 
 
 def get_llm_chat():
-    """Lazy load LLM chat service"""
+    """
+    Lazy load LLM chat service.
+
+    Uses USE_LANGCHAIN env var to determine which service to use:
+    - USE_LANGCHAIN=true: LangChain agent with Claude 3.5 Sonnet (better reasoning)
+    - USE_LANGCHAIN=false (default): Legacy service with Claude 3 Haiku (lower cost)
+
+    For assessment, set USE_LANGCHAIN=true to demonstrate LangChain integration.
+    """
     global _llm_chat_service
     if _llm_chat_service is None:
         try:
-            from services.llm_chat_service import LLMChatService
+            from services.llm_chat_service import get_llm_chat_service
 
-            _llm_chat_service = LLMChatService()
+            _llm_chat_service = get_llm_chat_service()
             print("✅ LLM chat service initialized")
         except Exception as e:
             print(f"⚠️  LLM chat service not available: {e}")
@@ -1934,6 +1942,261 @@ def execute_cypher():
 
 
 # ============================================================================
+# RAG (Retrieval-Augmented Generation) ENDPOINTS
+# ============================================================================
+
+# Lazy-loaded RAG service
+_rag_service = None
+
+
+def get_rag():
+    """Lazy load RAG service"""
+    global _rag_service
+    if _rag_service is None:
+        try:
+            from services.rag_service import RAGService
+
+            _rag_service = RAGService()
+            print("✅ RAG service initialized")
+        except Exception as e:
+            print(f"⚠️  RAG service not available: {e}")
+    return _rag_service
+
+
+@app.route("/api/rag/search", methods=["POST"])
+def rag_search():
+    """
+    Search indexed documents using semantic similarity
+
+    Request body:
+        {
+            "query": "natural language query",
+            "ticker": "optional ticker to filter",
+            "top_k": 5
+        }
+
+    Returns:
+        List of relevant document chunks with metadata
+    """
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        query = data.get("query", "").strip()
+        if not query:
+            return jsonify({"error": "Query is required"}), 400
+
+        ticker = data.get("ticker")
+        top_k = int(data.get("top_k", 5))
+
+        rag = get_rag()
+        if not rag:
+            return (
+                jsonify(
+                    {
+                        "error": "RAG service not available",
+                        "message": "Document search is not connected",
+                    }
+                ),
+                503,
+            )
+
+        if ticker:
+            ticker = ticker.upper()
+
+        results = rag.search(query, ticker=ticker, top_k=top_k)
+
+        return jsonify(
+            {
+                "query": query,
+                "ticker": ticker,
+                "results": results,
+                "count": len(results),
+            }
+        )
+
+    except Exception as e:
+        print(f"Error in RAG search: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rag/index", methods=["POST"])
+@require_cognito_auth
+def rag_index_document():
+    """
+    Index a document from S3 for RAG retrieval
+
+    Request body:
+        {
+            "s3_key": "raw/sec/CRWD_10-K_2024.pdf",
+            "ticker": "CRWD",
+            "document_type": "10-K"
+        }
+
+    Returns:
+        Indexing result with chunk count
+    """
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        s3_key = data.get("s3_key", "").strip()
+        if not s3_key:
+            return jsonify({"error": "s3_key is required"}), 400
+
+        ticker = data.get("ticker", "").upper()
+        document_type = data.get("document_type", "")
+
+        rag = get_rag()
+        if not rag:
+            return (
+                jsonify(
+                    {
+                        "error": "RAG service not available",
+                        "message": "Document indexing is not connected",
+                    }
+                ),
+                503,
+            )
+
+        # Import and use OCR service to extract text
+        from services.rag_service import index_s3_document
+
+        result = index_s3_document(s3_key, ticker, document_type)
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"Error indexing document: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rag/index-ticker/<ticker>", methods=["POST"])
+@require_cognito_auth
+def rag_index_ticker(ticker):
+    """
+    Index all documents for a ticker from S3
+
+    Query params:
+        document_types: Comma-separated list (e.g., "10-K,10-Q,transcript")
+        limit: Max documents to index (default: 50)
+
+    Returns:
+        Summary of indexed documents
+    """
+    try:
+        ticker = ticker.upper()
+        document_types = request.args.get("document_types", "").split(",")
+        document_types = [dt.strip() for dt in document_types if dt.strip()]
+        limit = int(request.args.get("limit", 50))
+
+        rag = get_rag()
+        if not rag:
+            return (
+                jsonify(
+                    {
+                        "error": "RAG service not available",
+                        "message": "Document indexing is not connected",
+                    }
+                ),
+                503,
+            )
+
+        # Get artifacts for this ticker
+        artifacts = db_service.get_artifacts_by_ticker(ticker)
+        if not artifacts:
+            artifacts = s3_service.get_artifacts_by_ticker(ticker)
+
+        if not artifacts:
+            return (
+                jsonify({"error": f"No artifacts found for {ticker}", "ticker": ticker}),
+                404,
+            )
+
+        # Filter by document type if specified
+        if document_types:
+            artifacts = [
+                a
+                for a in artifacts
+                if any(dt in a.get("artifact_type", "") for dt in document_types)
+            ]
+
+        # Limit documents
+        artifacts = artifacts[:limit]
+
+        from services.rag_service import index_s3_document
+
+        results = []
+        for artifact in artifacts:
+            s3_key = artifact.get("s3_key", "")
+            doc_type = artifact.get("artifact_type", "")
+            if s3_key:
+                try:
+                    result = index_s3_document(s3_key, ticker, doc_type)
+                    results.append({"s3_key": s3_key, "status": "success", **result})
+                except Exception as e:
+                    results.append({"s3_key": s3_key, "status": "error", "error": str(e)})
+
+        success_count = sum(1 for r in results if r["status"] == "success")
+
+        return jsonify(
+            {
+                "ticker": ticker,
+                "documents_indexed": success_count,
+                "total_attempted": len(results),
+                "results": results,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error indexing ticker documents: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rag/stats", methods=["GET"])
+def rag_stats():
+    """
+    Get RAG index statistics
+
+    Query params:
+        ticker: Optional ticker to filter stats
+
+    Returns:
+        Document and chunk counts
+    """
+    try:
+        ticker = request.args.get("ticker")
+
+        rag = get_rag()
+        if not rag:
+            return (
+                jsonify(
+                    {
+                        "error": "RAG service not available",
+                        "message": "RAG statistics not available",
+                    }
+                ),
+                503,
+            )
+
+        if ticker:
+            ticker = ticker.upper()
+
+        stats = rag.get_stats(ticker=ticker)
+
+        return jsonify(stats)
+
+    except Exception as e:
+        print(f"Error getting RAG stats: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================================
 # AUTHENTICATION ENDPOINTS (Cognito)
 # ============================================================================
 
@@ -2175,8 +2438,27 @@ def build_all_knowledge_graphs():
                         {"ticker": ticker, "status": "error", "error": str(e)}
                     )
 
+        # After building all company graphs, infer relationships
+        relationship_stats = {
+            "entity_relationships": 0,
+            "concept_relationships": 0,
+            "company_concept_associations": 0,
+        }
+
+        try:
+            relationship_stats["entity_relationships"] = builder.infer_entity_relationships()
+            relationship_stats["concept_relationships"] = builder.infer_concept_relationships()
+            relationship_stats["company_concept_associations"] = builder.create_company_concept_associations()
+        except Exception as e:
+            print(f"Warning: Error inferring relationships: {e}")
+
         return jsonify(
-            {"success": True, "companies_processed": len(results), "results": results}
+            {
+                "success": True,
+                "companies_processed": len(results),
+                "results": results,
+                "relationships": relationship_stats,
+            }
         )
 
     except Exception as e:
@@ -2222,6 +2504,63 @@ def clear_knowledge_graph():
 
     except Exception as e:
         print(f"Error clearing knowledge graph: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/infer-relationships", methods=["POST"])
+@require_cognito_auth
+def infer_graph_relationships():
+    """
+    Infer relationships in the knowledge graph.
+
+    Creates:
+    - Entity co-occurrence relationships (RELATED_TO between organizations)
+    - Concept co-occurrence relationships (RELATED_TO between concepts)
+    - Company-concept associations (ASSOCIATED_WITH with frequency/source)
+
+    Requires authentication.
+    """
+    try:
+        neo4j = get_neo4j()
+        if not neo4j or not neo4j.is_connected():
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
+
+        from services.graph_builder_service import get_graph_builder_service
+
+        builder = get_graph_builder_service()
+
+        # Get optional ticker filter from request
+        data = request.json or {}
+        ticker = data.get("ticker")
+        if ticker:
+            ticker = ticker.upper()
+
+        # Infer all relationship types
+        results = {
+            "entity_relationships": builder.infer_entity_relationships(ticker),
+            "concept_relationships": builder.infer_concept_relationships(ticker),
+            "company_concept_associations": builder.create_company_concept_associations(ticker),
+        }
+
+        return jsonify(
+            {
+                "success": True,
+                "ticker_filter": ticker,
+                **results,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error inferring relationships: {e}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
@@ -2465,6 +2804,12 @@ if __name__ == "__main__":
     print("")
     print("Auth Endpoints:")
     print("   - GET  /api/auth/status")
+    print("")
+    print("RAG Endpoints:")
+    print("   - POST /api/rag/search")
+    print("   - POST /api/rag/index")
+    print("   - POST /api/rag/index-ticker/<ticker>")
+    print("   - GET  /api/rag/stats")
     print("")
     print("Patent Endpoints:")
     print("   - GET  /api/patents/search?assignee=CrowdStrike")

@@ -45,31 +45,17 @@ class LLMChatService:
     # Claude 3 Haiku model ID on Bedrock
     MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
 
-    # System prompt for the assistant
-    SYSTEM_PROMPT = """You are a Venture Capital Investment Advisor with access to comprehensive intelligence on publicly traded cybersecurity companies. You leverage the CyberRisk Dashboard platform to provide data-driven investment insights.
+    # System prompt loaded dynamically from shared prompts module
+    # This ensures all companies from RDS are included
+    _system_prompt = None
 
-Your expertise includes:
-1. Analyzing company fundamentals, stock performance, and market positioning
-2. Evaluating sentiment from SEC filings and earnings calls for investment signals
-3. Interpreting stock price forecasts and technical indicators
-4. Assessing company growth trajectories through hiring trends and expansion metrics
-5. Extracting key insights from regulatory filings and earnings transcripts via the knowledge graph
-
-You have access to tools that query the database, fetch real-time market data, and search the knowledge graph. Always use the appropriate tool when analyzing specific companies or data requests.
-
-CRITICAL INSTRUCTIONS:
-- NEVER explain your decision-making process, tool selection reasoning, or internal plans to the user
-- NEVER tell the user to go to another tab or UI element - use your tools to fetch and present the data directly
-- NEVER expose tool names, error messages about caching, or technical implementation details
-- Just execute the appropriate tools silently and present the results naturally
-- If a tool returns an error, gracefully handle it and provide what information you can
-- Present data conversationally as if you already know it
-
-When discussing companies, reference them by ticker symbol (e.g., CRWD for CrowdStrike, PANW for Palo Alto Networks) and provide context on their market segment within cybersecurity (endpoint security, cloud security, identity management, etc.).
-
-Provide investment-relevant analysis with appropriate caveats about market risks. Be direct and data-driven. If you lack specific information, acknowledge it rather than speculating.
-
-Tracked cybersecurity companies: CRWD (CrowdStrike), PANW (Palo Alto Networks), ZS (Zscaler), FTNT (Fortinet), OKTA (Okta), NET (Cloudflare), S (SentinelOne), CYBR (CyberArk), TENB (Tenable), RPD (Rapid7)"""
+    @classmethod
+    def get_system_prompt(cls):
+        """Get system prompt (cached after first load)."""
+        if cls._system_prompt is None:
+            from services.prompts import get_system_prompt
+            cls._system_prompt = get_system_prompt()
+        return cls._system_prompt
 
     # Tool definitions for function calling
     TOOLS = [
@@ -386,7 +372,7 @@ Tracked cybersecurity companies: CRWD (CrowdStrike), PANW (Palo Alto Networks), 
             response = self.bedrock.converse(
                 modelId=self.MODEL_ID,
                 messages=bedrock_messages,
-                system=[{"text": self.SYSTEM_PROMPT}],
+                system=[{"text": self.get_system_prompt()}],
                 toolConfig=tool_config,
                 inferenceConfig={"maxTokens": 2048, "temperature": 0.7, "topP": 0.9},
             )
@@ -484,7 +470,7 @@ Tracked cybersecurity companies: CRWD (CrowdStrike), PANW (Palo Alto Networks), 
             response = self.bedrock.converse(
                 modelId=self.MODEL_ID,
                 messages=bedrock_messages,
-                system=[{"text": self.SYSTEM_PROMPT}],
+                system=[{"text": self.get_system_prompt()}],
                 toolConfig={
                     "tools": [
                         {
