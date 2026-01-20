@@ -714,6 +714,7 @@ function TargetedSentimentSection({ targetedSentiment, ticker }) {
 }
 
 // Entities Section Component (OLD - Kept for backwards compatibility)
+// eslint-disable-next-line no-unused-vars
 function EntitiesSection({ entities, ticker }) {
   if (!entities) {
     return <NotAvailablePlaceholder message="Entity data not available" />;
@@ -824,6 +825,7 @@ function EntityCard({ title, icon, entities, color }) {
 }
 
 // Key Phrases Section Component
+// eslint-disable-next-line no-unused-vars
 function KeyPhrasesSection({ phrases, ticker }) {
   if (!phrases || phrases.length === 0) {
     return <NotAvailablePlaceholder message="Key phrases not available" />;

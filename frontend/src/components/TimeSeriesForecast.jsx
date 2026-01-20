@@ -96,6 +96,7 @@ function TimeSeriesForecast({ ticker }) {
 
   useEffect(() => {
     fetchData(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, forecastDays, selectedModel]);
 
   // Show unsupported ticker message

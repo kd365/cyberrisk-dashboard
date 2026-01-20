@@ -529,6 +529,7 @@ function CypherConsole() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [history, setHistory] = useState([]);
   const [viewMode, setViewMode] = useState('table'); // 'table' or 'json'
 
