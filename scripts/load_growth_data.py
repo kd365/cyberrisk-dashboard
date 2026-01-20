@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / 'backend'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 try:
     import psycopg2
@@ -34,55 +34,84 @@ except ImportError:
 
 # Pre-cached job data (Dec 2024)
 CACHED_JOBS_BY_FUNCTION = {
-    'CRWD': {
-        'Engineering': 517, 'Sales': 278, 'Information Technology': 766,
-        'Marketing': 35, 'Finance': 13, 'Human Resources': 8,
-        'Product Management': 59, 'Research': 8, 'Legal': 8,
-        'Operations': 0, 'Customer Service': 0, 'Administrative': 1
+    "CRWD": {
+        "Engineering": 517,
+        "Sales": 278,
+        "Information Technology": 766,
+        "Marketing": 35,
+        "Finance": 13,
+        "Human Resources": 8,
+        "Product Management": 59,
+        "Research": 8,
+        "Legal": 8,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 1,
     },
-    'ZS': {
-        'Engineering': 97, 'Sales': 131, 'Information Technology': 149,
-        'Marketing': 18, 'Finance': 15, 'Human Resources': 10,
-        'Product Management': 22, 'Research': 4, 'Legal': 2,
-        'Operations': 0, 'Customer Service': 0, 'Administrative': 0
+    "ZS": {
+        "Engineering": 97,
+        "Sales": 131,
+        "Information Technology": 149,
+        "Marketing": 18,
+        "Finance": 15,
+        "Human Resources": 10,
+        "Product Management": 22,
+        "Research": 4,
+        "Legal": 2,
+        "Operations": 0,
+        "Customer Service": 0,
+        "Administrative": 0,
     },
-    'NET': {
-        'Engineering': 331, 'Sales': 217, 'Information Technology': 293,
-        'Marketing': 88, 'Finance': 16, 'Human Resources': 7,
-        'Product Management': 74, 'Research': 0, 'Legal': 13,
-        'Operations': 0, 'Customer Service': 28, 'Administrative': 3
-    }
+    "NET": {
+        "Engineering": 331,
+        "Sales": 217,
+        "Information Technology": 293,
+        "Marketing": 88,
+        "Finance": 16,
+        "Human Resources": 7,
+        "Product Management": 74,
+        "Research": 0,
+        "Legal": 13,
+        "Operations": 0,
+        "Customer Service": 28,
+        "Administrative": 3,
+    },
 }
 
 CACHED_JOBS_BY_SENIORITY = {
-    'CRWD': {
-        'Entry level': 64, 'Associate': 29, 'Mid-Senior level': 926,
-        'Director': 47, 'Executive': 2
+    "CRWD": {
+        "Entry level": 64,
+        "Associate": 29,
+        "Mid-Senior level": 926,
+        "Director": 47,
+        "Executive": 2,
     },
-    'ZS': {
-        'Entry level': 10, 'Associate': 0, 'Mid-Senior level': 267,
-        'Director': 26, 'Executive': 1
+    "ZS": {
+        "Entry level": 10,
+        "Associate": 0,
+        "Mid-Senior level": 267,
+        "Director": 26,
+        "Executive": 1,
     },
-    'NET': {
-        'Entry level': 27, 'Associate': 229, 'Mid-Senior level': 513,
-        'Director': 24, 'Executive': 10
-    }
+    "NET": {
+        "Entry level": 27,
+        "Associate": 229,
+        "Mid-Senior level": 513,
+        "Director": 24,
+        "Executive": 10,
+    },
 }
 
 # Latest employee counts (Nov 2025)
-EMPLOYEE_COUNTS = {
-    'CRWD': 10746,
-    'ZS': 8984,
-    'NET': 6246
-}
+EMPLOYEE_COUNTS = {"CRWD": 10746, "ZS": 8984, "NET": 6246}
 
 
 def get_db_connection():
     """Get database connection from environment variables"""
-    db_host = os.environ.get('DB_HOST')
-    db_name = os.environ.get('DB_NAME', 'cyberrisk')
-    db_user = os.environ.get('DB_USER', 'cyberrisk_admin')
-    db_password = os.environ.get('DB_PASSWORD')
+    db_host = os.environ.get("DB_HOST")
+    db_name = os.environ.get("DB_NAME", "cyberrisk")
+    db_user = os.environ.get("DB_USER", "cyberrisk_admin")
+    db_password = os.environ.get("DB_PASSWORD")
 
     if not db_host or not db_password:
         print("Error: Database credentials not configured")
@@ -95,7 +124,7 @@ def get_db_connection():
             database=db_name,
             user=db_user,
             password=db_password,
-            port=5432
+            port=5432,
         )
         print(f"Connected to RDS at {db_host}")
         return conn
@@ -160,20 +189,23 @@ def load_headcount_csv(conn, csv_path: str):
     cursor = conn.cursor()
     count = 0
 
-    with open(csv_path, 'r') as f:
+    with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            ticker = row['ticker']
-            date_str = row['date']
-            employee_count = int(row['employees_count'])
+            ticker = row["ticker"]
+            date_str = row["date"]
+            employee_count = int(row["employees_count"])
 
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO company_headcount_history (ticker, snapshot_date, employee_count, data_source)
                     VALUES (%s, %s, %s, 'coresignal_csv')
                     ON CONFLICT (ticker, snapshot_date)
                     DO UPDATE SET employee_count = EXCLUDED.employee_count
-                """, (ticker, date_str, employee_count))
+                """,
+                    (ticker, date_str, employee_count),
+                )
                 count += 1
             except Exception as e:
                 print(f"Error inserting row: {e}")
@@ -188,7 +220,7 @@ def load_headcount_csv(conn, csv_path: str):
 def load_jobs_data(conn):
     """Load cached jobs data"""
     cursor = conn.cursor()
-    snapshot_date = '2024-12-28'
+    snapshot_date = "2024-12-28"
     count = 0
 
     for ticker in CACHED_JOBS_BY_FUNCTION:
@@ -197,10 +229,13 @@ def load_jobs_data(conn):
         emp_count = EMPLOYEE_COUNTS.get(ticker)
 
         total_jobs = sum(jobs_func.values())
-        hiring_intensity = round((total_jobs / emp_count) * 100, 2) if emp_count else None
+        hiring_intensity = (
+            round((total_jobs / emp_count) * 100, 2) if emp_count else None
+        )
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO company_jobs_snapshot
                 (ticker, snapshot_date, jobs_by_function, jobs_by_seniority, total_jobs, employee_count, hiring_intensity, data_source)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, 'coresignal_cached')
@@ -211,15 +246,17 @@ def load_jobs_data(conn):
                     total_jobs = EXCLUDED.total_jobs,
                     employee_count = EXCLUDED.employee_count,
                     hiring_intensity = EXCLUDED.hiring_intensity
-            """, (
-                ticker,
-                snapshot_date,
-                Json(jobs_func),
-                Json(jobs_sen),
-                total_jobs,
-                emp_count,
-                hiring_intensity
-            ))
+            """,
+                (
+                    ticker,
+                    snapshot_date,
+                    Json(jobs_func),
+                    Json(jobs_sen),
+                    total_jobs,
+                    emp_count,
+                    hiring_intensity,
+                ),
+            )
             count += 1
         except Exception as e:
             print(f"Error inserting jobs for {ticker}: {e}")
@@ -234,9 +271,9 @@ def load_jobs_data(conn):
 def load_json_data(conn, json_dir: str):
     """Load additional data from JSON files (department/country/seniority breakdowns)"""
     json_files = {
-        'CRWD': 'crowdstrike.json',
-        'ZS': 'zscaler.json',
-        'NET': 'cloudflare.json'
+        "CRWD": "crowdstrike.json",
+        "ZS": "zscaler.json",
+        "NET": "cloudflare.json",
     }
 
     cursor = conn.cursor()
@@ -251,7 +288,7 @@ def load_json_data(conn, json_dir: str):
         print(f"Processing {filename}...")
 
         try:
-            with open(filepath, 'r') as f:
+            with open(filepath, "r") as f:
                 data = json.load(f)
 
             # Extract monthly breakdowns and update existing headcount records
@@ -261,60 +298,70 @@ def load_json_data(conn, json_dir: str):
             region_by_month = {}
 
             # Department breakdown
-            for record in data.get('employees_count_breakdown_by_department_by_month', []):
-                date_str = record.get('date')
+            for record in data.get(
+                "employees_count_breakdown_by_department_by_month", []
+            ):
+                date_str = record.get("date")
                 if date_str and len(date_str) == 6:
                     date_str = f"{date_str[:4]}-{date_str[4:6]}-01"
-                breakdown = record.get('employees_count_breakdown_by_department', {})
+                breakdown = record.get("employees_count_breakdown_by_department", {})
                 cleaned = {}
                 for k, v in breakdown.items():
                     if v is not None:
-                        dept = k.replace('employees_count_', '')
+                        dept = k.replace("employees_count_", "")
                         cleaned[dept] = v
                 if cleaned:
                     dept_by_month[date_str] = cleaned
 
             # Country breakdown
-            for record in data.get('employees_count_by_country_by_month', []):
-                date_str = record.get('date')
+            for record in data.get("employees_count_by_country_by_month", []):
+                date_str = record.get("date")
                 if date_str and len(date_str) == 6:
                     date_str = f"{date_str[:4]}-{date_str[4:6]}-01"
-                countries = record.get('employees_count_by_country', [])
-                country_data = {item['country']: item['employee_count'] for item in countries}
+                countries = record.get("employees_count_by_country", [])
+                country_data = {
+                    item["country"]: item["employee_count"] for item in countries
+                }
                 if country_data:
                     country_by_month[date_str] = country_data
 
             # Seniority breakdown
-            for record in data.get('employees_count_breakdown_by_seniority_by_month', []):
-                date_str = record.get('date')
+            for record in data.get(
+                "employees_count_breakdown_by_seniority_by_month", []
+            ):
+                date_str = record.get("date")
                 if date_str and len(date_str) == 6:
                     date_str = f"{date_str[:4]}-{date_str[4:6]}-01"
-                breakdown = record.get('employees_count_breakdown_by_seniority', {})
+                breakdown = record.get("employees_count_breakdown_by_seniority", {})
                 cleaned = {}
                 for k, v in breakdown.items():
                     if v is not None:
-                        level = k.replace('employees_count_', '')
+                        level = k.replace("employees_count_", "")
                         cleaned[level] = v
                 if cleaned:
                     seniority_by_month[date_str] = cleaned
 
             # Region breakdown
-            for record in data.get('employees_count_breakdown_by_region_by_month', []):
-                date_str = record.get('date')
+            for record in data.get("employees_count_breakdown_by_region_by_month", []):
+                date_str = record.get("date")
                 if date_str and len(date_str) == 6:
                     date_str = f"{date_str[:4]}-{date_str[4:6]}-01"
-                breakdown = record.get('employees_count_breakdown_by_region', {})
+                breakdown = record.get("employees_count_breakdown_by_region", {})
                 cleaned = {}
                 for k, v in breakdown.items():
                     if v is not None:
-                        region = k.replace('employees_count_', '')
+                        region = k.replace("employees_count_", "")
                         cleaned[region] = v
                 if cleaned:
                     region_by_month[date_str] = cleaned
 
             # Update existing records with breakdown data
-            all_dates = set(dept_by_month.keys()) | set(country_by_month.keys()) | \
-                        set(seniority_by_month.keys()) | set(region_by_month.keys())
+            all_dates = (
+                set(dept_by_month.keys())
+                | set(country_by_month.keys())
+                | set(seniority_by_month.keys())
+                | set(region_by_month.keys())
+            )
 
             for date_str in all_dates:
                 dept = dept_by_month.get(date_str)
@@ -322,21 +369,24 @@ def load_json_data(conn, json_dir: str):
                 seniority = seniority_by_month.get(date_str)
                 region = region_by_month.get(date_str)
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     UPDATE company_headcount_history
                     SET by_department = COALESCE(%s, by_department),
                         by_country = COALESCE(%s, by_country),
                         by_seniority = COALESCE(%s, by_seniority),
                         by_region = COALESCE(%s, by_region)
                     WHERE ticker = %s AND snapshot_date = %s
-                """, (
-                    Json(dept) if dept else None,
-                    Json(country) if country else None,
-                    Json(seniority) if seniority else None,
-                    Json(region) if region else None,
-                    ticker,
-                    date_str
-                ))
+                """,
+                    (
+                        Json(dept) if dept else None,
+                        Json(country) if country else None,
+                        Json(seniority) if seniority else None,
+                        Json(region) if region else None,
+                        ticker,
+                        date_str,
+                    ),
+                )
                 count += 1
 
             conn.commit()
@@ -386,9 +436,9 @@ def verify_data(conn):
 def main():
     # Get script directory for relative paths
     script_dir = Path(__file__).parent.parent
-    docs_dir = script_dir / 'docs'
+    docs_dir = script_dir / "docs"
 
-    csv_path = docs_dir / 'headcount_3companies.csv'
+    csv_path = docs_dir / "headcount_3companies.csv"
 
     print("=" * 60)
     print("CoreSignal Growth Data Loader")
@@ -419,5 +469,5 @@ def main():
     print("\nDone!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

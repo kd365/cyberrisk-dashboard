@@ -41,22 +41,46 @@ class OCRService:
     # Common artifacts to filter from extracted text
     PDF_ARTIFACTS = {
         # PDF internal structure
-        "obj", "endobj", "stream", "endstream", "xref", "trailer",
-        "startxref", "flatedecode", "devicergb", "devicegray", "devicecmyk",
+        "obj",
+        "endobj",
+        "stream",
+        "endstream",
+        "xref",
+        "trailer",
+        "startxref",
+        "flatedecode",
+        "devicergb",
+        "devicegray",
+        "devicecmyk",
         # XBRL/SEC artifacts
-        "xmlns", "xbrli", "xsi", "dei", "fasb", "us-gaap", "gaap",
-        "iso4217", "srt", "country",
+        "xmlns",
+        "xbrli",
+        "xsi",
+        "dei",
+        "fasb",
+        "us-gaap",
+        "gaap",
+        "iso4217",
+        "srt",
+        "country",
         # HTML/CSS artifacts
-        "colspan", "rowspan", "thead", "tbody", "cellpadding", "cellspacing",
-        "bgcolor", "valign", "nowrap",
+        "colspan",
+        "rowspan",
+        "thead",
+        "tbody",
+        "cellpadding",
+        "cellspacing",
+        "bgcolor",
+        "valign",
+        "nowrap",
     }
 
     # Patterns that indicate garbage text (often from malformed extraction)
     GARBAGE_PATTERNS = [
-        r'^[A-Fa-f0-9]{32,}$',  # Long hex strings
-        r'^\d+\s+\d+\s+obj$',    # PDF object references
-        r'^<<.*>>$',             # PDF dictionary markers
-        r'^\s*[<>]+\s*$',        # Lone angle brackets
+        r"^[A-Fa-f0-9]{32,}$",  # Long hex strings
+        r"^\d+\s+\d+\s+obj$",  # PDF object references
+        r"^<<.*>>$",  # PDF dictionary markers
+        r"^\s*[<>]+\s*$",  # Lone angle brackets
     ]
 
     def __init__(self):
@@ -66,8 +90,7 @@ class OCRService:
 
         # Initialize S3 client
         config = Config(
-            region_name=self.region,
-            retries={"max_attempts": 3, "mode": "adaptive"}
+            region_name=self.region, retries={"max_attempts": 3, "mode": "adaptive"}
         )
         self.s3 = boto3.client("s3", config=config)
 
@@ -85,9 +108,12 @@ class OCRService:
         if self._unstructured_available is None:
             try:
                 from unstructured.partition.pdf import partition_pdf
+
                 self._unstructured_available = True
             except ImportError:
-                logger.warning("unstructured library not available - OCR will be limited")
+                logger.warning(
+                    "unstructured library not available - OCR will be limited"
+                )
                 self._unstructured_available = False
         return self._unstructured_available
 
@@ -97,6 +123,7 @@ class OCRService:
         if self._pymupdf_available is None:
             try:
                 import fitz
+
                 self._pymupdf_available = True
             except ImportError:
                 logger.info("PyMuPDF not available - using fallback extraction")
@@ -108,10 +135,7 @@ class OCRService:
     # =========================================================================
 
     def extract_text_from_s3(
-        self,
-        s3_key: str,
-        use_ocr: bool = True,
-        use_cache: bool = True
+        self, s3_key: str, use_ocr: bool = True, use_cache: bool = True
     ) -> Optional[str]:
         """
         Extract text from a PDF stored in S3.
@@ -168,9 +192,7 @@ class OCRService:
                 pass
 
     def extract_text_from_file(
-        self,
-        file_path: str,
-        use_ocr: bool = True
+        self, file_path: str, use_ocr: bool = True
     ) -> Optional[str]:
         """
         Extract text from a local PDF file.
@@ -215,10 +237,7 @@ class OCRService:
             logger.info(f"Extracting with Unstructured OCR: {file_path}")
 
             # Use OCR strategy for best results
-            elements = partition_pdf(
-                filename=file_path,
-                strategy="ocr_only"
-            )
+            elements = partition_pdf(filename=file_path, strategy="ocr_only")
 
             # Join all elements with double newlines to preserve structure
             text = "\n\n".join([str(el) for el in elements])
@@ -307,30 +326,30 @@ class OCRService:
 
         # Step 1: Fix hyphenated words across line breaks
         # Example: "cyber-\nsecurity" -> "cybersecurity"
-        text = re.sub(r'(\w)-\s*\n\s*(\w)', r'\1\2', text)
+        text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)
 
         # Step 2: Fix missing spaces between CamelCase words
         # Example: "CrowdStrikeAnnounces" -> "CrowdStrike Announces"
-        text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+        text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
 
         # Step 3: Fix spacing around section numbers
         # Example: "9.52.180Code" -> "9.52.180 Code"
-        text = re.sub(r'(\d+\.\d+\.?\d*)([A-Za-z])', r'\1 \2', text)
+        text = re.sub(r"(\d+\.\d+\.?\d*)([A-Za-z])", r"\1 \2", text)
 
         # Step 4: Remove PDF artifact keywords
         for artifact in self.PDF_ARTIFACTS:
             # Case-insensitive removal of standalone artifacts
-            text = re.sub(rf'\b{artifact}\b', '', text, flags=re.IGNORECASE)
+            text = re.sub(rf"\b{artifact}\b", "", text, flags=re.IGNORECASE)
 
         # Step 5: Remove garbage lines matching patterns
-        lines = text.split('\n')
+        lines = text.split("\n")
         clean_lines = []
         for line in lines:
             line_stripped = line.strip()
 
             # Skip empty lines (we'll normalize spacing later)
             if not line_stripped:
-                clean_lines.append('')
+                clean_lines.append("")
                 continue
 
             # Skip garbage pattern matches
@@ -343,22 +362,23 @@ class OCRService:
             if not is_garbage:
                 clean_lines.append(line)
 
-        text = '\n'.join(clean_lines)
+        text = "\n".join(clean_lines)
 
         # Step 6: Normalize whitespace
         # Replace multiple spaces with single space
-        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r"[ \t]+", " ", text)
         # Replace 3+ newlines with double newline (preserve paragraph breaks)
-        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
 
         # Step 7: Remove lines that are just numbers or punctuation
-        lines = text.split('\n')
+        lines = text.split("\n")
         clean_lines = [
-            line for line in lines
-            if not re.match(r'^[\d\s\-\.\,\;\:]+$', line.strip())
+            line
+            for line in lines
+            if not re.match(r"^[\d\s\-\.\,\;\:]+$", line.strip())
             or len(line.strip()) > 20  # Keep if it's a substantial number line
         ]
-        text = '\n'.join(clean_lines)
+        text = "\n".join(clean_lines)
 
         # Final trim
         text = text.strip()
@@ -381,26 +401,26 @@ class OCRService:
             Comprehend-optimized text chunk
         """
         # Remove any remaining XBRL-style tags
-        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r"<[^>]+>", " ", text)
 
         # Remove URLs (often noisy in SEC filings)
-        text = re.sub(r'https?://\S+', '', text)
+        text = re.sub(r"https?://\S+", "", text)
 
         # Remove email addresses
-        text = re.sub(r'\S+@\S+\.\S+', '', text)
+        text = re.sub(r"\S+@\S+\.\S+", "", text)
 
         # Collapse whitespace again after removals
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
 
         # Truncate to max bytes if needed
-        if len(text.encode('utf-8')) > max_bytes:
+        if len(text.encode("utf-8")) > max_bytes:
             # Encode, truncate, decode safely
-            encoded = text.encode('utf-8')[:max_bytes]
-            text = encoded.decode('utf-8', errors='ignore')
+            encoded = text.encode("utf-8")[:max_bytes]
+            text = encoded.decode("utf-8", errors="ignore")
             # Try to end at a sentence boundary
-            last_period = text.rfind('.')
+            last_period = text.rfind(".")
             if last_period > max_bytes * 0.8:  # At least 80% of content
-                text = text[:last_period + 1]
+                text = text[: last_period + 1]
 
         return text
 
@@ -420,7 +440,7 @@ class OCRService:
 
         if os.path.exists(cache_path):
             try:
-                with open(cache_path, 'r', encoding='utf-8') as f:
+                with open(cache_path, "r", encoding="utf-8") as f:
                     return f.read()
             except Exception as e:
                 logger.warning(f"Cache read failed: {e}")
@@ -432,7 +452,7 @@ class OCRService:
         cache_path = self._get_cache_key(s3_key)
 
         try:
-            with open(cache_path, 'w', encoding='utf-8') as f:
+            with open(cache_path, "w", encoding="utf-8") as f:
                 f.write(text)
             logger.debug(f"Cached text for {s3_key}")
         except Exception as e:
@@ -458,7 +478,7 @@ class OCRService:
                 count = 1
         else:
             for filename in os.listdir(self.cache_dir):
-                if filename.endswith('.txt'):
+                if filename.endswith(".txt"):
                     os.unlink(os.path.join(self.cache_dir, filename))
                     count += 1
 
@@ -478,14 +498,15 @@ class OCRService:
         if not text:
             return {"error": "No text provided"}
 
-        lines = text.split('\n')
+        lines = text.split("\n")
         words = text.split()
 
         # Count potential issues
         short_lines = sum(1 for line in lines if 0 < len(line.strip()) < 10)
         numeric_lines = sum(
-            1 for line in lines
-            if line.strip() and re.match(r'^[\d\s\-\.\,]+$', line.strip())
+            1
+            for line in lines
+            if line.strip() and re.match(r"^[\d\s\-\.\,]+$", line.strip())
         )
 
         return {
@@ -500,10 +521,7 @@ class OCRService:
         }
 
     def is_text_quality_acceptable(
-        self,
-        text: str,
-        min_words: int = 100,
-        max_short_line_ratio: float = 0.5
+        self, text: str, min_words: int = 100, max_short_line_ratio: float = 0.5
     ) -> Tuple[bool, str]:
         """
         Check if extracted text meets quality thresholds.
@@ -528,7 +546,10 @@ class OCRService:
         if non_empty > 0:
             short_ratio = stats["short_lines"] / non_empty
             if short_ratio > max_short_line_ratio:
-                return False, f"Too many short lines: {short_ratio:.1%} > {max_short_line_ratio:.1%}"
+                return (
+                    False,
+                    f"Too many short lines: {short_ratio:.1%} > {max_short_line_ratio:.1%}",
+                )
 
         return True, "OK"
 

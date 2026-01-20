@@ -54,6 +54,7 @@ class LLMChatService:
         """Get system prompt (cached after first load)."""
         if cls._system_prompt is None:
             from services.prompts import get_system_prompt
+
             cls._system_prompt = get_system_prompt()
         return cls._system_prompt
 

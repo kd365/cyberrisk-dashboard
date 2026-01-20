@@ -39,56 +39,177 @@ class GraphBuilderService:
     # Concept categories for classification - enhanced for cybersecurity domain
     CONCEPT_CATEGORIES = {
         "RISK": [
-            "risk", "threat", "vulnerability", "breach", "attack", "exposure",
-            "ransomware", "malware", "phishing", "cyber attack", "data loss",
-            "security incident", "intrusion", "exploit", "compromise", "hacker",
-            "cyberattack", "apt", "threat actor", "nation-state", "insider threat",
+            "risk",
+            "threat",
+            "vulnerability",
+            "breach",
+            "attack",
+            "exposure",
+            "ransomware",
+            "malware",
+            "phishing",
+            "cyber attack",
+            "data loss",
+            "security incident",
+            "intrusion",
+            "exploit",
+            "compromise",
+            "hacker",
+            "cyberattack",
+            "apt",
+            "threat actor",
+            "nation-state",
+            "insider threat",
         ],
         "TECHNOLOGY": [
-            "ai", "artificial intelligence", "machine learning", "cloud", "platform",
-            "saas", "endpoint", "zero trust", "xdr", "edr", "siem", "soar",
-            "automation", "orchestration", "devsecops", "container", "kubernetes",
-            "api security", "identity", "iam", "mfa", "sso", "encryption",
-            "firewall", "network security", "cloud security", "data protection",
+            "ai",
+            "artificial intelligence",
+            "machine learning",
+            "cloud",
+            "platform",
+            "saas",
+            "endpoint",
+            "zero trust",
+            "xdr",
+            "edr",
+            "siem",
+            "soar",
+            "automation",
+            "orchestration",
+            "devsecops",
+            "container",
+            "kubernetes",
+            "api security",
+            "identity",
+            "iam",
+            "mfa",
+            "sso",
+            "encryption",
+            "firewall",
+            "network security",
+            "cloud security",
+            "data protection",
         ],
         "PRODUCT": [
-            "product", "solution", "module", "service", "offering", "suite",
-            "falcon", "cortex", "chronicle", "sentinel", "defender", "crowdstrike",
-            "prisma", "cloudflare", "zscaler", "okta", "cyberark", "sailpoint",
+            "product",
+            "solution",
+            "module",
+            "service",
+            "offering",
+            "suite",
+            "falcon",
+            "cortex",
+            "chronicle",
+            "sentinel",
+            "defender",
+            "crowdstrike",
+            "prisma",
+            "cloudflare",
+            "zscaler",
+            "okta",
+            "cyberark",
+            "sailpoint",
         ],
         "MARKET": [
-            "market", "competition", "industry", "sector", "demand", "tam",
-            "market share", "addressable market", "enterprise", "smb", "mid-market",
-            "customer", "partner", "channel", "go-to-market", "land and expand",
+            "market",
+            "competition",
+            "industry",
+            "sector",
+            "demand",
+            "tam",
+            "market share",
+            "addressable market",
+            "enterprise",
+            "smb",
+            "mid-market",
+            "customer",
+            "partner",
+            "channel",
+            "go-to-market",
+            "land and expand",
         ],
         "COMPETITOR": [
-            "competitor", "competition", "market leader", "rival", "alternative",
-            "competitive", "differentiation", "positioning",
+            "competitor",
+            "competition",
+            "market leader",
+            "rival",
+            "alternative",
+            "competitive",
+            "differentiation",
+            "positioning",
         ],
         "OPPORTUNITY": [
-            "growth", "opportunity", "expansion", "innovation", "potential",
-            "partnership", "acquisition", "merger", "new product", "launch",
-            "international", "geographic expansion", "upsell", "cross-sell",
+            "growth",
+            "opportunity",
+            "expansion",
+            "innovation",
+            "potential",
+            "partnership",
+            "acquisition",
+            "merger",
+            "new product",
+            "launch",
+            "international",
+            "geographic expansion",
+            "upsell",
+            "cross-sell",
         ],
         "FINANCIAL": [
-            "revenue", "margin", "arr", "earnings", "profit", "cost",
-            "subscription", "recurring", "billings", "backlog", "guidance",
-            "gross margin", "operating margin", "free cash flow", "ebitda",
+            "revenue",
+            "margin",
+            "arr",
+            "earnings",
+            "profit",
+            "cost",
+            "subscription",
+            "recurring",
+            "billings",
+            "backlog",
+            "guidance",
+            "gross margin",
+            "operating margin",
+            "free cash flow",
+            "ebitda",
         ],
     }
 
     # Entity blocklist - filter out common noise from extraction
     ENTITY_BLOCKLIST = {
         # XBRL/PDF artifacts
-        "xbrl", "xmlns", "fasb", "dei", "gaap", "us-gaap", "iso4217",
-        "devicergb", "flatedecode", "endobj", "xref", "srt",
+        "xbrl",
+        "xmlns",
+        "fasb",
+        "dei",
+        "gaap",
+        "us-gaap",
+        "iso4217",
+        "devicergb",
+        "flatedecode",
+        "endobj",
+        "xref",
+        "srt",
         # Generic terms that aren't useful entities
-        "the company", "our company", "the period", "fiscal year",
-        "quarter", "the registrant", "the board", "the securities",
-        "the exchange", "the commission", "annual report", "form 10-k",
+        "the company",
+        "our company",
+        "the period",
+        "fiscal year",
+        "quarter",
+        "the registrant",
+        "the board",
+        "the securities",
+        "the exchange",
+        "the commission",
+        "annual report",
+        "form 10-k",
         # Website/navigation artifacts
-        "motley fool", "fool.com", "arrow-thin-down", "click here",
-        "read more", "sign up", "log in", "subscribe",
+        "motley fool",
+        "fool.com",
+        "arrow-thin-down",
+        "click here",
+        "read more",
+        "sign up",
+        "log in",
+        "subscribe",
     }
 
     def __init__(self):
@@ -320,12 +441,10 @@ class GraphBuilderService:
         """
         try:
             # Check if it's a PDF - use OCR service
-            if s3_key.lower().endswith('.pdf'):
+            if s3_key.lower().endswith(".pdf"):
                 logger.info(f"Using OCR extraction for PDF: {s3_key}")
                 text = self.ocr_service.extract_text_from_s3(
-                    s3_key=s3_key,
-                    use_ocr=True,
-                    use_cache=True
+                    s3_key=s3_key, use_ocr=True, use_cache=True
                 )
                 if text:
                     # Validate quality
@@ -498,6 +617,7 @@ class GraphBuilderService:
             if isinstance(alternate_names, str):
                 try:
                     import json
+
                     alternate_names = json.loads(alternate_names)
                 except (json.JSONDecodeError, TypeError):
                     alternate_names = []
@@ -514,7 +634,9 @@ class GraphBuilderService:
                 exchange=company.get("exchange"),
                 location=company.get("location"),
                 domain=company.get("domain"),
-                alternate_names=alternate_names if isinstance(alternate_names, list) else [],
+                alternate_names=(
+                    alternate_names if isinstance(alternate_names, list) else []
+                ),
             )
             count += 1
             logger.debug(f"Ensured tracked company node: {ticker}")
@@ -568,6 +690,7 @@ class GraphBuilderService:
             if isinstance(alternate_names, str):
                 try:
                     import json
+
                     alternate_names = json.loads(alternate_names)
                 except (json.JSONDecodeError, TypeError):
                     alternate_names = []
@@ -584,7 +707,9 @@ class GraphBuilderService:
                 exchange=company.get("exchange"),
                 location=company.get("location"),
                 domain=company.get("domain"),
-                alternate_names=alternate_names if isinstance(alternate_names, list) else [],
+                alternate_names=(
+                    alternate_names if isinstance(alternate_names, list) else []
+                ),
             )
         elif taxonomy:
             # Fallback: Use hardcoded taxonomy (for companies not in DB)
@@ -663,7 +788,13 @@ class GraphBuilderService:
                 continue
 
             # Skip numeric-only entities
-            if entity_text.replace(",", "").replace(".", "").replace("-", "").replace(" ", "").isdigit():
+            if (
+                entity_text.replace(",", "")
+                .replace(".", "")
+                .replace("-", "")
+                .replace(" ", "")
+                .isdigit()
+            ):
                 continue
 
             # Skip entities with too few alphabetic characters
@@ -679,7 +810,10 @@ class GraphBuilderService:
                 continue
 
             # Skip blocklisted entities (noise filtering)
-            if entity_text.lower() in self.ENTITY_BLOCKLIST or normalized in self.ENTITY_BLOCKLIST:
+            if (
+                entity_text.lower() in self.ENTITY_BLOCKLIST
+                or normalized in self.ENTITY_BLOCKLIST
+            ):
                 continue
 
             seen_entities.add(normalized)
@@ -701,11 +835,11 @@ class GraphBuilderService:
 
                     # Link to the existing tracked company node (don't create duplicate)
                     self.neo4j.link_document_organization(
-                        doc_id=doc_id,
-                        org_normalized=canonical_normalized,
-                        count=1
+                        doc_id=doc_id, org_normalized=canonical_normalized, count=1
                     )
-                    logger.debug(f"Linked '{entity_text}' to tracked company {canonical_ticker}")
+                    logger.debug(
+                        f"Linked '{entity_text}' to tracked company {canonical_ticker}"
+                    )
                 else:
                     # Not a tracked company - create as mentioned organization
                     self.neo4j.create_organization(name=entity_text)
@@ -780,7 +914,13 @@ class GraphBuilderService:
                 continue
 
             # Skip numeric-only phrases (dates, amounts, page numbers, etc.)
-            if phrase_text.replace(",", "").replace(".", "").replace("-", "").replace(" ", "").isdigit():
+            if (
+                phrase_text.replace(",", "")
+                .replace(".", "")
+                .replace("-", "")
+                .replace(" ", "")
+                .isdigit()
+            ):
                 continue
 
             # Skip phrases that are mostly numbers (e.g., "2024", "$1.5 million")
@@ -868,31 +1008,49 @@ class GraphBuilderService:
 
         # Remove common corporate suffixes
         suffixes = [
-            ", inc.", ", inc", " inc.", " inc",
-            ", llc", " llc", ", l.l.c.", " l.l.c.",
-            ", corp.", " corp.", ", corporation", " corporation",
-            ", ltd.", " ltd.", ", limited", " limited",
-            ", co.", " co.", ", company", " company",
-            ", plc", " plc", ", n.v.", " n.v.",
+            ", inc.",
+            ", inc",
+            " inc.",
+            " inc",
+            ", llc",
+            " llc",
+            ", l.l.c.",
+            " l.l.c.",
+            ", corp.",
+            " corp.",
+            ", corporation",
+            " corporation",
+            ", ltd.",
+            " ltd.",
+            ", limited",
+            " limited",
+            ", co.",
+            " co.",
+            ", company",
+            " company",
+            ", plc",
+            " plc",
+            ", n.v.",
+            " n.v.",
         ]
         for suffix in suffixes:
             if name.endswith(suffix):
-                name = name[:-len(suffix)]
+                name = name[: -len(suffix)]
 
         # Remove common prefixes
         prefixes = ["the ", "a ", "an "]
         for prefix in prefixes:
             if name.startswith(prefix):
-                name = name[len(prefix):]
+                name = name[len(prefix) :]
 
         # Replace special characters with underscore
-        name = re.sub(r'[^a-z0-9]+', '_', name)
+        name = re.sub(r"[^a-z0-9]+", "_", name)
 
         # Remove leading/trailing underscores
-        name = name.strip('_')
+        name = name.strip("_")
 
         # Collapse multiple underscores
-        name = re.sub(r'_+', '_', name)
+        name = re.sub(r"_+", "_", name)
 
         return name
 
@@ -1080,7 +1238,9 @@ class GraphBuilderService:
         # Infer relationships
         results["entity_relationships"] = self.infer_entity_relationships(ticker)
         results["concept_relationships"] = self.infer_concept_relationships(ticker)
-        results["company_concept_associations"] = self.create_company_concept_associations(ticker)
+        results["company_concept_associations"] = (
+            self.create_company_concept_associations(ticker)
+        )
 
         logger.info(f"Full graph build complete: {results}")
         return results

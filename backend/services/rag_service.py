@@ -55,8 +55,7 @@ class RAGService:
 
         # AWS Bedrock client for embeddings
         config = Config(
-            region_name=self.region,
-            retries={"max_attempts": 3, "mode": "adaptive"}
+            region_name=self.region, retries={"max_attempts": 3, "mode": "adaptive"}
         )
         self.bedrock = boto3.client("bedrock-runtime", config=config)
 
@@ -79,7 +78,7 @@ class RAGService:
             port=self.db_port,
             database=self.db_name,
             user=self.db_user,
-            password=self.db_password
+            password=self.db_password,
         )
 
     def _init_schema(self):
@@ -142,10 +141,7 @@ class RAGService:
     # =========================================================================
 
     def split_text(
-        self,
-        text: str,
-        chunk_size: int = None,
-        chunk_overlap: int = None
+        self, text: str, chunk_size: int = None, chunk_overlap: int = None
     ) -> List[Dict]:
         """
         Split text into overlapping chunks for embedding.
@@ -173,7 +169,10 @@ class RAGService:
         def split_recursive(text: str, separators: List[str]) -> List[str]:
             """Recursively split text using separators."""
             if not separators:
-                return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size - chunk_overlap)]
+                return [
+                    text[i : i + chunk_size]
+                    for i in range(0, len(text), chunk_size - chunk_overlap)
+                ]
 
             separator = separators[0]
             splits = text.split(separator) if separator else [text]
@@ -210,11 +209,13 @@ class RAGService:
                 "content": chunk,
                 "index": i,
                 "char_start": sum(len(raw_chunks[j]) for j in range(i)),
-                "char_end": sum(len(raw_chunks[j]) for j in range(i + 1))
+                "char_end": sum(len(raw_chunks[j]) for j in range(i + 1)),
             }
             chunks.append(chunk_data)
 
-        logger.info(f"Split text into {len(chunks)} chunks (avg {len(text) // max(len(chunks), 1)} chars each)")
+        logger.info(
+            f"Split text into {len(chunks)} chunks (avg {len(text) // max(len(chunks), 1)} chars each)"
+        )
         return chunks
 
     # =========================================================================
@@ -240,11 +241,13 @@ class RAGService:
                 modelId=self.EMBEDDING_MODEL,
                 contentType="application/json",
                 accept="application/json",
-                body=json.dumps({
-                    "inputText": text,
-                    "dimensions": self.EMBEDDING_DIMENSIONS,
-                    "normalize": True
-                })
+                body=json.dumps(
+                    {
+                        "inputText": text,
+                        "dimensions": self.EMBEDDING_DIMENSIONS,
+                        "normalize": True,
+                    }
+                ),
             )
 
             result = json.loads(response["body"].read())
@@ -253,7 +256,9 @@ class RAGService:
             if embedding and len(embedding) == self.EMBEDDING_DIMENSIONS:
                 return embedding
             else:
-                logger.error(f"Unexpected embedding dimensions: {len(embedding) if embedding else 0}")
+                logger.error(
+                    f"Unexpected embedding dimensions: {len(embedding) if embedding else 0}"
+                )
                 return None
 
         except Exception as e:
@@ -261,9 +266,7 @@ class RAGService:
             return None
 
     def generate_embeddings_batch(
-        self,
-        texts: List[str],
-        batch_size: int = 10
+        self, texts: List[str], batch_size: int = 10
     ) -> List[Optional[List[float]]]:
         """
         Generate embeddings for multiple texts.
@@ -278,7 +281,7 @@ class RAGService:
         embeddings = []
 
         for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+            batch = texts[i : i + batch_size]
             for text in batch:
                 embedding = self.generate_embedding(text)
                 embeddings.append(embedding)
@@ -297,7 +300,7 @@ class RAGService:
         text: str,
         ticker: str = None,
         document_type: str = None,
-        metadata: Dict = None
+        metadata: Dict = None,
     ) -> int:
         """
         Index a document by chunking, embedding, and storing in pgvector.
@@ -333,8 +336,7 @@ class RAGService:
         try:
             # Delete existing chunks for this document (re-indexing)
             cur.execute(
-                "DELETE FROM document_chunks WHERE document_id = %s",
-                (document_id,)
+                "DELETE FROM document_chunks WHERE document_id = %s", (document_id,)
             )
 
             # Insert new chunks
@@ -347,22 +349,25 @@ class RAGService:
                     **(metadata or {}),
                     "char_start": chunk.get("char_start"),
                     "char_end": chunk.get("char_end"),
-                    "indexed_at": datetime.utcnow().isoformat()
+                    "indexed_at": datetime.utcnow().isoformat(),
                 }
 
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO document_chunks
                     (document_id, ticker, document_type, chunk_index, content, embedding, metadata)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    document_id,
-                    ticker,
-                    document_type,
-                    chunk["index"],
-                    chunk["content"],
-                    embedding,
-                    json.dumps(chunk_metadata)
-                ))
+                """,
+                    (
+                        document_id,
+                        ticker,
+                        document_type,
+                        chunk["index"],
+                        chunk["content"],
+                        embedding,
+                        json.dumps(chunk_metadata),
+                    ),
+                )
                 indexed += 1
 
             conn.commit()
@@ -384,7 +389,7 @@ class RAGService:
         ticker: str = None,
         document_type: str = None,
         limit: int = 5,
-        similarity_threshold: float = 0.7
+        similarity_threshold: float = 0.7,
     ) -> List[Dict]:
         """
         Search for relevant document chunks using semantic similarity.
@@ -437,22 +442,26 @@ class RAGService:
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s
             """
-            params.extend([query_embedding, similarity_threshold, query_embedding, limit])
+            params.extend(
+                [query_embedding, similarity_threshold, query_embedding, limit]
+            )
 
             cur.execute(sql, params)
             rows = cur.fetchall()
 
             results = []
             for row in rows:
-                results.append({
-                    "document_id": row[0],
-                    "ticker": row[1],
-                    "document_type": row[2],
-                    "chunk_index": row[3],
-                    "content": row[4],
-                    "metadata": row[5],
-                    "similarity": float(row[6])
-                })
+                results.append(
+                    {
+                        "document_id": row[0],
+                        "ticker": row[1],
+                        "document_type": row[2],
+                        "chunk_index": row[3],
+                        "content": row[4],
+                        "metadata": row[5],
+                        "similarity": float(row[6]),
+                    }
+                )
 
             logger.info(f"Found {len(results)} relevant chunks for query")
             return results
@@ -466,10 +475,7 @@ class RAGService:
             conn.close()
 
     def get_context_for_query(
-        self,
-        query: str,
-        ticker: str = None,
-        max_tokens: int = 3000
+        self, query: str, ticker: str = None, max_tokens: int = 3000
     ) -> str:
         """
         Get formatted context string for LLM from relevant documents.
@@ -495,7 +501,9 @@ class RAGService:
         max_chars = max_tokens * 4  # Rough token-to-char estimate
 
         for result in results:
-            chunk_text = f"[{result['document_type']} - {result['ticker']}]\n{result['content']}"
+            chunk_text = (
+                f"[{result['document_type']} - {result['ticker']}]\n{result['content']}"
+            )
 
             if total_chars + len(chunk_text) > max_chars:
                 break
@@ -505,7 +513,9 @@ class RAGService:
 
         context = "\n\n---\n\n".join(context_parts)
 
-        logger.info(f"Retrieved {len(context_parts)} passages ({total_chars} chars) for context")
+        logger.info(
+            f"Retrieved {len(context_parts)} passages ({total_chars} chars) for context"
+        )
         return context
 
     # =========================================================================
@@ -544,7 +554,7 @@ class RAGService:
                     "ticker": row[1],
                     "document_type": row[2],
                     "chunk_count": row[3],
-                    "indexed_at": row[4].isoformat() if row[4] else None
+                    "indexed_at": row[4].isoformat() if row[4] else None,
                 }
                 for row in rows
             ]
@@ -560,8 +570,7 @@ class RAGService:
 
         try:
             cur.execute(
-                "DELETE FROM document_chunks WHERE document_id = %s",
-                (document_id,)
+                "DELETE FROM document_chunks WHERE document_id = %s", (document_id,)
             )
             deleted = cur.rowcount
             conn.commit()
@@ -579,7 +588,8 @@ class RAGService:
 
         try:
             if ticker:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT
                         COUNT(DISTINCT document_id) as document_count,
                         COUNT(*) as chunk_count,
@@ -587,7 +597,9 @@ class RAGService:
                         AVG(LENGTH(content)) as avg_chunk_size
                     FROM document_chunks
                     WHERE ticker = %s
-                """, (ticker,))
+                """,
+                    (ticker,),
+                )
             else:
                 cur.execute("""
                     SELECT
@@ -603,7 +615,7 @@ class RAGService:
             stats = {
                 "documents_indexed": row[0] or 0,
                 "total_chunks": row[1] or 0,
-                "avg_chunk_size": int(row[3]) if row[3] else 0
+                "avg_chunk_size": int(row[3]) if row[3] else 0,
             }
 
             if ticker:
@@ -623,10 +635,9 @@ class RAGService:
 # Integration with OCR Service
 # =============================================================================
 
+
 def index_s3_document(
-    s3_key: str,
-    ticker: str = None,
-    document_type: str = None
+    s3_key: str, ticker: str = None, document_type: str = None
 ) -> Dict:
     """
     Convenience function to index a document from S3.
@@ -653,7 +664,7 @@ def index_s3_document(
             "s3_key": s3_key,
             "success": False,
             "error": "Failed to extract text",
-            "chunks_indexed": 0
+            "chunks_indexed": 0,
         }
 
     # Check quality
@@ -667,7 +678,7 @@ def index_s3_document(
         text=text,
         ticker=ticker,
         document_type=document_type,
-        metadata={"s3_key": s3_key, "source": "s3"}
+        metadata={"s3_key": s3_key, "source": "s3"},
     )
 
     result = {
@@ -676,7 +687,7 @@ def index_s3_document(
         "chunks_indexed": chunks_indexed,
         "text_length": len(text),
         "ticker": ticker,
-        "document_type": document_type
+        "document_type": document_type,
     }
 
     if quality_warning:

@@ -334,63 +334,51 @@ COMPANY_ALIASES = {
     "crowdstrike holdings": "CRWD",
     "crowd strike": "CRWD",
     "crwd": "CRWD",
-
     # Palo Alto Networks variations
     "palo alto networks": "PANW",
     "palo alto": "PANW",
     "paloalto": "PANW",
     "pan": "PANW",
     "panw": "PANW",
-
     # Zscaler variations
     "zscaler": "ZS",
     "z scaler": "ZS",
     "zs": "ZS",
-
     # Fortinet variations
     "fortinet": "FTNT",
     "forti": "FTNT",
     "ftnt": "FTNT",
-
     # SentinelOne variations
     "sentinelone": "S",
     "sentinel one": "S",
     "sentinel": "S",
     "s1": "S",
-
     # Cloudflare variations
     "cloudflare": "NET",
     "cloud flare": "NET",
     "net": "NET",
-
     # Okta variations
     "okta": "OKTA",
-
     # CyberArk variations
     "cyberark": "CYBR",
     "cyber ark": "CYBR",
     "cyberark software": "CYBR",
     "cybr": "CYBR",
-
     # Tenable variations
     "tenable": "TENB",
     "tenable holdings": "TENB",
     "tenb": "TENB",
-
     # Qualys variations
     "qualys": "QLYS",
     "qlys": "QLYS",
-
     # Rapid7 variations
     "rapid7": "RPD",
     "rapid 7": "RPD",
     "rpd": "RPD",
-
     # Varonis variations
     "varonis": "VRNS",
     "varonis systems": "VRNS",
     "vrns": "VRNS",
-
     # Additional common cybersecurity companies (not tracked but often mentioned)
     # These map to None to indicate "known but not tracked"
     "microsoft": None,
@@ -457,10 +445,20 @@ def resolve_company_name(name: str) -> dict:
     normalized = name.lower().strip()
 
     # Remove common suffixes for matching
-    for suffix in [", inc.", ", inc", " inc.", " inc", ", llc", " llc",
-                   ", corp.", " corp.", ", ltd.", " ltd."]:
+    for suffix in [
+        ", inc.",
+        ", inc",
+        " inc.",
+        " inc",
+        ", llc",
+        " llc",
+        ", corp.",
+        " corp.",
+        ", ltd.",
+        " ltd.",
+    ]:
         if normalized.endswith(suffix):
-            normalized = normalized[:-len(suffix)].strip()
+            normalized = normalized[: -len(suffix)].strip()
 
     # Check alias lookup
     if normalized in COMPANY_ALIASES:

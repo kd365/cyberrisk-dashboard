@@ -49,7 +49,9 @@ def get_tracked_companies() -> list:
             {
                 "ticker": ticker,
                 "company_name": info["name"],
-                "sector": info.get("cyber_sector", "Cybersecurity").replace("_", " ").title()
+                "sector": info.get("cyber_sector", "Cybersecurity")
+                .replace("_", " ")
+                .title(),
             }
             for ticker, info in TRACKED_COMPANIES.items()
         ]
@@ -70,9 +72,7 @@ def refresh_company_cache():
 def get_tracked_companies_str() -> str:
     """Get formatted string of tracked companies for the prompt."""
     companies = get_tracked_companies()
-    return ", ".join(
-        f"{c['ticker']} ({c['company_name']})" for c in companies
-    )
+    return ", ".join(f"{c['ticker']} ({c['company_name']})" for c in companies)
 
 
 def get_tracked_companies_detailed() -> str:
@@ -88,6 +88,7 @@ def get_tracked_companies_detailed() -> str:
 # =============================================================================
 # Main System Prompt
 # =============================================================================
+
 
 def get_system_prompt() -> str:
     """

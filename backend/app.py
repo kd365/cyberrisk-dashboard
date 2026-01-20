@@ -2113,7 +2113,9 @@ def rag_index_ticker(ticker):
 
         if not artifacts:
             return (
-                jsonify({"error": f"No artifacts found for {ticker}", "ticker": ticker}),
+                jsonify(
+                    {"error": f"No artifacts found for {ticker}", "ticker": ticker}
+                ),
                 404,
             )
 
@@ -2139,7 +2141,9 @@ def rag_index_ticker(ticker):
                     result = index_s3_document(s3_key, ticker, doc_type)
                     results.append({"s3_key": s3_key, "status": "success", **result})
                 except Exception as e:
-                    results.append({"s3_key": s3_key, "status": "error", "error": str(e)})
+                    results.append(
+                        {"s3_key": s3_key, "status": "error", "error": str(e)}
+                    )
 
         success_count = sum(1 for r in results if r["status"] == "success")
 
@@ -2290,12 +2294,10 @@ def run_migration():
         cursor = conn.cursor()
 
         # Add alternate_names column if it doesn't exist
-        cursor.execute(
-            """
+        cursor.execute("""
             ALTER TABLE companies
             ADD COLUMN IF NOT EXISTS alternate_names TEXT
-        """
-        )
+        """)
         conn.commit()
 
         cursor.close()
@@ -2446,9 +2448,15 @@ def build_all_knowledge_graphs():
         }
 
         try:
-            relationship_stats["entity_relationships"] = builder.infer_entity_relationships()
-            relationship_stats["concept_relationships"] = builder.infer_concept_relationships()
-            relationship_stats["company_concept_associations"] = builder.create_company_concept_associations()
+            relationship_stats["entity_relationships"] = (
+                builder.infer_entity_relationships()
+            )
+            relationship_stats["concept_relationships"] = (
+                builder.infer_concept_relationships()
+            )
+            relationship_stats["company_concept_associations"] = (
+                builder.create_company_concept_associations()
+            )
         except Exception as e:
             print(f"Warning: Error inferring relationships: {e}")
 
@@ -2548,7 +2556,9 @@ def infer_graph_relationships():
         results = {
             "entity_relationships": builder.infer_entity_relationships(ticker),
             "concept_relationships": builder.infer_concept_relationships(ticker),
-            "company_concept_associations": builder.create_company_concept_associations(ticker),
+            "company_concept_associations": builder.create_company_concept_associations(
+                ticker
+            ),
         }
 
         return jsonify(

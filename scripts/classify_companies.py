@@ -34,7 +34,12 @@ KNOWN_CLASSIFICATIONS = {
     # Endpoint Security
     "CRWD": {
         "cyber_sector": "endpoint_security",
-        "cyber_focus": ["EDR", "XDR", "Threat Intelligence", "Cloud Workload Protection"],
+        "cyber_focus": [
+            "EDR",
+            "XDR",
+            "Threat Intelligence",
+            "Cloud Workload Protection",
+        ],
         "gics_sector": "Information Technology",
         "gics_industry": "Systems Software",
         "gics_sub_industry_code": "45103020",
@@ -54,7 +59,6 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "sentinelone.com",
         "alternate_names": ["SentinelOne", "Sentinel One", "S1"],
     },
-
     # Network Security
     "PANW": {
         "cyber_sector": "network_security",
@@ -89,7 +93,6 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "checkpoint.com",
         "alternate_names": ["Check Point", "CheckPoint", "Check Point Software"],
     },
-
     # Cloud Security
     "ZS": {
         "cyber_sector": "cloud_security",
@@ -113,7 +116,6 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "cloudflare.com",
         "alternate_names": ["Cloudflare", "Cloud Flare"],
     },
-
     # Identity & Access Management
     "OKTA": {
         "cyber_sector": "identity_access",
@@ -148,11 +150,14 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "sailpoint.com",
         "alternate_names": ["SailPoint", "Sail Point"],
     },
-
     # Vulnerability Management
     "TENB": {
         "cyber_sector": "vulnerability_management",
-        "cyber_focus": ["Vulnerability Management", "Exposure Management", "OT Security"],
+        "cyber_focus": [
+            "Vulnerability Management",
+            "Exposure Management",
+            "OT Security",
+        ],
         "gics_sector": "Information Technology",
         "gics_industry": "Systems Software",
         "gics_sub_industry_code": "45103020",
@@ -172,7 +177,6 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "qualys.com",
         "alternate_names": ["Qualys"],
     },
-
     # Security Operations
     "RPD": {
         "cyber_sector": "security_operations",
@@ -196,7 +200,6 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "splunk.com",
         "alternate_names": ["Splunk"],
     },
-
     # Data Security
     "VRNS": {
         "cyber_sector": "data_security",
@@ -209,7 +212,6 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "varonis.com",
         "alternate_names": ["Varonis", "Varonis Systems"],
     },
-
     # Email Security
     "PFPT": {
         "cyber_sector": "email_security",
@@ -222,7 +224,6 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "proofpoint.com",
         "alternate_names": ["Proofpoint"],
     },
-
     # Application Security
     "SNYK": {
         "cyber_sector": "application_security",
@@ -235,7 +236,6 @@ KNOWN_CLASSIFICATIONS = {
         "domain": "snyk.io",
         "alternate_names": ["Snyk"],
     },
-
     # Managed Security / MDR
     "SCWX": {
         "cyber_sector": "managed_security",
@@ -252,15 +252,48 @@ KNOWN_CLASSIFICATIONS = {
 
 # Sector inference based on company name/description keywords
 SECTOR_KEYWORDS = {
-    "endpoint_security": ["endpoint", "edr", "xdr", "antivirus", "malware", "workstation"],
+    "endpoint_security": [
+        "endpoint",
+        "edr",
+        "xdr",
+        "antivirus",
+        "malware",
+        "workstation",
+    ],
     "network_security": ["firewall", "network", "ngfw", "sd-wan", "intrusion"],
     "cloud_security": ["cloud", "sase", "casb", "cwpp", "saas security", "zero trust"],
-    "identity_access": ["identity", "iam", "pam", "sso", "mfa", "authentication", "access management"],
+    "identity_access": [
+        "identity",
+        "iam",
+        "pam",
+        "sso",
+        "mfa",
+        "authentication",
+        "access management",
+    ],
     "security_operations": ["siem", "soar", "soc", "analytics", "monitoring", "log"],
-    "application_security": ["appsec", "sast", "dast", "devsecops", "code security", "software composition"],
-    "data_security": ["data protection", "dlp", "encryption", "data security", "backup"],
+    "application_security": [
+        "appsec",
+        "sast",
+        "dast",
+        "devsecops",
+        "code security",
+        "software composition",
+    ],
+    "data_security": [
+        "data protection",
+        "dlp",
+        "encryption",
+        "data security",
+        "backup",
+    ],
     "email_security": ["email", "phishing", "spam", "messaging security"],
-    "vulnerability_management": ["vulnerability", "scanning", "pen test", "attack surface"],
+    "vulnerability_management": [
+        "vulnerability",
+        "scanning",
+        "pen test",
+        "attack surface",
+    ],
     "managed_security": ["managed", "mdr", "mssp", "consulting"],
 }
 
@@ -332,11 +365,13 @@ Respond with JSON only:
 
         response = bedrock.invoke_model(
             modelId="anthropic.claude-3-haiku-20240307-v1:0",
-            body=json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 200,
-                "messages": [{"role": "user", "content": prompt}]
-            })
+            body=json.dumps(
+                {
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": 200,
+                    "messages": [{"role": "user", "content": prompt}],
+                }
+            ),
         )
 
         result = json.loads(response["body"].read())
@@ -344,7 +379,8 @@ Respond with JSON only:
 
         # Parse JSON from response
         import re
-        json_match = re.search(r'\{[^}]+\}', content)
+
+        json_match = re.search(r"\{[^}]+\}", content)
         if json_match:
             return json.loads(json_match.group())
 
@@ -366,7 +402,7 @@ def update_company_taxonomy(
     location: str = None,
     domain: str = None,
     alternate_names: List[str] = None,
-    dry_run: bool = False
+    dry_run: bool = False,
 ) -> bool:
     """Update a company's taxonomy in the database."""
     import json
@@ -377,7 +413,8 @@ def update_company_taxonomy(
 
     try:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE companies
             SET cyber_sector = %s,
                 cyber_focus = %s,
@@ -389,18 +426,20 @@ def update_company_taxonomy(
                 domain = %s,
                 alternate_names = %s
             WHERE ticker = %s
-        """, (
-            cyber_sector,
-            cyber_focus,
-            gics_sector or "Information Technology",
-            gics_industry or "Systems Software",
-            gics_sub_industry_code or "45103020",
-            exchange,
-            location,
-            domain,
-            json.dumps(alternate_names) if alternate_names else None,
-            ticker
-        ))
+        """,
+            (
+                cyber_sector,
+                cyber_focus,
+                gics_sector or "Information Technology",
+                gics_industry or "Systems Software",
+                gics_sub_industry_code or "45103020",
+                exchange,
+                location,
+                domain,
+                json.dumps(alternate_names) if alternate_names else None,
+                ticker,
+            ),
+        )
         conn.commit()
         cursor.close()
         return True
@@ -411,9 +450,15 @@ def update_company_taxonomy(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Classify companies with cybersecurity taxonomy")
-    parser.add_argument("--dry-run", action="store_true", help="Don't actually update database")
-    parser.add_argument("--use-llm", action="store_true", help="Use LLM to classify unknown companies")
+    parser = argparse.ArgumentParser(
+        description="Classify companies with cybersecurity taxonomy"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Don't actually update database"
+    )
+    parser.add_argument(
+        "--use-llm", action="store_true", help="Use LLM to classify unknown companies"
+    )
     parser.add_argument("--ticker", help="Only classify specific ticker")
     args = parser.parse_args()
 
@@ -439,7 +484,7 @@ def main():
     if args.ticker:
         cursor.execute(
             "SELECT ticker, company_name, sector, description, cyber_sector FROM companies WHERE ticker = %s",
-            (args.ticker.upper(),)
+            (args.ticker.upper(),),
         )
     else:
         cursor.execute(
@@ -473,7 +518,8 @@ def main():
             print(f"  Known classification: {classification['cyber_sector']}")
 
             success = update_company_taxonomy(
-                conn, ticker,
+                conn,
+                ticker,
                 classification["cyber_sector"],
                 classification["cyber_focus"],
                 classification.get("gics_sector"),
@@ -483,7 +529,7 @@ def main():
                 classification.get("location"),
                 classification.get("domain"),
                 classification.get("alternate_names"),
-                dry_run=args.dry_run
+                dry_run=args.dry_run,
             )
 
             if success:
@@ -498,10 +544,11 @@ def main():
             print(f"  Inferred sector: {inferred_sector}")
 
             success = update_company_taxonomy(
-                conn, ticker,
+                conn,
+                ticker,
                 inferred_sector,
                 [],  # No specific focus inferred
-                dry_run=args.dry_run
+                dry_run=args.dry_run,
             )
 
             if success:
@@ -519,10 +566,11 @@ def main():
                 print(f"  LLM classified: {llm_result.get('cyber_sector')}")
 
                 success = update_company_taxonomy(
-                    conn, ticker,
+                    conn,
+                    ticker,
                     llm_result.get("cyber_sector", "security_operations"),
                     llm_result.get("cyber_focus", []),
-                    dry_run=args.dry_run
+                    dry_run=args.dry_run,
                 )
 
                 if success:
@@ -534,10 +582,11 @@ def main():
         # Default fallback
         print(f"  Could not classify - using default: security_operations")
         success = update_company_taxonomy(
-            conn, ticker,
+            conn,
+            ticker,
             "security_operations",  # Safe default
             [],
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
         )
 
         if success:
