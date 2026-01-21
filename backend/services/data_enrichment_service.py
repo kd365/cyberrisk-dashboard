@@ -338,8 +338,10 @@ class VulnerabilityEventService:
         # Try CVSS 3.1 first, then 3.0, then 2.0
         for version in ["cvssMetricV31", "cvssMetricV30", "cvssMetricV2"]:
             if version in metrics and metrics[version]:
-                return metrics[version][0].get("cvssData", {}).get(
-                    "baseSeverity", "UNKNOWN"
+                return (
+                    metrics[version][0]
+                    .get("cvssData", {})
+                    .get("baseSeverity", "UNKNOWN")
                 )
 
         return "UNKNOWN"
@@ -384,7 +386,9 @@ class VulnerabilityEventService:
                     if result:
                         total_created += 1
                 except Exception as e:
-                    logger.warning(f"Failed to create vulnerability {vuln['cve_id']}: {e}")
+                    logger.warning(
+                        f"Failed to create vulnerability {vuln['cve_id']}: {e}"
+                    )
 
         return {"ticker": ticker, "vulnerabilities_created": total_created}
 
@@ -411,7 +415,9 @@ class VulnerabilityEventService:
         # Also try company name if different from CPE names
         if company_name:
             # Simplify company name for search
-            simple_name = company_name.lower().replace(" inc.", "").replace(" corp.", "").strip()
+            simple_name = (
+                company_name.lower().replace(" inc.", "").replace(" corp.", "").strip()
+            )
             if simple_name not in [n.lower() for n in cpe_names]:
                 vulns = self.fetch_vulnerabilities(simple_name, days_back)
                 # Dedupe by CVE ID
@@ -430,7 +436,9 @@ class VulnerabilityEventService:
             logger.info(f"Fetching vulnerabilities for {ticker}...")
             result = self.create_vulnerability_nodes(ticker)
             results["success"].append(result)
-            results["total_vulnerabilities"] += result.get("vulnerabilities_created", 0)
+            results["total_vulnerabilities"] += result.get(
+                "vulnerabilities_created", 0
+            )
 
         return results
 
