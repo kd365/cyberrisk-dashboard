@@ -477,7 +477,9 @@ class FeatureEvaluationService:
 
             if baseline_auc > 0:
                 results["llm_feature_lift"] = {
-                    "auc_lift_pct": float((full_auc - baseline_auc) / baseline_auc * 100),
+                    "auc_lift_pct": float(
+                        (full_auc - baseline_auc) / baseline_auc * 100
+                    ),
                     "auc_lift_absolute": float(full_auc - baseline_auc),
                 }
 
@@ -499,7 +501,9 @@ class FeatureEvaluationService:
         # Generate targets
         targets = {}
         for ticker in df.index:
-            target = self.generate_target_returns(ticker, days_forward, target_threshold)
+            target = self.generate_target_returns(
+                ticker, days_forward, target_threshold
+            )
             if target is not None:
                 targets[ticker] = target
 
