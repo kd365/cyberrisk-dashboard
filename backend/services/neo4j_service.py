@@ -579,8 +579,8 @@ class Neo4jService:
 
         if ticker:
             cypher = """
-                MATCH (o:Organization {ticker: $ticker, tracked: true})
-                MATCH (o)-[:FILED]->(d:Document)
+                MATCH (o:Organization {ticker: $ticker})
+                MATCH (o)-[:FILED|HAS_FILING]->(d:Document)
                 OPTIONAL MATCH (d)-[:MENTIONS|DISCUSSES]->(n)
                 WHERE any(kw IN $keywords WHERE toLower(n.name) CONTAINS kw)
                 WITH o, n, d
