@@ -371,7 +371,9 @@ class FeatureEvaluationService:
         logger.info("Generating target variables...")
         targets = {}
         for ticker in df.index:
-            target = self.generate_target_returns(ticker, days_forward, target_threshold)
+            target = self.generate_target_returns(
+                ticker, days_forward, target_threshold
+            )
             if target is not None:
                 targets[ticker] = target
 
