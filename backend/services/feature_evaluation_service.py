@@ -442,17 +442,18 @@ class FeatureEvaluationService:
 
             try:
                 # Cross-validation
+                n_cv = min(cv_folds, len(df) // 2)
                 cv_auc = cross_val_score(
-                    model, X_scaled, y, cv=min(cv_folds, len(df) // 2), scoring="roc_auc"
+                    model, X_scaled, y, cv=n_cv, scoring="roc_auc"
                 )
                 cv_f1 = cross_val_score(
-                    model, X_scaled, y, cv=min(cv_folds, len(df) // 2), scoring="f1"
+                    model, X_scaled, y, cv=n_cv, scoring="f1"
                 )
                 cv_precision = cross_val_score(
-                    model, X_scaled, y, cv=min(cv_folds, len(df) // 2), scoring="precision"
+                    model, X_scaled, y, cv=n_cv, scoring="precision"
                 )
                 cv_recall = cross_val_score(
-                    model, X_scaled, y, cv=min(cv_folds, len(df) // 2), scoring="recall"
+                    model, X_scaled, y, cv=n_cv, scoring="recall"
                 )
 
                 results["ablation_results"][config_name] = {
@@ -472,8 +473,12 @@ class FeatureEvaluationService:
             "baseline_only" in results["ablation_results"]
             and "full_model" in results["ablation_results"]
         ):
-            baseline_auc = results["ablation_results"]["baseline_only"].get("auc_mean", 0)
-            full_auc = results["ablation_results"]["full_model"].get("auc_mean", 0)
+            baseline_auc = results["ablation_results"]["baseline_only"].get(
+                "auc_mean", 0
+            )
+            full_auc = results["ablation_results"]["full_model"].get(
+                "auc_mean", 0
+            )
 
             if baseline_auc > 0:
                 results["llm_feature_lift"] = {
