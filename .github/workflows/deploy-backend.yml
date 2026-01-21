@@ -58,6 +58,9 @@ jobs:
             --parameters "commands=[
               'set -e',
               'echo \"Starting deployment...\"',
+              'echo \"Cleaning up unused Docker images to free disk space...\"',
+              'docker image prune -af || true',
+              'df -h',
               'sudo systemctl stop gunicorn || true',
               'sudo systemctl disable gunicorn || true',
               'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}',
