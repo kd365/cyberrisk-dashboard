@@ -426,7 +426,9 @@ class FeatureEvaluationService:
             available_cols = [c for c in feature_cols if c in df_encoded.columns]
 
             if not available_cols:
-                results["ablation_results"][config_name] = {"error": "No features available"}
+                results["ablation_results"][config_name] = {
+                    "error": "No features available"
+                }
                 continue
 
             X = df_encoded[available_cols]
@@ -443,12 +445,8 @@ class FeatureEvaluationService:
             try:
                 # Cross-validation
                 n_cv = min(cv_folds, len(df) // 2)
-                cv_auc = cross_val_score(
-                    model, X_scaled, y, cv=n_cv, scoring="roc_auc"
-                )
-                cv_f1 = cross_val_score(
-                    model, X_scaled, y, cv=n_cv, scoring="f1"
-                )
+                cv_auc = cross_val_score(model, X_scaled, y, cv=n_cv, scoring="roc_auc")
+                cv_f1 = cross_val_score(model, X_scaled, y, cv=n_cv, scoring="f1")
                 cv_precision = cross_val_score(
                     model, X_scaled, y, cv=n_cv, scoring="precision"
                 )
@@ -476,9 +474,7 @@ class FeatureEvaluationService:
             baseline_auc = results["ablation_results"]["baseline_only"].get(
                 "auc_mean", 0
             )
-            full_auc = results["ablation_results"]["full_model"].get(
-                "auc_mean", 0
-            )
+            full_auc = results["ablation_results"]["full_model"].get("auc_mean", 0)
 
             if baseline_auc > 0:
                 results["llm_feature_lift"] = {
