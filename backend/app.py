@@ -3034,6 +3034,128 @@ def extract_llm_features(ticker):
         return jsonify({"error": str(e)}), 500
 
 
+# ============================================================================
+# FEATURE EVALUATION ENDPOINTS
+# ============================================================================
+
+
+def get_evaluation_service():
+    """Lazy load feature evaluation service"""
+    try:
+        from services.feature_evaluation_service import FeatureEvaluationService
+
+        return FeatureEvaluationService()
+    except Exception as e:
+        print(f"Error loading evaluation service: {e}")
+        traceback.print_exc()
+        return None
+
+
+@app.route("/api/evaluation/ablation-study", methods=["POST"])
+@require_cognito_auth
+def run_ablation_study():
+    """
+    Run ablation study comparing model performance with different feature sets.
+
+    Per the LLM scientific paper methodology, this compares:
+    1. Baseline only (traditional numerical features)
+    2. Baseline + LLM features
+    3. Baseline + Event features
+    4. Baseline + Sentiment features
+    5. Full model (all features)
+
+    Request body (optional):
+        {
+            "target_threshold": 0.05,  // Threshold for rare event (default 5%)
+            "days_forward": 30,        // Days to look ahead for target (default 30)
+            "cv_folds": 5              // Cross-validation folds (default 5)
+        }
+
+    Returns:
+        Ablation study results with metrics for each feature configuration
+    """
+    try:
+        eval_svc = get_evaluation_service()
+        if not eval_svc:
+            return jsonify({"error": "Evaluation service not available"}), 503
+
+        data = request.json or {}
+        target_threshold = data.get("target_threshold", 0.05)
+        days_forward = data.get("days_forward", 30)
+        cv_folds = data.get("cv_folds", 5)
+
+        results = eval_svc.run_ablation_study(
+            target_threshold=target_threshold,
+            days_forward=days_forward,
+            cv_folds=cv_folds,
+        )
+
+        return jsonify({"success": True, "results": results})
+
+    except Exception as e:
+        print(f"Error running ablation study: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/evaluation/feature-importance", methods=["GET"])
+@require_cognito_auth
+def get_feature_importance():
+    """
+    Get feature importance rankings from the full model.
+
+    Query params (optional):
+        target_threshold: float (default 0.05) - Threshold for rare event
+        days_forward: int (default 30) - Days to look ahead for target
+
+    Returns:
+        Feature importance rankings with scores
+    """
+    try:
+        eval_svc = get_evaluation_service()
+        if not eval_svc:
+            return jsonify({"error": "Evaluation service not available"}), 503
+
+        target_threshold = float(request.args.get("target_threshold", 0.05))
+        days_forward = int(request.args.get("days_forward", 30))
+
+        results = eval_svc.get_feature_importance(
+            target_threshold=target_threshold,
+            days_forward=days_forward,
+        )
+
+        return jsonify({"success": True, "results": results})
+
+    except Exception as e:
+        print(f"Error getting feature importance: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/evaluation/feature-coverage", methods=["GET"])
+@require_cognito_auth
+def get_feature_coverage():
+    """
+    Get feature coverage statistics - how many companies have each feature type.
+
+    Returns:
+        Coverage statistics showing data availability for each feature category
+    """
+    try:
+        eval_svc = get_evaluation_service()
+        if not eval_svc:
+            return jsonify({"error": "Evaluation service not available"}), 503
+
+        results = eval_svc.get_feature_coverage()
+
+        return jsonify({"success": True, "coverage": results})
+
+    except Exception as e:
+        print(f"Error getting feature coverage: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("Starting Cyber Risk Dashboard API...")
     print("Endpoints:")
@@ -3090,4 +3212,9 @@ if __name__ == "__main__":
     print("   - POST /api/enrichment/vulnerabilities/<ticker>")
     print("   - POST /api/enrichment/executive-events/<ticker>")
     print("   - POST /api/enrichment/llm-features/<ticker>")
+    print("")
+    print("Feature Evaluation Endpoints:")
+    print("   - POST /api/evaluation/ablation-study")
+    print("   - GET  /api/evaluation/feature-importance")
+    print("   - GET  /api/evaluation/feature-coverage")
     app.run(host="0.0.0.0", port=5000, debug=True)
