@@ -1900,7 +1900,7 @@ def execute_cypher():
 
     Request body:
         {
-            "query": "MATCH (c:Company) RETURN c LIMIT 10"
+            "query": "MATCH (o:Organization) RETURN o LIMIT 10"
         }
 
     Returns:

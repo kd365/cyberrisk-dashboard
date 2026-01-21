@@ -1169,14 +1169,14 @@ class GraphBuilderService:
 
         query = """
             // Aggregate concept mentions per company
-            MATCH (c:Company)-[:FILED]->(d:Document)-[disc:DISCUSSES]->(concept:Concept)
-            WHERE $ticker IS NULL OR c.ticker = $ticker
-            WITH c, concept,
+            MATCH (o:Organization)-[:FILED|HAS_FILING]->(d:Document)-[disc:DISCUSSES]->(concept:Concept)
+            WHERE $ticker IS NULL OR o.ticker = $ticker
+            WITH o, concept,
                  count(DISTINCT d) as doc_count,
                  sum(disc.count) as total_mentions,
                  collect(DISTINCT d.type) as source_doc_types
             WHERE doc_count >= 2  // Must appear in at least 2 documents
-            MERGE (c)-[r:ASSOCIATED_WITH]->(concept)
+            MERGE (o)-[r:ASSOCIATED_WITH]->(concept)
             SET r.frequency = total_mentions,
                 r.document_count = doc_count,
                 r.source = source_doc_types,

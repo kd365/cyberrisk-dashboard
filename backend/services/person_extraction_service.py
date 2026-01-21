@@ -438,9 +438,9 @@ class PersonExtractionService:
         # Create relationship based on role
         if person.get("is_executive"):
             query = """
-                MATCH (c:Company {ticker: $ticker})
+                MATCH (o:Organization {ticker: $ticker})
                 MATCH (p:Person {normalized_name: $person})
-                MERGE (p)-[r:EXECUTIVE_OF]->(c)
+                MERGE (p)-[r:EXECUTIVE_OF]->(o)
                 SET r.title = $title,
                     r.role_type = $role_type
             """
@@ -474,7 +474,7 @@ class PersonExtractionService:
     def _count_executives(self, ticker: str) -> int:
         """Count executives for a ticker."""
         query = """
-            MATCH (p:Person)-[:EXECUTIVE_OF]->(c:Company {ticker: $ticker})
+            MATCH (p:Person)-[:EXECUTIVE_OF]->(o:Organization {ticker: $ticker})
             RETURN count(DISTINCT p) as count
         """
         result = self.neo4j.execute_read(query, {"ticker": ticker})

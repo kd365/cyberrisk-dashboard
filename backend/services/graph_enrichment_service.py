@@ -201,7 +201,7 @@ class GraphEnrichmentService:
 
                 # Create snapshot node
                 query = """
-                    MATCH (c:Company {ticker: $ticker})
+                    MATCH (o:Organization {ticker: $ticker})
                     MERGE (s:SentimentSnapshot {cache_key: $cache_key})
                     SET s.dominant_sentiment = $dominant,
                         s.confidence = $confidence,
@@ -210,7 +210,7 @@ class GraphEnrichmentService:
                         s.neutral = $neutral,
                         s.mixed = $mixed,
                         s.cached_at = datetime($cached_at)
-                    MERGE (c)-[:HAS_SENTIMENT]->(s)
+                    MERGE (o)-[:HAS_SENTIMENT]->(s)
                 """
 
                 self.neo4j.execute_write(
@@ -279,11 +279,11 @@ class GraphEnrichmentService:
 
                 # Create growth snapshot node
                 query = """
-                    MATCH (c:Company {ticker: $ticker})
+                    MATCH (o:Organization {ticker: $ticker})
                     MERGE (g:GrowthSnapshot {ticker: $ticker, date: date($date)})
                     SET g.employee_count = $employee_count,
                         g.hiring_intensity = $hiring_intensity
-                    MERGE (c)-[:HAS_GROWTH_DATA]->(g)
+                    MERGE (o)-[:HAS_GROWTH_DATA]->(g)
                 """
 
                 self.neo4j.execute_write(
@@ -348,7 +348,7 @@ class GraphEnrichmentService:
 
                 # Create forecast snapshot node
                 query = """
-                    MATCH (c:Company {ticker: $ticker})
+                    MATCH (o:Organization {ticker: $ticker})
                     MERGE (f:ForecastSnapshot {cache_key: $cache_key})
                     SET f.ticker = $ticker,
                         f.model = $model,
@@ -357,7 +357,7 @@ class GraphEnrichmentService:
                         f.predicted_price = $predicted_price,
                         f.expected_return_pct = $expected_return,
                         f.cached_at = datetime($cached_at)
-                    MERGE (c)-[:HAS_FORECAST]->(f)
+                    MERGE (o)-[:HAS_FORECAST]->(f)
                 """
 
                 self.neo4j.execute_write(
@@ -438,10 +438,10 @@ class GraphEnrichmentService:
 
                 # Create headcount point node
                 query = """
-                    MATCH (c:Company {ticker: $ticker})
+                    MATCH (o:Organization {ticker: $ticker})
                     MERGE (h:HeadcountPoint {ticker: $ticker, date: date($date)})
                     SET h.employee_count = $employee_count
-                    MERGE (c)-[:HEADCOUNT_HISTORY]->(h)
+                    MERGE (o)-[:HEADCOUNT_HISTORY]->(h)
                 """
 
                 self.neo4j.execute_write(
@@ -515,9 +515,9 @@ class GraphEnrichmentService:
 
                 # Create job function node and relationship
                 query = """
-                    MATCH (c:Company {ticker: $ticker})
+                    MATCH (o:Organization {ticker: $ticker})
                     MERGE (j:JobFunction {name: $function_name})
-                    MERGE (c)-[r:HIRING_FOR]->(j)
+                    MERGE (o)-[r:HIRING_FOR]->(j)
                     SET r.open_positions = $open_positions,
                         r.snapshot_date = date($date)
                 """
