@@ -374,13 +374,13 @@ def get_patents(
 
 
 @tool
-def search_documents(query: str, ticker: Optional[str] = None, top_k: int = 5) -> dict:
+def search_documents(query: str, ticker: Optional[str] = None, limit: int = 5) -> dict:
     """Search indexed SEC filings and documents using semantic similarity.
 
     Args:
         query: Natural language query to search for (e.g., "cloud security revenue growth")
         ticker: Optional ticker to limit search to specific company
-        top_k: Number of relevant passages to return (default: 5)
+        limit: Number of relevant passages to return (default: 5)
 
     Use this tool when asked about specific information from SEC filings, 10-K reports,
     10-Q reports, or earnings transcripts. Returns relevant text passages with sources.
@@ -395,7 +395,7 @@ def search_documents(query: str, ticker: Optional[str] = None, top_k: int = 5) -
 
     try:
         ticker = ticker.upper() if ticker else None
-        results = rag.search(query, ticker=ticker, top_k=top_k)
+        results = rag.search(query, ticker=ticker, limit=limit)
 
         if not results:
             return {
@@ -445,7 +445,7 @@ def get_document_context(query: str, ticker: Optional[str] = None) -> dict:
 
     try:
         ticker = ticker.upper() if ticker else None
-        context = rag.get_context_for_query(query, ticker=ticker, top_k=5)
+        context = rag.get_context_for_query(query, ticker=ticker)
 
         if not context or context == "No relevant context found.":
             return {
