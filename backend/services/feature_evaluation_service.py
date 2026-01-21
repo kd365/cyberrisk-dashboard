@@ -516,7 +516,9 @@ class FeatureEvaluationService:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        model = GradientBoostingClassifier(n_estimators=100, max_depth=4, random_state=42)
+        model = GradientBoostingClassifier(
+            n_estimators=100, max_depth=4, random_state=42
+        )
         model.fit(X_scaled, y)
 
         # Get feature importances
@@ -526,7 +528,11 @@ class FeatureEvaluationService:
         # Group by feature type
         importance_by_group = {}
         for group, cols in feature_groups.items():
-            group_cols = [c for c in importances.index if any(c.startswith(col.replace("_", "")) for col in cols)]
+            group_cols = [
+                c
+                for c in importances.index
+                if any(c.startswith(col.replace("_", "")) for col in cols)
+            ]
             if group_cols:
                 importance_by_group[group] = float(importances[group_cols].sum())
 
@@ -578,7 +584,10 @@ class FeatureEvaluationService:
         total = len(tickers)
         return {
             "total_companies": total,
-            "coverage": {k: {"count": v, "pct": v / total * 100 if total > 0 else 0} for k, v in coverage.items()},
+            "coverage": {
+                k: {"count": v, "pct": v / total * 100 if total > 0 else 0}
+                for k, v in coverage.items()
+            },
         }
 
 
