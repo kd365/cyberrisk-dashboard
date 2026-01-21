@@ -88,18 +88,10 @@ resource "aws_cloudfront_distribution" "frontend" {
     compress               = true
   }
 
-  # SPA routing - serve index.html for client-side routes
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
+  # NOTE: Removed custom_error_response blocks for 403/404 that were redirecting
+  # to /index.html. These were globally intercepting API errors and returning
+  # React HTML instead of proper API responses. SPA routing for client-side
+  # routes should be handled by React Router's fallback/catch-all route instead.
 
   restrictions {
     geo_restriction {
