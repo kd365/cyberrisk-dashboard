@@ -436,9 +436,7 @@ class VulnerabilityEventService:
             logger.info(f"Fetching vulnerabilities for {ticker}...")
             result = self.create_vulnerability_nodes(ticker)
             results["success"].append(result)
-            results["total_vulnerabilities"] += result.get(
-                "vulnerabilities_created", 0
-            )
+            results["total_vulnerabilities"] += result.get("vulnerabilities_created", 0)
 
         return results
 
@@ -808,7 +806,9 @@ class DataEnrichmentService:
         # 2. Vulnerability Events
         if not skip_vulnerabilities:
             logger.info("\n[2/4] Fetching vulnerability events...")
-            results["vulnerabilities"] = self.vulnerability_service.enrich_all_companies()
+            results["vulnerabilities"] = (
+                self.vulnerability_service.enrich_all_companies()
+            )
         else:
             logger.info("\n[2/4] Skipping vulnerabilities (skip_vulnerabilities=True)")
             results["vulnerabilities"] = {"skipped": True}
@@ -816,17 +816,25 @@ class DataEnrichmentService:
         # 3. Executive Events
         if not skip_executive_events:
             logger.info("\n[3/4] Extracting executive events...")
-            results["executive_events"] = self.executive_extractor.enrich_all_companies()
+            results["executive_events"] = (
+                self.executive_extractor.enrich_all_companies()
+            )
         else:
-            logger.info("\n[3/4] Skipping executive events (skip_executive_events=True)")
+            logger.info(
+                "\n[3/4] Skipping executive events (skip_executive_events=True)"
+            )
             results["executive_events"] = {"skipped": True}
 
         # 4. Analyst Sentiment
         if not skip_analyst_sentiment:
             logger.info("\n[4/4] Extracting analyst sentiment...")
-            results["analyst_sentiment"] = self.sentiment_extractor.enrich_all_companies()
+            results["analyst_sentiment"] = (
+                self.sentiment_extractor.enrich_all_companies()
+            )
         else:
-            logger.info("\n[4/4] Skipping analyst sentiment (skip_analyst_sentiment=True)")
+            logger.info(
+                "\n[4/4] Skipping analyst sentiment (skip_analyst_sentiment=True)"
+            )
             results["analyst_sentiment"] = {"skipped": True}
 
         logger.info("\n" + "=" * 60)
@@ -860,30 +868,34 @@ class DataEnrichmentService:
             features = self.company_extractor.extract_company_features(ticker)
             if features and "error" not in features:
                 self.company_extractor.update_company_node(ticker, features)
-                self.company_extractor.create_competitive_relationships(ticker, features)
+                self.company_extractor.create_competitive_relationships(
+                    ticker, features
+                )
             results["features"] = features
         else:
             results["features"] = {"skipped": True}
 
         # Vulnerabilities
         if not skip_vulnerabilities:
-            results["vulnerabilities"] = self.vulnerability_service.create_vulnerability_nodes(
-                ticker
+            results["vulnerabilities"] = (
+                self.vulnerability_service.create_vulnerability_nodes(ticker)
             )
         else:
             results["vulnerabilities"] = {"skipped": True}
 
         # Executive events
         if not skip_executive_events:
-            results["executive_events"] = self.executive_extractor.create_executive_events(
-                ticker
+            results["executive_events"] = (
+                self.executive_extractor.create_executive_events(ticker)
             )
         else:
             results["executive_events"] = {"skipped": True}
 
         # Analyst sentiment
         if not skip_analyst_sentiment:
-            results["sentiment"] = self.sentiment_extractor.update_company_sentiment(ticker)
+            results["sentiment"] = self.sentiment_extractor.update_company_sentiment(
+                ticker
+            )
         else:
             results["sentiment"] = {"skipped": True}
 
