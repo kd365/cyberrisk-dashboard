@@ -2777,6 +2777,263 @@ def get_patent_details(patent_number):
         return jsonify({"error": str(e)}), 500
 
 
+# ============================================================================
+# DATA ENRICHMENT ENDPOINTS
+# ============================================================================
+
+
+def get_enrichment_service():
+    """Lazy load data enrichment service"""
+    try:
+        from services.data_enrichment_service import DataEnrichmentService
+
+        return DataEnrichmentService()
+    except Exception as e:
+        print(f"Error loading enrichment service: {e}")
+        return None
+
+
+@app.route("/api/enrichment/run-all", methods=["POST"])
+@require_cognito_auth
+def run_full_enrichment():
+    """
+    Run full data enrichment pipeline for all companies.
+
+    This endpoint triggers:
+    1. LLM feature extraction from SEC filings
+    2. NVD/CVE vulnerability event integration
+    3. SEC 8-K executive event extraction
+    4. Analyst sentiment extraction from earnings calls
+
+    Requires authentication. This is a long-running operation.
+
+    Request body (optional):
+        {
+            "skip_llm_features": false,
+            "skip_vulnerabilities": false,
+            "skip_executive_events": false,
+            "skip_analyst_sentiment": false
+        }
+
+    Returns:
+        Summary of enrichment results for all companies
+    """
+    try:
+        enrichment_svc = get_enrichment_service()
+        if not enrichment_svc:
+            return jsonify({"error": "Enrichment service not available"}), 503
+
+        data = request.json or {}
+        skip_llm = data.get("skip_llm_features", False)
+        skip_vulns = data.get("skip_vulnerabilities", False)
+        skip_exec = data.get("skip_executive_events", False)
+        skip_analyst = data.get("skip_analyst_sentiment", False)
+
+        results = enrichment_svc.run_full_enrichment(
+            skip_llm_features=skip_llm,
+            skip_vulnerabilities=skip_vulns,
+            skip_executive_events=skip_exec,
+            skip_analyst_sentiment=skip_analyst,
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "message": "Full enrichment pipeline completed",
+                "results": results,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error running full enrichment: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/enrichment/company/<ticker>", methods=["POST"])
+@require_cognito_auth
+def enrich_single_company(ticker):
+    """
+    Run data enrichment for a single company.
+
+    Path params:
+        ticker: Stock ticker symbol (e.g., CRWD, PANW)
+
+    Request body (optional):
+        {
+            "skip_llm_features": false,
+            "skip_vulnerabilities": false,
+            "skip_executive_events": false,
+            "skip_analyst_sentiment": false
+        }
+
+    Returns:
+        Enrichment results for the specified company
+    """
+    ticker = ticker.upper()
+    try:
+        enrichment_svc = get_enrichment_service()
+        if not enrichment_svc:
+            return jsonify({"error": "Enrichment service not available"}), 503
+
+        data = request.json or {}
+        skip_llm = data.get("skip_llm_features", False)
+        skip_vulns = data.get("skip_vulnerabilities", False)
+        skip_exec = data.get("skip_executive_events", False)
+        skip_analyst = data.get("skip_analyst_sentiment", False)
+
+        results = enrichment_svc.enrich_single_company(
+            ticker,
+            skip_llm_features=skip_llm,
+            skip_vulnerabilities=skip_vulns,
+            skip_executive_events=skip_exec,
+            skip_analyst_sentiment=skip_analyst,
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "ticker": ticker,
+                "message": f"Enrichment completed for {ticker}",
+                "results": results,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error enriching company {ticker}: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/enrichment/vulnerabilities/<ticker>", methods=["POST"])
+@require_cognito_auth
+def fetch_vulnerabilities(ticker):
+    """
+    Fetch and store vulnerability data for a company from NVD.
+
+    Path params:
+        ticker: Stock ticker symbol (e.g., CRWD, PANW)
+
+    Query params:
+        days_back: Number of days to search (default: 90)
+
+    Returns:
+        List of vulnerabilities found and stored
+    """
+    ticker = ticker.upper()
+    try:
+        from services.data_enrichment_service import VulnerabilityEventService
+
+        vuln_svc = VulnerabilityEventService()
+
+        days_back = int(request.args.get("days_back", 90))
+
+        # Get company info for product name lookup
+        company = db_service.get_company(ticker)
+        if not company:
+            return jsonify({"error": f"Company {ticker} not found"}), 404
+
+        company_name = company.get("company_name", ticker)
+
+        vulnerabilities = vuln_svc.fetch_vulnerabilities_for_company(
+            ticker, company_name, days_back=days_back
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "ticker": ticker,
+                "company_name": company_name,
+                "vulnerabilities_found": len(vulnerabilities),
+                "vulnerabilities": vulnerabilities[:20],  # Return first 20 for preview
+            }
+        )
+
+    except Exception as e:
+        print(f"Error fetching vulnerabilities for {ticker}: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/enrichment/executive-events/<ticker>", methods=["POST"])
+@require_cognito_auth
+def extract_executive_events(ticker):
+    """
+    Extract executive appointment/departure events from 8-K filings.
+
+    Path params:
+        ticker: Stock ticker symbol (e.g., CRWD, PANW)
+
+    Returns:
+        List of executive events extracted from 8-K filings
+    """
+    ticker = ticker.upper()
+    try:
+        from services.data_enrichment_service import ExecutiveEventExtractor
+
+        exec_svc = ExecutiveEventExtractor()
+
+        events = exec_svc.extract_executive_events(ticker)
+
+        return jsonify(
+            {
+                "success": True,
+                "ticker": ticker,
+                "events_found": len(events),
+                "events": events,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error extracting executive events for {ticker}: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/enrichment/llm-features/<ticker>", methods=["POST"])
+@require_cognito_auth
+def extract_llm_features(ticker):
+    """
+    Extract LLM-powered features from SEC filings for a company.
+
+    Path params:
+        ticker: Stock ticker symbol (e.g., CRWD, PANW)
+
+    Returns:
+        Extracted features including cyber_sector_relevance, market_positioning,
+        threat_specialization, competitive_moat, and risk_summary
+    """
+    ticker = ticker.upper()
+    try:
+        from services.data_enrichment_service import CompanyFeatureExtractor
+
+        feature_svc = CompanyFeatureExtractor()
+
+        features = feature_svc.extract_company_features(ticker)
+
+        if not features:
+            return jsonify(
+                {
+                    "success": False,
+                    "ticker": ticker,
+                    "message": "No SEC filings found to extract features from",
+                }
+            )
+
+        return jsonify(
+            {
+                "success": True,
+                "ticker": ticker,
+                "features": features,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error extracting LLM features for {ticker}: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("Starting Cyber Risk Dashboard API...")
     print("Endpoints:")
@@ -2826,4 +3083,11 @@ if __name__ == "__main__":
     print("   - GET  /api/patents/search?inventor=John+Smith")
     print("   - POST /api/patents/<ticker>/fetch")
     print("   - GET  /api/patents/<patent_number>")
+    print("")
+    print("Data Enrichment Endpoints:")
+    print("   - POST /api/enrichment/run-all")
+    print("   - POST /api/enrichment/company/<ticker>")
+    print("   - POST /api/enrichment/vulnerabilities/<ticker>")
+    print("   - POST /api/enrichment/executive-events/<ticker>")
+    print("   - POST /api/enrichment/llm-features/<ticker>")
     app.run(host="0.0.0.0", port=5000, debug=True)
