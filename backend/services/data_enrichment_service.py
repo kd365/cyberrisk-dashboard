@@ -118,9 +118,16 @@ Extract these features (respond ONLY with valid JSON, no markdown):
             from services.database_service import db_service
 
             artifacts = db_service.get_artifacts_by_ticker(ticker)
-            filing = next(
-                (a for a in artifacts if filing_type in a.get("type", "")), None
-            )
+            # Filter for txt files only (PDFs can't be read as text)
+            # Sort by date descending to get most recent
+            txt_filings = [
+                a
+                for a in artifacts
+                if filing_type in a.get("type", "")
+                and a.get("s3_key", "").endswith(".txt")
+            ]
+            txt_filings.sort(key=lambda x: x.get("date", ""), reverse=True)
+            filing = txt_filings[0] if txt_filings else None
 
             if not filing:
                 return None
