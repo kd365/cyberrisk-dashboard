@@ -116,27 +116,50 @@ Extract these features (respond ONLY with valid JSON, no markdown):
         """Get the most recent filing text for a company."""
         try:
             from services.database_service import db_service
+            from services.ocr_service import get_ocr_service
 
             artifacts = db_service.get_artifacts_by_ticker(ticker)
-            # Filter for txt files only (PDFs can't be read as text)
             # Sort by date descending to get most recent
-            txt_filings = [
+            # Prefer OCR-extracted files (_ocr.txt), then regular .txt, then .pdf
+            filings = [
                 a
                 for a in artifacts
                 if filing_type in a.get("type", "")
-                and a.get("s3_key", "").endswith(".txt")
             ]
-            txt_filings.sort(key=lambda x: x.get("date", ""), reverse=True)
-            filing = txt_filings[0] if txt_filings else None
+            filings.sort(key=lambda x: (
+                # Priority: 1=ocr.txt, 2=regular.txt, 3=pdf
+                0 if "_ocr.txt" in x.get("s3_key", "") else
+                1 if x.get("s3_key", "").endswith(".txt") else 2,
+                # Then by date descending
+                x.get("date", "") or ""
+            ), reverse=False)  # Lower priority number first
+
+            # Also sort by date within each priority
+            filings.sort(key=lambda x: x.get("date", ""), reverse=True)
+
+            filing = filings[0] if filings else None
 
             if not filing:
                 return None
 
             bucket = os.environ.get("S3_BUCKET", "cyberrisk-data")
             s3_key = filing["s3_key"]
+            ocr = get_ocr_service()
 
-            response = self.s3.get_object(Bucket=bucket, Key=s3_key)
-            text = response["Body"].read().decode("utf-8")
+            # If PDF, use OCR extraction
+            if s3_key.endswith(".pdf"):
+                logger.info(f"Using OCR extraction for {s3_key}")
+                ocr.bucket = bucket
+                text = ocr.extract_text_from_s3(s3_key, use_ocr=True)
+            else:
+                # Read TXT file
+                response = self.s3.get_object(Bucket=bucket, Key=s3_key)
+                text = response["Body"].read().decode("utf-8")
+                # Clean XBRL/HTML artifacts from the text
+                text = ocr.clean_text(text)
+
+            if not text:
+                return None
 
             # Get first 15000 chars (business description + competition sections)
             return text[:15000]
