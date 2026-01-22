@@ -6,6 +6,7 @@ import SentimentAnalysis from './SentimentAnalysisEnhanced';
 import CompanyGrowth from './CompanyGrowth';
 import LexChatbot from './LexChatbot';
 import GraphRAGAssistant from './GraphRAGAssistant';
+import { useAuth, LoginForm } from './AuthProvider';
 
 // Icon components (simple SVG icons)
 const Icons = {
@@ -107,12 +108,15 @@ const Icons = {
 };
 
 function Dashboard() {
+  // Use Cognito auth from AuthProvider
+  const { user, isAuthenticated, isLoading: authLoading, signOut } = useAuth();
+
   const [activeTab, setActiveTab] = useState('scraping');
   const [selectedCompany, setSelectedCompany] = useState('CRWD');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [companies, setCompanies] = useState([]);
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [metrics, setMetrics] = useState({
     totalCompanies: 0,
     totalArtifacts: 0,
@@ -166,23 +170,16 @@ function Dashboard() {
     fetchArtifacts();
   }, []);
 
-  // Check if user is already authenticated
-  useEffect(() => {
-    const userName = localStorage.getItem('user_name');
-    const userEmail = localStorage.getItem('user_email');
-    if (userName && userEmail) {
-      setIsAuthenticated(true);
-    }
-  }, []);
-
+  // Auth complete handler (for legacy ScrapingInterface compatibility)
   const handleAuthComplete = () => {
-    setIsAuthenticated(true);
+    // Auth is now handled by AuthProvider/useAuth
+    // This just closes the login modal if shown
+    setShowLoginModal(false);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user_name');
-    localStorage.removeItem('user_email');
-    setIsAuthenticated(false);
+  // Logout handler using Cognito
+  const handleLogout = async () => {
+    await signOut();
   };
 
   const navItems = [

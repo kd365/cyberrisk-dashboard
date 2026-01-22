@@ -2226,6 +2226,329 @@ def auth_status():
         return jsonify({"authenticated": False, "error": str(e)})
 
 
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    """
+    Authenticate user with Cognito.
+
+    Request body:
+        {
+            "email": "user@example.com",
+            "password": "password123"
+        }
+
+    Returns:
+        JWT tokens if successful, error otherwise
+    """
+    import boto3
+
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        email = data.get("email", "").strip()
+        password = data.get("password", "")
+
+        if not email or not password:
+            return jsonify({"error": "Email and password required"}), 400
+
+        # Get Cognito configuration
+        region = os.environ.get("AWS_REGION", "us-west-2")
+        client_id = os.environ.get("COGNITO_CLIENT_ID", "")
+
+        if not client_id:
+            return jsonify({"error": "Cognito not configured"}), 503
+
+        # Authenticate with Cognito
+        cognito = boto3.client("cognito-idp", region_name=region)
+
+        try:
+            response = cognito.initiate_auth(
+                ClientId=client_id,
+                AuthFlow="USER_PASSWORD_AUTH",
+                AuthParameters={"USERNAME": email, "PASSWORD": password},
+            )
+
+            # Check if password change required (NEW_PASSWORD_REQUIRED challenge)
+            if response.get("ChallengeName") == "NEW_PASSWORD_REQUIRED":
+                return jsonify(
+                    {
+                        "challenge": "NEW_PASSWORD_REQUIRED",
+                        "session": response.get("Session"),
+                        "message": "Please set a new password",
+                    }
+                )
+
+            # Successful authentication
+            auth_result = response.get("AuthenticationResult", {})
+
+            return jsonify(
+                {
+                    "success": True,
+                    "accessToken": auth_result.get("AccessToken"),
+                    "idToken": auth_result.get("IdToken"),
+                    "refreshToken": auth_result.get("RefreshToken"),
+                    "expiresIn": auth_result.get("ExpiresIn"),
+                }
+            )
+
+        except cognito.exceptions.NotAuthorizedException:
+            return jsonify({"error": "Invalid email or password"}), 401
+        except cognito.exceptions.UserNotFoundException:
+            return jsonify({"error": "User not found"}), 401
+        except cognito.exceptions.UserNotConfirmedException:
+            return jsonify({"error": "Email not verified"}), 401
+        except Exception as e:
+            print(f"Cognito auth error: {e}")
+            return jsonify({"error": str(e)}), 401
+
+    except Exception as e:
+        print(f"Login error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/new-password", methods=["POST"])
+def auth_new_password():
+    """
+    Complete NEW_PASSWORD_REQUIRED challenge.
+
+    Request body:
+        {
+            "email": "user@example.com",
+            "newPassword": "NewPassword123",
+            "session": "session_from_login_response"
+        }
+
+    Returns:
+        JWT tokens if successful
+    """
+    import boto3
+
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        email = data.get("email", "").strip()
+        new_password = data.get("newPassword", "")
+        session = data.get("session", "")
+
+        if not email or not new_password or not session:
+            return jsonify({"error": "Email, newPassword, and session required"}), 400
+
+        region = os.environ.get("AWS_REGION", "us-west-2")
+        client_id = os.environ.get("COGNITO_CLIENT_ID", "")
+
+        if not client_id:
+            return jsonify({"error": "Cognito not configured"}), 503
+
+        cognito = boto3.client("cognito-idp", region_name=region)
+
+        try:
+            response = cognito.respond_to_auth_challenge(
+                ClientId=client_id,
+                ChallengeName="NEW_PASSWORD_REQUIRED",
+                Session=session,
+                ChallengeResponses={
+                    "USERNAME": email,
+                    "NEW_PASSWORD": new_password,
+                },
+            )
+
+            auth_result = response.get("AuthenticationResult", {})
+
+            return jsonify(
+                {
+                    "success": True,
+                    "accessToken": auth_result.get("AccessToken"),
+                    "idToken": auth_result.get("IdToken"),
+                    "refreshToken": auth_result.get("RefreshToken"),
+                    "expiresIn": auth_result.get("ExpiresIn"),
+                }
+            )
+
+        except Exception as e:
+            print(f"New password error: {e}")
+            return jsonify({"error": str(e)}), 400
+
+    except Exception as e:
+        print(f"New password error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/refresh", methods=["POST"])
+def auth_refresh():
+    """
+    Refresh access token using refresh token.
+
+    Request body:
+        {
+            "refreshToken": "refresh_token_here"
+        }
+
+    Returns:
+        New access and ID tokens
+    """
+    import boto3
+
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        refresh_token = data.get("refreshToken", "")
+
+        if not refresh_token:
+            return jsonify({"error": "Refresh token required"}), 400
+
+        region = os.environ.get("AWS_REGION", "us-west-2")
+        client_id = os.environ.get("COGNITO_CLIENT_ID", "")
+
+        if not client_id:
+            return jsonify({"error": "Cognito not configured"}), 503
+
+        cognito = boto3.client("cognito-idp", region_name=region)
+
+        try:
+            response = cognito.initiate_auth(
+                ClientId=client_id,
+                AuthFlow="REFRESH_TOKEN_AUTH",
+                AuthParameters={"REFRESH_TOKEN": refresh_token},
+            )
+
+            auth_result = response.get("AuthenticationResult", {})
+
+            return jsonify(
+                {
+                    "success": True,
+                    "accessToken": auth_result.get("AccessToken"),
+                    "idToken": auth_result.get("IdToken"),
+                    "expiresIn": auth_result.get("ExpiresIn"),
+                }
+            )
+
+        except cognito.exceptions.NotAuthorizedException:
+            return jsonify({"error": "Invalid or expired refresh token"}), 401
+        except Exception as e:
+            print(f"Token refresh error: {e}")
+            return jsonify({"error": str(e)}), 401
+
+    except Exception as e:
+        print(f"Refresh error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    """
+    Log out user by invalidating tokens.
+
+    Headers:
+        Authorization: Bearer <access_token>
+
+    Returns:
+        Success message
+    """
+    import boto3
+
+    try:
+        # Get access token from header
+        auth_header = request.headers.get("Authorization", "")
+        access_token = None
+        if auth_header.startswith("Bearer "):
+            access_token = auth_header.split(" ", 1)[1]
+
+        if not access_token:
+            # No token to invalidate, just return success
+            return jsonify({"success": True, "message": "Logged out"})
+
+        region = os.environ.get("AWS_REGION", "us-west-2")
+
+        cognito = boto3.client("cognito-idp", region_name=region)
+
+        try:
+            # Global sign out invalidates all tokens for the user
+            cognito.global_sign_out(AccessToken=access_token)
+            return jsonify({"success": True, "message": "Logged out successfully"})
+        except cognito.exceptions.NotAuthorizedException:
+            # Token already invalid, that's fine
+            return jsonify({"success": True, "message": "Logged out"})
+        except Exception as e:
+            print(f"Logout error: {e}")
+            # Still return success - client will clear tokens anyway
+            return jsonify({"success": True, "message": "Logged out"})
+
+    except Exception as e:
+        print(f"Logout error: {e}")
+        return jsonify({"success": True, "message": "Logged out"})
+
+
+@app.route("/api/auth/update-profile", methods=["POST"])
+def auth_update_profile():
+    """
+    Update user profile attributes in Cognito.
+
+    Headers:
+        Authorization: Bearer <access_token>
+
+    Request body:
+        {
+            "name": "John Smith"
+        }
+
+    Returns:
+        Success message with updated user info
+    """
+    import boto3
+
+    try:
+        # Get access token from header
+        auth_header = request.headers.get("Authorization", "")
+        access_token = None
+        if auth_header.startswith("Bearer "):
+            access_token = auth_header.split(" ", 1)[1]
+
+        if not access_token:
+            return jsonify({"error": "Authentication required"}), 401
+
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        name = data.get("name", "").strip()
+        if not name:
+            return jsonify({"error": "Name is required"}), 400
+
+        region = os.environ.get("AWS_REGION", "us-west-2")
+        cognito = boto3.client("cognito-idp", region_name=region)
+
+        try:
+            # Update user attributes
+            cognito.update_user_attributes(
+                AccessToken=access_token,
+                UserAttributes=[{"Name": "name", "Value": name}],
+            )
+
+            return jsonify(
+                {"success": True, "message": "Profile updated", "name": name}
+            )
+
+        except cognito.exceptions.NotAuthorizedException:
+            return jsonify({"error": "Invalid or expired token"}), 401
+        except Exception as e:
+            print(f"Profile update error: {e}")
+            return jsonify({"error": str(e)}), 400
+
+    except Exception as e:
+        print(f"Update profile error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 # ============================================================================
 # ADMIN ENDPOINTS - Database migrations and maintenance
 # ============================================================================
@@ -2294,10 +2617,12 @@ def run_migration():
         cursor = conn.cursor()
 
         # Add alternate_names column if it doesn't exist
-        cursor.execute("""
+        cursor.execute(
+            """
             ALTER TABLE companies
             ADD COLUMN IF NOT EXISTS alternate_names TEXT
-        """)
+        """
+        )
         conn.commit()
 
         cursor.close()

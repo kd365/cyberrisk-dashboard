@@ -104,8 +104,8 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  // Sign in with username and password
-  const signIn = async (username, password) => {
+  // Sign in with email and password
+  const signIn = async (email, password) => {
     setError(null);
     setIsLoading(true);
 
@@ -113,7 +113,7 @@ export function AuthProvider({ children }) {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
@@ -127,11 +127,17 @@ export function AuthProvider({ children }) {
         return {
           requiresNewPassword: true,
           session: data.session,
-          username
+          email
         };
       }
 
-      storeTokens(data.tokens);
+      // Backend returns tokens directly (accessToken, idToken, refreshToken, expiresIn)
+      storeTokens({
+        AccessToken: data.accessToken,
+        IdToken: data.idToken,
+        RefreshToken: data.refreshToken,
+        ExpiresIn: data.expiresIn,
+      });
       return { success: true };
 
     } catch (err) {
@@ -143,7 +149,7 @@ export function AuthProvider({ children }) {
   };
 
   // Complete new password challenge
-  const completeNewPassword = async (username, newPassword, session) => {
+  const completeNewPassword = async (email, newPassword, session) => {
     setError(null);
     setIsLoading(true);
 
@@ -151,7 +157,7 @@ export function AuthProvider({ children }) {
       const response = await fetch('/api/auth/new-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, newPassword, session }),
+        body: JSON.stringify({ email, newPassword, session }),
       });
 
       const data = await response.json();
@@ -160,7 +166,13 @@ export function AuthProvider({ children }) {
         throw new Error(data.error || 'Password change failed');
       }
 
-      storeTokens(data.tokens);
+      // Backend returns tokens directly
+      storeTokens({
+        AccessToken: data.accessToken,
+        IdToken: data.idToken,
+        RefreshToken: data.refreshToken,
+        ExpiresIn: data.expiresIn,
+      });
       return { success: true };
 
     } catch (err) {
@@ -211,7 +223,13 @@ export function AuthProvider({ children }) {
       }
 
       const data = await response.json();
-      storeTokens(data.tokens);
+      // Backend returns tokens directly (no refreshToken on refresh - reuse existing)
+      storeTokens({
+        AccessToken: data.accessToken,
+        IdToken: data.idToken,
+        RefreshToken: refreshToken, // Keep existing refresh token
+        ExpiresIn: data.expiresIn,
+      });
       return true;
 
     } catch (err) {
@@ -355,7 +373,7 @@ export function useAuth() {
 
 export function LoginForm({ onSuccess }) {
   const { signIn, completeNewPassword, isLoading, error } = useAuth();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -379,14 +397,14 @@ export function LoginForm({ onSuccess }) {
         }
 
         await completeNewPassword(
-          challengeState.username,
+          challengeState.email,
           newPassword,
           challengeState.session
         );
         onSuccess?.();
       } else {
         // Normal login
-        const result = await signIn(username, password);
+        const result = await signIn(email, password);
         if (result.requiresNewPassword) {
           setChallengeState(result);
         } else if (result.success) {
@@ -519,8 +537,8 @@ export function LoginForm({ onSuccess }) {
         <label style={styles.label}>Email</label>
         <input
           type="email"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           style={styles.input}
           placeholder="Enter your email"
           required

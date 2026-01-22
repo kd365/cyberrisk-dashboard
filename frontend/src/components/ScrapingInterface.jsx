@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth, LoginForm } from './AuthProvider';
 
-function ScrapingInterface({ isAuthenticated, onAuthComplete }) {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-  });
+function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplete }) {
+  // Use Cognito auth context
+  const { user, isAuthenticated: authIsAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Combine prop-based and context-based authentication
+  const isAuthenticated = authIsAuthenticated || propIsAuthenticated;
+
+  // For SEC scraping, we need user's name (Cognito has email)
+  const [userName, setUserName] = useState(() => localStorage.getItem('user_name') || '');
+  const [needsName, setNeedsName] = useState(false);
+
   const [companies, setCompanies] = useState([]);
   const [selectedCompanies, setSelectedCompanies] = useState(['CRWD']);
   const [isLoading, setIsLoading] = useState(false);
@@ -13,24 +20,58 @@ function ScrapingInterface({ isAuthenticated, onAuthComplete }) {
   const [documentStatus, setDocumentStatus] = useState({});
   const [showInfo, setShowInfo] = useState(true);
 
-  const handleAuthChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
+  // Check if we need the user's name for SEC scraping
+  useEffect(() => {
+    // If user has name from Cognito, use that
+    if (user?.name && !userName) {
+      setUserName(user.name);
+      localStorage.setItem('user_name', user.name);
+    } else if (isAuthenticated && !userName && !user?.name) {
+      setNeedsName(true);
+    }
+  }, [isAuthenticated, userName, user?.name]);
 
-  const handleAuthSubmit = (e) => {
+  // When user logs in via Cognito, store email for SEC scraping compatibility
+  useEffect(() => {
+    if (user?.email) {
+      localStorage.setItem('user_email', user.email);
+    }
+  }, [user?.email]);
+
+  const handleNameSubmit = async (e) => {
     e.preventDefault();
-    
-    // Store in localStorage
-    localStorage.setItem('user_name', formData.name);
-    localStorage.setItem('user_email', formData.email);
-    
-    // Notify parent component
-    if (onAuthComplete) {
-      onAuthComplete(formData);
+    if (userName.trim()) {
+      try {
+        // Update name in Cognito
+        const accessToken = localStorage.getItem('cognito_access_token');
+        if (accessToken) {
+          const response = await fetch('/api/auth/update-profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ name: userName.trim() }),
+          });
+
+          if (!response.ok) {
+            console.error('Failed to update profile in Cognito');
+          }
+        }
+
+        // Also store locally for SEC scraping
+        localStorage.setItem('user_name', userName.trim());
+        setNeedsName(false);
+
+        if (onAuthComplete) {
+          onAuthComplete({ name: userName, email: user?.email });
+        }
+      } catch (error) {
+        console.error('Error updating profile:', error);
+        // Still allow proceeding even if Cognito update fails
+        localStorage.setItem('user_name', userName.trim());
+        setNeedsName(false);
+      }
     }
   };
 
@@ -122,7 +163,16 @@ function ScrapingInterface({ isAuthenticated, onAuthComplete }) {
     }
   };
 
-  // If not authenticated, show auth form
+  // Show loading while auth is being checked
+  if (authLoading) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '40px', textAlign: 'center' }}>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  // If not authenticated, show Cognito login form
   if (!isAuthenticated) {
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
@@ -136,20 +186,16 @@ function ScrapingInterface({ isAuthenticated, onAuthComplete }) {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
               <div>
-                <h3 style={{ marginTop: 0, color: '#004085' }}>About Your Information</h3>
+                <h3 style={{ marginTop: 0, color: '#004085' }}>Welcome to CyberRisk Dashboard</h3>
                 <p style={{ lineHeight: '1.6', color: '#004085' }}>
-                  We need your <strong>name and email</strong> to:
+                  Sign in to access:
                 </p>
                 <ul style={{ marginLeft: '20px', color: '#004085' }}>
-                  <li>Track SEC filing requests under your profile</li>
-                  <li>Manage API rate limits for SEC.gov scraping</li>
-                  <li>Store your preferences and saved analyses</li>
-                  <li>Notify you when data updates complete</li>
+                  <li>SEC filings and earnings transcripts for 30+ cybersecurity companies</li>
+                  <li>AI-powered sentiment analysis and risk assessment</li>
+                  <li>Knowledge graph exploration and chat assistant</li>
+                  <li>Price forecasting and growth analytics</li>
                 </ul>
-                <p style={{ fontSize: '12px', color: '#004085', marginBottom: 0 }}>
-                  <strong>Data stored locally:</strong> Your information is stored in your browser's local storage. 
-                  We recommend using a valid email for SEC filing requests.
-                </p>
               </div>
               <button
                 onClick={() => setShowInfo(false)}
@@ -168,6 +214,15 @@ function ScrapingInterface({ isAuthenticated, onAuthComplete }) {
           </div>
         )}
 
+        <LoginForm onSuccess={onAuthComplete} />
+      </div>
+    );
+  }
+
+  // If authenticated but no name for SEC scraping, collect it
+  if (needsName) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
         <div style={{
           background: 'white',
           border: '1px solid #ddd',
@@ -175,11 +230,14 @@ function ScrapingInterface({ isAuthenticated, onAuthComplete }) {
           padding: '30px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
         }}>
-          <h2 style={{ textAlign: 'center', marginBottom: '10px' }}>Get Started</h2>
-          <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px', fontSize: '14px' }}>
-            Please enter your information to access SEC filings, earnings transcripts, and analysis for 50+ cybersecurity companies.
+          <h2 style={{ textAlign: 'center', marginBottom: '10px' }}>One More Step</h2>
+          <p style={{ textAlign: 'center', color: '#666', marginBottom: '20px', fontSize: '14px' }}>
+            SEC.gov requires user identification for API requests. Please provide your name.
           </p>
-          <form onSubmit={handleAuthSubmit}>
+          <p style={{ textAlign: 'center', color: '#28a745', marginBottom: '20px', fontSize: '14px' }}>
+            Signed in as: <strong>{user?.email}</strong>
+          </p>
+          <form onSubmit={handleNameSubmit}>
             <div className="form-group" style={{ marginBottom: '20px' }}>
               <label htmlFor="name" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
                 Full Name *
@@ -187,33 +245,9 @@ function ScrapingInterface({ isAuthenticated, onAuthComplete }) {
               <input
                 type="text"
                 id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleAuthChange}
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
                 placeholder="e.g., John Smith"
-                required
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  boxSizing: 'border-box',
-                  fontSize: '14px'
-                }}
-              />
-            </div>
-
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label htmlFor="email" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                Email Address *
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleAuthChange}
-                placeholder="e.g., john@company.com"
                 required
                 style={{
                   width: '100%',
