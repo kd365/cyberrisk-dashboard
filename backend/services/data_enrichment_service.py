@@ -121,19 +121,24 @@ Extract these features (respond ONLY with valid JSON, no markdown):
             artifacts = db_service.get_artifacts_by_ticker(ticker)
             # Sort by date descending to get most recent
             # Prefer OCR-extracted files (_ocr.txt), then regular .txt, then .pdf
-            filings = [
-                a
-                for a in artifacts
-                if filing_type in a.get("type", "")
-            ]
-            filings.sort(key=lambda x: (
-                # Priority: 1=ocr.txt, 2=regular.txt, 3=pdf
-                0 if "_ocr.txt" in x.get("s3_key", "") else
-                1 if x.get("s3_key", "").endswith(".txt") else 2,
-                # Then by date descending
-                x.get("date", "") or ""
-            ), reverse=False)  # Lower priority number first
+            filings = [a for a in artifacts if filing_type in a.get("type", "")]
 
+            def get_file_priority(s3_key: str) -> int:
+                """Return priority: 0=ocr.txt (best), 1=regular.txt, 2=pdf"""
+                if "_ocr.txt" in s3_key:
+                    return 0
+                elif s3_key.endswith(".txt"):
+                    return 1
+                return 2
+
+            # Sort by priority first, then by date descending
+            filings.sort(
+                key=lambda x: (
+                    get_file_priority(x.get("s3_key", "")),
+                    x.get("date", "") or "",
+                ),
+                reverse=False,
+            )
             # Also sort by date within each priority
             filings.sort(key=lambda x: x.get("date", ""), reverse=True)
 
