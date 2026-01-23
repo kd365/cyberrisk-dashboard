@@ -172,8 +172,7 @@ function Dashboard() {
   // Auth complete handler (for legacy ScrapingInterface compatibility)
   const handleAuthComplete = () => {
     // Auth is now handled by AuthProvider/useAuth
-    // This just closes the login modal if shown
-    setShowLoginModal(false);
+    // No action needed - state is managed by AuthProvider
   };
 
   // Logout handler using Cognito
