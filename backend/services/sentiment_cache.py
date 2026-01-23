@@ -378,3 +378,51 @@ class SentimentCache:
             print(f"🧹 Cleaned up {len(keys_to_delete)} expired memory cache entries")
 
         return len(keys_to_delete)
+
+
+# Module-level singleton instance
+_sentiment_cache = None
+
+
+def get_sentiment_cache() -> SentimentCache:
+    """Get or create the singleton SentimentCache instance."""
+    global _sentiment_cache
+    if _sentiment_cache is None:
+        _sentiment_cache = SentimentCache()
+    return _sentiment_cache
+
+
+def get_cached_sentiment(ticker: str) -> Optional[Dict[str, Any]]:
+    """
+    Get cached sentiment for a ticker from the database.
+
+    This is a convenience function used by other services to retrieve
+    previously computed sentiment data without requiring the artifacts list.
+
+    Args:
+        ticker: Stock ticker symbol
+
+    Returns:
+        dict or None: Cached sentiment data including overall_sentiment,
+                     filing_sentiments, and aggregate metrics, or None if not found.
+    """
+    try:
+        from services.database_service import db_service
+
+        # Query the sentiment_cache table directly for the most recent entry
+        query = """
+            SELECT sentiment_data
+            FROM sentiment_cache
+            WHERE ticker = %s
+            ORDER BY computed_at DESC
+            LIMIT 1
+        """
+
+        result = db_service.execute_query(query, (ticker,))
+        if result and len(result) > 0:
+            return result[0].get('sentiment_data')
+        return None
+
+    except Exception as e:
+        print(f"Error retrieving cached sentiment for {ticker}: {e}")
+        return None
