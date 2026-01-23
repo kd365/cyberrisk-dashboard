@@ -420,7 +420,7 @@ def get_cached_sentiment(ticker: str) -> Optional[Dict[str, Any]]:
 
         result = db_service.execute_query(query, (ticker,))
         if result and len(result) > 0:
-            return result[0].get('sentiment_data')
+            return result[0].get("sentiment_data")
         return None
 
     except Exception as e:
