@@ -431,7 +431,10 @@ class SecTranscriptScraper:
 
     def save_raw_pdf_files(self, artifacts):
         """
-        Save SEC filings as PDFs to S3
+        Save SEC filings to S3
+
+        For 8-K filings, saves as text (better for executive event extraction).
+        For 10-K/10-Q, saves as PDF.
 
         Args:
             artifacts: List of SEC filing metadata dicts
@@ -446,9 +449,15 @@ class SecTranscriptScraper:
             date = artifact.get("date")
             form = artifact.get("form")
 
-            # Generate S3 key: raw/sec/TICKER_10-K_YYYY-MM-DD.pdf
-            filename = f"{ticker}_{form}_{date}.pdf"
-            key = f"raw/sec/{filename}"
+            # For 8-K, use text format (better for parsing executive events)
+            if form == "8-K":
+                filename = f"{ticker}_{form}_{date}.txt"
+                key = f"raw/sec/{filename}"
+                content_type = "text/plain"
+            else:
+                filename = f"{ticker}_{form}_{date}.pdf"
+                key = f"raw/sec/{filename}"
+                content_type = "application/pdf"
 
             try:
                 # Check if already exists
@@ -460,9 +469,14 @@ class SecTranscriptScraper:
                 except ClientError:
                     pass
 
-                # Fetch PDF content
-                print(f"  📥 Downloading PDF for {ticker} {form} {date}...")
-                content = self._fetch_sec_filing_pdf(artifact)
+                # Fetch content - use text extraction for 8-K, PDF for others
+                print(f"  📥 Downloading {form} for {ticker} {date}...")
+                if form == "8-K":
+                    content = self._fetch_sec_filing_text(artifact)
+                    if content:
+                        content = content.encode("utf-8")
+                else:
+                    content = self._fetch_sec_filing_pdf(artifact)
 
                 if content:
                     # Save to S3
@@ -470,12 +484,12 @@ class SecTranscriptScraper:
                         Bucket=self.bucket,
                         Key=key,
                         Body=content,
-                        ContentType="application/pdf",
+                        ContentType=content_type,
                     )
                     print(f"  ✅ Saved {key}")
                     saved.append(key)
                 else:
-                    print(f"  ⚠️  Could not fetch PDF for {key}, skipping")
+                    print(f"  ⚠️  Could not fetch content for {key}, skipping")
 
             except Exception as e:
                 print(f"  ❌ Error saving {key}: {e}")
