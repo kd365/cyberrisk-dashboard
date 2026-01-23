@@ -88,7 +88,8 @@ class SentimentCache:
 
         try:
             cursor = self.db_connection.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS sentiment_cache (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(10) NOT NULL,
@@ -99,7 +100,8 @@ class SentimentCache:
                 );
                 CREATE INDEX IF NOT EXISTS idx_sentiment_cache_lookup
                     ON sentiment_cache(ticker, artifact_hash);
-            """)
+            """
+            )
             self.db_connection.commit()
             cursor.close()
         except Exception as e:
@@ -331,11 +333,13 @@ class SentimentCache:
             if conn:
                 try:
                     cursor = conn.cursor(cursor_factory=RealDictCursor)
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         SELECT ticker, COUNT(*) as count, MAX(computed_at) as last_computed
                         FROM sentiment_cache
                         GROUP BY ticker
-                    """)
+                    """
+                    )
                     rows = cursor.fetchall()
                     cursor.close()
 
@@ -407,20 +411,32 @@ def get_cached_sentiment(ticker: str) -> Optional[Dict[str, Any]]:
                      filing_sentiments, and aggregate metrics, or None if not found.
     """
     try:
-        from services.database_service import db_service
+        cache = get_sentiment_cache()
 
-        # Query the sentiment_cache table directly for the most recent entry
-        query = """
+        if not cache.use_database:
+            return None
+
+        conn = cache._get_db_connection()
+        if not conn:
+            return None
+
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
             SELECT sentiment_data
             FROM sentiment_cache
             WHERE ticker = %s
             ORDER BY computed_at DESC
             LIMIT 1
-        """
+        """,
+            (ticker,),
+        )
 
-        result = db_service.execute_query(query, (ticker,))
-        if result and len(result) > 0:
-            return result[0].get("sentiment_data")
+        row = cursor.fetchone()
+        cursor.close()
+
+        if row:
+            return row["sentiment_data"]
         return None
 
     except Exception as e:
