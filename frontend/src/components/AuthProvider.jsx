@@ -185,6 +185,87 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Sign up with email and password
+  const signUp = async (email, password) => {
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Sign up failed');
+      }
+
+      return { success: true, message: data.message };
+
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Confirm sign up with verification code
+  const confirmSignUp = async (email, code) => {
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/auth/confirm-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Verification failed');
+      }
+
+      return { success: true, message: data.message };
+
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Resend verification code
+  const resendCode = async (email) => {
+    setError(null);
+
+    try {
+      const response = await fetch('/api/auth/resend-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to resend code');
+      }
+
+      return { success: true, message: data.message };
+
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
   // Sign out
   const signOut = useCallback(async () => {
     try {
@@ -342,6 +423,9 @@ export function AuthProvider({ children }) {
     isLoading,
     error,
     signIn,
+    signUp,
+    confirmSignUp,
+    resendCode,
     signOut,
     completeNewPassword,
     refreshTokens,
@@ -374,45 +458,96 @@ export function useAuth() {
 // =============================================================================
 
 export function LoginForm({ onSuccess }) {
-  const { signIn, completeNewPassword, isLoading, error } = useAuth();
+  const { signIn, signUp, confirmSignUp, resendCode, completeNewPassword, isLoading, error } = useAuth();
+  const [mode, setMode] = useState('signin'); // 'signin', 'signup', 'verify'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [localError, setLocalError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [challengeState, setChallengeState] = useState(null);
 
-  const handleSubmit = async (e) => {
+  const handleSignIn = async (e) => {
     e.preventDefault();
     setLocalError('');
 
     try {
-      if (challengeState?.requiresNewPassword) {
-        // Handle new password challenge
-        if (newPassword !== confirmPassword) {
-          setLocalError('Passwords do not match');
-          return;
-        }
-        if (newPassword.length < 8) {
-          setLocalError('Password must be at least 8 characters');
-          return;
-        }
-
-        await completeNewPassword(
-          challengeState.email,
-          newPassword,
-          challengeState.session
-        );
+      const result = await signIn(email, password);
+      if (result.requiresNewPassword) {
+        setChallengeState(result);
+      } else if (result.success) {
         onSuccess?.();
-      } else {
-        // Normal login
-        const result = await signIn(email, password);
-        if (result.requiresNewPassword) {
-          setChallengeState(result);
-        } else if (result.success) {
-          onSuccess?.();
-        }
       }
+    } catch (err) {
+      setLocalError(err.message);
+    }
+  };
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    setLocalError('');
+
+    if (password !== confirmPassword) {
+      setLocalError('Passwords do not match');
+      return;
+    }
+    if (password.length < 8) {
+      setLocalError('Password must be at least 8 characters');
+      return;
+    }
+
+    try {
+      await signUp(email, password);
+      setMode('verify');
+      setSuccessMessage('Verification code sent to your email');
+    } catch (err) {
+      setLocalError(err.message);
+    }
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    setLocalError('');
+
+    try {
+      await confirmSignUp(email, verificationCode);
+      setSuccessMessage('Email verified! You can now sign in.');
+      setMode('signin');
+      setPassword('');
+      setVerificationCode('');
+    } catch (err) {
+      setLocalError(err.message);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setLocalError('');
+    try {
+      await resendCode(email);
+      setSuccessMessage('New verification code sent');
+    } catch (err) {
+      setLocalError(err.message);
+    }
+  };
+
+  const handleNewPassword = async (e) => {
+    e.preventDefault();
+    setLocalError('');
+
+    if (newPassword !== confirmPassword) {
+      setLocalError('Passwords do not match');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setLocalError('Password must be at least 8 characters');
+      return;
+    }
+
+    try {
+      await completeNewPassword(challengeState.email, newPassword, challengeState.session);
+      onSuccess?.();
     } catch (err) {
       setLocalError(err.message);
     }
@@ -464,12 +599,47 @@ export function LoginForm({ onSuccess }) {
       cursor: 'pointer',
       marginTop: '8px',
     },
+    secondaryButton: {
+      width: '100%',
+      padding: '12px 24px',
+      background: 'transparent',
+      color: '#3c50e0',
+      border: '1px solid #3c50e0',
+      borderRadius: '8px',
+      fontSize: '16px',
+      fontWeight: '500',
+      cursor: 'pointer',
+      marginTop: '12px',
+    },
+    link: {
+      color: '#3c50e0',
+      cursor: 'pointer',
+      textDecoration: 'underline',
+      background: 'none',
+      border: 'none',
+      fontSize: '14px',
+    },
+    footer: {
+      textAlign: 'center',
+      marginTop: '20px',
+      fontSize: '14px',
+      color: '#64748b',
+    },
     error: {
       padding: '12px',
       background: '#fef2f2',
       border: '1px solid #fecaca',
       borderRadius: '8px',
       color: '#dc2626',
+      fontSize: '14px',
+      marginBottom: '16px',
+    },
+    success: {
+      padding: '12px',
+      background: '#f0fdf4',
+      border: '1px solid #bbf7d0',
+      borderRadius: '8px',
+      color: '#16a34a',
       fontSize: '14px',
       marginBottom: '16px',
     },
@@ -486,17 +656,13 @@ export function LoginForm({ onSuccess }) {
 
   const displayError = localError || error;
 
+  // New password challenge form
   if (challengeState?.requiresNewPassword) {
     return (
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleNewPassword} style={styles.form}>
         <h2 style={styles.title}>Set New Password</h2>
-
-        <div style={styles.info}>
-          Please set a new password for your account.
-        </div>
-
+        <div style={styles.info}>Please set a new password for your account.</div>
         {displayError && <div style={styles.error}>{displayError}</div>}
-
         <div style={styles.field}>
           <label style={styles.label}>New Password</label>
           <input
@@ -509,7 +675,6 @@ export function LoginForm({ onSuccess }) {
             minLength={8}
           />
         </div>
-
         <div style={styles.field}>
           <label style={styles.label}>Confirm Password</label>
           <input
@@ -521,7 +686,6 @@ export function LoginForm({ onSuccess }) {
             required
           />
         </div>
-
         <button type="submit" style={styles.button} disabled={isLoading}>
           {isLoading ? 'Setting Password...' : 'Set Password'}
         </button>
@@ -529,12 +693,100 @@ export function LoginForm({ onSuccess }) {
     );
   }
 
+  // Email verification form
+  if (mode === 'verify') {
+    return (
+      <form onSubmit={handleVerify} style={styles.form}>
+        <h2 style={styles.title}>Verify Email</h2>
+        {successMessage && <div style={styles.success}>{successMessage}</div>}
+        {displayError && <div style={styles.error}>{displayError}</div>}
+        <div style={styles.info}>Enter the verification code sent to {email}</div>
+        <div style={styles.field}>
+          <label style={styles.label}>Verification Code</label>
+          <input
+            type="text"
+            value={verificationCode}
+            onChange={(e) => setVerificationCode(e.target.value)}
+            style={styles.input}
+            placeholder="Enter 6-digit code"
+            required
+            maxLength={6}
+          />
+        </div>
+        <button type="submit" style={styles.button} disabled={isLoading}>
+          {isLoading ? 'Verifying...' : 'Verify Email'}
+        </button>
+        <button type="button" onClick={handleResendCode} style={styles.secondaryButton} disabled={isLoading}>
+          Resend Code
+        </button>
+        <div style={styles.footer}>
+          <button type="button" onClick={() => setMode('signin')} style={styles.link}>
+            Back to Sign In
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  // Sign up form
+  if (mode === 'signup') {
+    return (
+      <form onSubmit={handleSignUp} style={styles.form}>
+        <h2 style={styles.title}>Create Account</h2>
+        {displayError && <div style={styles.error}>{displayError}</div>}
+        <div style={styles.field}>
+          <label style={styles.label}>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={styles.input}
+            placeholder="Enter your email"
+            required
+          />
+        </div>
+        <div style={styles.field}>
+          <label style={styles.label}>Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={styles.input}
+            placeholder="At least 8 characters"
+            required
+            minLength={8}
+          />
+        </div>
+        <div style={styles.field}>
+          <label style={styles.label}>Confirm Password</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            style={styles.input}
+            placeholder="Confirm password"
+            required
+          />
+        </div>
+        <button type="submit" style={styles.button} disabled={isLoading}>
+          {isLoading ? 'Creating Account...' : 'Sign Up'}
+        </button>
+        <div style={styles.footer}>
+          Already have an account?{' '}
+          <button type="button" onClick={() => { setMode('signin'); setLocalError(''); setSuccessMessage(''); }} style={styles.link}>
+            Sign In
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  // Sign in form (default)
   return (
-    <form onSubmit={handleSubmit} style={styles.form}>
+    <form onSubmit={handleSignIn} style={styles.form}>
       <h2 style={styles.title}>Sign In</h2>
-
+      {successMessage && <div style={styles.success}>{successMessage}</div>}
       {displayError && <div style={styles.error}>{displayError}</div>}
-
       <div style={styles.field}>
         <label style={styles.label}>Email</label>
         <input
@@ -546,7 +798,6 @@ export function LoginForm({ onSuccess }) {
           required
         />
       </div>
-
       <div style={styles.field}>
         <label style={styles.label}>Password</label>
         <input
@@ -558,10 +809,15 @@ export function LoginForm({ onSuccess }) {
           required
         />
       </div>
-
       <button type="submit" style={styles.button} disabled={isLoading}>
         {isLoading ? 'Signing In...' : 'Sign In'}
       </button>
+      <div style={styles.footer}>
+        Don't have an account?{' '}
+        <button type="button" onClick={() => { setMode('signup'); setLocalError(''); setSuccessMessage(''); }} style={styles.link}>
+          Sign Up
+        </button>
+      </div>
     </form>
   );
 }

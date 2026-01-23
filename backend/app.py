@@ -2351,6 +2351,196 @@ def auth_login():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/auth/signup", methods=["POST"])
+def auth_signup():
+    """
+    Register a new user with Cognito.
+
+    Request body:
+        {
+            "email": "user@example.com",
+            "password": "Password123"
+        }
+
+    Returns:
+        Success message if registration successful, error otherwise.
+        User will receive verification code via email.
+    """
+    import boto3
+
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        email = data.get("email", "").strip()
+        password = data.get("password", "")
+
+        if not email or not password:
+            return jsonify({"error": "Email and password required"}), 400
+
+        # Get Cognito configuration
+        region = os.environ.get("AWS_REGION", "us-west-2")
+        client_id = os.environ.get("COGNITO_CLIENT_ID", "")
+
+        if not client_id:
+            return jsonify({"error": "Cognito not configured"}), 503
+
+        # Register with Cognito
+        cognito = boto3.client("cognito-idp", region_name=region)
+
+        try:
+            response = cognito.sign_up(
+                ClientId=client_id,
+                Username=email,
+                Password=password,
+                UserAttributes=[{"Name": "email", "Value": email}],
+            )
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "Verification code sent to your email",
+                    "userSub": response.get("UserSub"),
+                }
+            )
+
+        except cognito.exceptions.UsernameExistsException:
+            return jsonify({"error": "An account with this email already exists"}), 409
+        except cognito.exceptions.InvalidPasswordException as e:
+            return jsonify({"error": str(e)}), 400
+        except cognito.exceptions.InvalidParameterException as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            print(f"Cognito signup error: {e}")
+            return jsonify({"error": str(e)}), 400
+
+    except Exception as e:
+        print(f"Signup error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/confirm-signup", methods=["POST"])
+def auth_confirm_signup():
+    """
+    Confirm user registration with verification code.
+
+    Request body:
+        {
+            "email": "user@example.com",
+            "code": "123456"
+        }
+
+    Returns:
+        Success message if confirmed, error otherwise.
+    """
+    import boto3
+
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        email = data.get("email", "").strip()
+        code = data.get("code", "").strip()
+
+        if not email or not code:
+            return jsonify({"error": "Email and verification code required"}), 400
+
+        # Get Cognito configuration
+        region = os.environ.get("AWS_REGION", "us-west-2")
+        client_id = os.environ.get("COGNITO_CLIENT_ID", "")
+
+        if not client_id:
+            return jsonify({"error": "Cognito not configured"}), 503
+
+        # Confirm signup with Cognito
+        cognito = boto3.client("cognito-idp", region_name=region)
+
+        try:
+            cognito.confirm_sign_up(
+                ClientId=client_id,
+                Username=email,
+                ConfirmationCode=code,
+            )
+
+            return jsonify(
+                {"success": True, "message": "Email verified! You can now sign in."}
+            )
+
+        except cognito.exceptions.CodeMismatchException:
+            return jsonify({"error": "Invalid verification code"}), 400
+        except cognito.exceptions.ExpiredCodeException:
+            return jsonify({"error": "Verification code expired"}), 400
+        except cognito.exceptions.UserNotFoundException:
+            return jsonify({"error": "User not found"}), 404
+        except Exception as e:
+            print(f"Cognito confirm error: {e}")
+            return jsonify({"error": str(e)}), 400
+
+    except Exception as e:
+        print(f"Confirm signup error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/resend-code", methods=["POST"])
+def auth_resend_code():
+    """
+    Resend verification code to user's email.
+
+    Request body:
+        {
+            "email": "user@example.com"
+        }
+
+    Returns:
+        Success message if code sent, error otherwise.
+    """
+    import boto3
+
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        email = data.get("email", "").strip()
+
+        if not email:
+            return jsonify({"error": "Email required"}), 400
+
+        # Get Cognito configuration
+        region = os.environ.get("AWS_REGION", "us-west-2")
+        client_id = os.environ.get("COGNITO_CLIENT_ID", "")
+
+        if not client_id:
+            return jsonify({"error": "Cognito not configured"}), 503
+
+        # Resend code via Cognito
+        cognito = boto3.client("cognito-idp", region_name=region)
+
+        try:
+            cognito.resend_confirmation_code(ClientId=client_id, Username=email)
+
+            return jsonify(
+                {"success": True, "message": "Verification code sent to your email"}
+            )
+
+        except cognito.exceptions.UserNotFoundException:
+            return jsonify({"error": "User not found"}), 404
+        except cognito.exceptions.InvalidParameterException:
+            return jsonify({"error": "User is already verified"}), 400
+        except Exception as e:
+            print(f"Cognito resend error: {e}")
+            return jsonify({"error": str(e)}), 400
+
+    except Exception as e:
+        print(f"Resend code error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/auth/new-password", methods=["POST"])
 def auth_new_password():
     """
