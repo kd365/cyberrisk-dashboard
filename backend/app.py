@@ -756,8 +756,14 @@ scraping_status = {
 }
 
 
-def run_scraping_task(companies, scrape_type):
-    """Background task to scrape companies"""
+def run_scraping_task(companies, scrape_type, include_8k=False):
+    """Background task to scrape companies
+
+    Args:
+        companies: List of ticker symbols to scrape
+        scrape_type: 'all', 'sec', 'transcripts', or '8k'
+        include_8k: Whether to include 8-K filings (current reports)
+    """
     scraping_status["running"] = True
     scraping_status["progress"] = 0
     scraping_status["results"] = []
@@ -774,19 +780,44 @@ def run_scraping_task(companies, scrape_type):
             result = {
                 "ticker": ticker,
                 "sec_filings": 0,
+                "eightk_filings": 0,
                 "transcripts": 0,
                 "errors": [],
             }
 
-            # Scrape SEC filings
+            # Scrape SEC filings (10-K, 10-Q)
             if scrape_type in ["all", "sec"]:
                 try:
-                    filings = scraper.scrape_sec_filings(ticker, num_filings=5)
+                    filings = scraper.scrape_sec_filings(
+                        ticker, num_filings=5, include_8k=include_8k, num_8k=10
+                    )
                     if filings:
-                        saved = scraper.save_raw_pdf_files(filings)
-                        result["sec_filings"] = len(saved)
+                        # Separate 8-K from other filings for reporting
+                        regular_filings = [f for f in filings if f["form"] != "8-K"]
+                        eightk_filings = [f for f in filings if f["form"] == "8-K"]
+
+                        if regular_filings:
+                            saved = scraper.save_raw_pdf_files(regular_filings)
+                            result["sec_filings"] = len(saved)
+
+                        if eightk_filings:
+                            saved_8k = scraper.save_raw_pdf_files(eightk_filings)
+                            result["eightk_filings"] = len(saved_8k)
                 except Exception as e:
                     result["errors"].append(f"SEC: {str(e)}")
+
+            # Scrape only 8-K filings
+            if scrape_type == "8k":
+                try:
+                    filings = scraper.scrape_sec_filings(
+                        ticker, num_filings=0, include_8k=True, num_8k=10
+                    )
+                    eightk_filings = [f for f in filings if f["form"] == "8-K"]
+                    if eightk_filings:
+                        saved = scraper.save_raw_pdf_files(eightk_filings)
+                        result["eightk_filings"] = len(saved)
+                except Exception as e:
+                    result["errors"].append(f"8-K: {str(e)}")
 
             # Scrape transcripts
             if scrape_type in ["all", "transcripts"]:
@@ -805,6 +836,7 @@ def run_scraping_task(companies, scrape_type):
                 {
                     "ticker": ticker,
                     "sec_filings": 0,
+                    "eightk_filings": 0,
                     "transcripts": 0,
                     "errors": [str(e)],
                 }
@@ -824,7 +856,13 @@ def get_scraping_status():
 
 @app.route("/api/scraping/start", methods=["POST"])
 def start_scraping():
-    """Start scraping process in background"""
+    """Start scraping process in background
+
+    Request body:
+        type: 'all', 'sec', 'transcripts', or '8k'
+        companies: List of ticker symbols
+        include_8k: Whether to include 8-K filings when type is 'all' or 'sec'
+    """
     if scraping_status["running"]:
         return (
             jsonify({"status": "error", "message": "Scraping already in progress"}),
@@ -834,12 +872,15 @@ def start_scraping():
     data = request.json or {}
     scrape_type = data.get("type", "all")
     companies = data.get("companies", [])
+    include_8k = data.get("include_8k", False)
 
     if not companies:
         return jsonify({"status": "error", "message": "No companies specified"}), 400
 
     # Start scraping in background thread
-    thread = threading.Thread(target=run_scraping_task, args=(companies, scrape_type))
+    thread = threading.Thread(
+        target=run_scraping_task, args=(companies, scrape_type, include_8k)
+    )
     thread.daemon = True
     thread.start()
 
@@ -847,6 +888,7 @@ def start_scraping():
         {
             "status": "started",
             "type": scrape_type,
+            "include_8k": include_8k,
             "companies": companies,
             "message": f"Started scraping {len(companies)} companies",
         }

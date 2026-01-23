@@ -17,6 +17,7 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [scrapeType, setScrapeType] = useState('all');
+  const [include8K, setInclude8K] = useState(false);
   const [documentStatus, setDocumentStatus] = useState({});
   const [showInfo, setShowInfo] = useState(true);
 
@@ -145,6 +146,7 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
         body: JSON.stringify({
           type: scrapeType,
           companies: selectedCompanies,
+          include_8k: include8K,
           generate_artifacts: true
         })
       });
@@ -426,9 +428,33 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
               <option value="all">All Documents (10-K, 10-Q, Transcripts)</option>
               <option value="sec">SEC Filings Only (10-K, 10-Q)</option>
               <option value="transcripts">Earnings Transcripts Only</option>
+              <option value="8k">8-K Current Reports Only</option>
             </select>
           </div>
-          
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}>
+              <input
+                type="checkbox"
+                checked={include8K}
+                onChange={(e) => setInclude8K(e.target.checked)}
+                disabled={scrapeType === '8k'}
+                style={{ marginRight: '8px', cursor: 'pointer' }}
+              />
+              <span>
+                <strong>Include 8-K Filings</strong>
+                <span style={{ color: '#666', marginLeft: '8px' }}>
+                  (Cybersecurity incidents, leadership changes, material events)
+                </span>
+              </span>
+            </label>
+          </div>
+
           <button
             onClick={handleScrape}
             disabled={isLoading || selectedCompanies.length === 0}

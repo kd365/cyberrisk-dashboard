@@ -30,11 +30,23 @@ class SecTranscriptScraper:
         self.bucket = os.environ.get("ARTIFACTS_BUCKET", "cyber-risk-artifacts")
         self.artifacts = []
 
-    def scrape_sec_filings(self, ticker, num_filings=20):
+    def scrape_sec_filings(self, ticker, num_filings=20, include_8k=False, num_8k=10):
         """
-        Fetch SEC 10-K and 10-Q filings for a ticker
+        Fetch SEC 10-K, 10-Q, and optionally 8-K filings for a ticker
 
         Uses SEC EDGAR API - fetches up to num_filings of each type (10-K and 10-Q)
+
+        Args:
+            ticker: Stock ticker symbol
+            num_filings: Number of 10-K and 10-Q filings to fetch (default: 20 each)
+            include_8k: Whether to include 8-K current reports (default: False)
+            num_8k: Number of 8-K filings to fetch if include_8k is True (default: 10)
+
+        8-K filings are "Current Reports" filed for material events like:
+        - Cybersecurity incidents (Item 1.05 - required since Dec 2023)
+        - Leadership changes (Item 5.02)
+        - Material agreements (Item 1.01)
+        - Financial results (Item 2.02)
         """
         print(f"🔍 Fetching SEC filings for {ticker}...")
 
@@ -54,7 +66,7 @@ class SecTranscriptScraper:
             data = response.json()
             filings = []
 
-            # Extract 10-K and 10-Q filings separately to ensure we get enough of each
+            # Extract filings separately to ensure we get enough of each type
             recent = data.get("filings", {}).get("recent", {})
             forms = recent.get("form", [])
             dates = recent.get("filingDate", [])
@@ -62,6 +74,7 @@ class SecTranscriptScraper:
 
             tenk_count = 0
             tenq_count = 0
+            eightk_count = 0
 
             for form, date, accession in zip(forms, dates, accessions):
                 if form == "10-K" and tenk_count < num_filings:
@@ -84,14 +97,28 @@ class SecTranscriptScraper:
                         }
                     )
                     tenq_count += 1
+                elif include_8k and form == "8-K" and eightk_count < num_8k:
+                    filings.append(
+                        {
+                            "ticker": ticker,
+                            "form": form,
+                            "date": date,
+                            "accession": accession,
+                        }
+                    )
+                    eightk_count += 1
 
-                # Stop if we have enough of both types
-                if tenk_count >= num_filings and tenq_count >= num_filings:
+                # Stop if we have enough of all types
+                max_8k = num_8k if include_8k else 0
+                if (tenk_count >= num_filings and
+                    tenq_count >= num_filings and
+                    eightk_count >= max_8k):
                     break
 
-            print(
-                f"  ✅ Found {len(filings)} SEC filings ({tenk_count} 10-K, {tenq_count} 10-Q)"
-            )
+            filing_summary = f"{tenk_count} 10-K, {tenq_count} 10-Q"
+            if include_8k:
+                filing_summary += f", {eightk_count} 8-K"
+            print(f"  ✅ Found {len(filings)} SEC filings ({filing_summary})")
             return filings
 
         except Exception as e:
@@ -570,8 +597,8 @@ class SecTranscriptScraper:
                     ticker = parts[0].upper()
 
                     # Handle different filename patterns
-                    if parts[1] in ["10-K", "10-Q", "10K", "10Q"]:
-                        # Pattern: TICKER_10-K_DATE.pdf
+                    if parts[1] in ["10-K", "10-Q", "10K", "10Q", "8-K", "8K"]:
+                        # Pattern: TICKER_10-K_DATE.pdf or TICKER_8-K_DATE.pdf
                         doc_type = parts[1]
                         date = parts[2] if len(parts) > 2 else ""
                     else:
@@ -584,6 +611,8 @@ class SecTranscriptScraper:
                         artifact_type = "10-K"
                     elif "10Q" in doc_type or "10-Q" in doc_type:
                         artifact_type = "10-Q"
+                    elif "8K" in doc_type or "8-K" in doc_type:
+                        artifact_type = "8-K"
                     elif "transcript" in doc_type.lower():
                         artifact_type = "Earnings Transcript"
                     else:
