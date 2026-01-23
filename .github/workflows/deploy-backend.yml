@@ -1,6 +1,7 @@
 name: Deploy Backend
 
 on:
+  workflow_dispatch:  # Allow manual triggers
   workflow_run:
     workflows: ["Backend CI"]
     types:

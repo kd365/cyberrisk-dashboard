@@ -48,24 +48,24 @@ jobs:
 
       - name: Build Docker images
         run: |
-          echo "Building Docker images with docker-compose..."
-          docker-compose build --parallel
+          echo "Building Docker images with docker compose..."
+          docker compose build --parallel
           echo "Build complete!"
 
       - name: Start services
         run: |
-          echo "Starting services with docker-compose..."
-          docker-compose up -d
+          echo "Starting services with docker compose..."
+          docker compose up -d
           echo "Waiting for services to be healthy..."
           sleep 30
 
       - name: Check service status
         run: |
           echo "=== Docker Compose Services Status ==="
-          docker-compose ps
+          docker compose ps
           echo ""
           echo "=== Container Logs ==="
-          docker-compose logs --tail=50
+          docker compose logs --tail=50
 
       - name: Test backend health
         run: |
@@ -79,7 +79,7 @@ jobs:
             sleep 5
           done
           echo "Backend health check failed"
-          docker-compose logs backend
+          docker compose logs backend
           exit 1
 
       - name: Test frontend accessibility
@@ -94,7 +94,7 @@ jobs:
             sleep 5
           done
           echo "Frontend accessibility check failed"
-          docker-compose logs frontend
+          docker compose logs frontend
           exit 1
 
       - name: Test Neo4j connectivity
@@ -109,7 +109,7 @@ jobs:
             sleep 5
           done
           echo "Neo4j accessibility check failed"
-          docker-compose logs neo4j
+          docker compose logs neo4j
           exit 1
 
       - name: Run integration tests
@@ -131,7 +131,7 @@ jobs:
         if: always()
         run: |
           echo "Stopping and removing containers..."
-          docker-compose down -v
+          docker compose down -v
           echo "Cleanup complete!"
 
       - name: Upload logs on failure
