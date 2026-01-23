@@ -110,9 +110,11 @@ class SecTranscriptScraper:
 
                 # Stop if we have enough of all types
                 max_8k = num_8k if include_8k else 0
-                if (tenk_count >= num_filings and
-                    tenq_count >= num_filings and
-                    eightk_count >= max_8k):
+                if (
+                    tenk_count >= num_filings
+                    and tenq_count >= num_filings
+                    and eightk_count >= max_8k
+                ):
                     break
 
             filing_summary = f"{tenk_count} 10-K, {tenq_count} 10-Q"

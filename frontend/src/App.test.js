@@ -3,6 +3,7 @@ import App from './App';
 
 test('renders CyberRisk application', () => {
   render(<App />);
-  const appElement = screen.getByText(/CyberRisk/i);
-  expect(appElement).toBeInTheDocument();
+  // Use getAllByText since there may be multiple elements containing "CyberRisk"
+  const appElements = screen.getAllByText(/CyberRisk/i);
+  expect(appElements.length).toBeGreaterThan(0);
 });
