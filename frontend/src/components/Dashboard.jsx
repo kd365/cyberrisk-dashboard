@@ -6,7 +6,7 @@ import SentimentAnalysis from './SentimentAnalysisEnhanced';
 import CompanyGrowth from './CompanyGrowth';
 import LexChatbot from './LexChatbot';
 import GraphRAGAssistant from './GraphRAGAssistant';
-import { useAuth, LoginForm } from './AuthProvider';
+import { useAuth } from './AuthProvider';
 
 // Icon components (simple SVG icons)
 const Icons = {
@@ -109,14 +109,13 @@ const Icons = {
 
 function Dashboard() {
   // Use Cognito auth from AuthProvider
-  const { user, isAuthenticated, isLoading: authLoading, signOut } = useAuth();
+  const { isAuthenticated, signOut } = useAuth();
 
   const [activeTab, setActiveTab] = useState('scraping');
   const [selectedCompany, setSelectedCompany] = useState('CRWD');
   const [companies, setCompanies] = useState([]);
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [metrics, setMetrics] = useState({
     totalCompanies: 0,
     totalArtifacts: 0,

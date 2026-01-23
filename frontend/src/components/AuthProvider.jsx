@@ -12,6 +12,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 const AuthContext = createContext(null);
 
 // Cognito configuration - loaded from environment variables
+// Used by backend API calls - kept for reference
+// eslint-disable-next-line no-unused-vars
 const COGNITO_CONFIG = {
   userPoolId: process.env.REACT_APP_COGNITO_USER_POOL_ID,
   clientId: process.env.REACT_APP_COGNITO_CLIENT_ID,
