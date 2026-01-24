@@ -52,7 +52,7 @@ The CyberRisk Dashboard uses LangChain to orchestrate a tool-calling agent power
         ▼                      ▼                      ▼
 ┌───────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │  AWS Bedrock  │    │   Tool Layer    │    │  Memory Service │
-│  Claude 3.5   │    │   (11 Tools)    │    │   (Mem0 + PG)   │
+│  Claude 3.5   │    │   (12 Tools)    │    │   (Mem0 + PG)   │
 │    Sonnet     │    │                 │    │                 │
 └───────────────┘    └─────────────────┘    └─────────────────┘
 ```
@@ -89,8 +89,9 @@ Tools are defined using LangChain's `@tool` decorator:
 |------|---------|-------------|
 | `list_companies` | List all tracked cybersecurity companies | PostgreSQL |
 | `get_company_info` | Get company details + current stock price | PostgreSQL + Yahoo Finance |
+| `add_company` | Add a new company to track | PostgreSQL |
 | `get_sentiment` | Retrieve sentiment analysis results | AWS Comprehend cache |
-| `get_forecast` | Get stock price predictions | Prophet/Chronos models |
+| `get_forecast` | Get stock price predictions | Chronos/Prophet models |
 | `get_growth_metrics` | Employee count and hiring trends | CoreSignal API |
 | `get_documents` | List SEC filings for a company | S3 artifacts |
 | `query_knowledge_graph` | Search Neo4j for entities/relationships | Neo4j |
@@ -99,13 +100,14 @@ Tools are defined using LangChain's `@tool` decorator:
 | `get_document_context` | Get formatted context for Q&A | pgvector RAG |
 | `get_dashboard_help` | Explain dashboard features | Static |
 
-#### 3. Prompt Template
+#### 3. Prompt Template (`prompts.py`)
 
 The system prompt includes:
-- Role definition as a cybersecurity analyst
+- Role definition as a Venture Capital Investment Advisor
 - List of available tools and their purposes
 - Current list of tracked companies (loaded dynamically from RDS)
-- Instructions for tool usage and response formatting
+- Critical instructions for tool usage and presenting tool results
+- Knowledge graph insight guidelines
 
 ### Data Flow
 
