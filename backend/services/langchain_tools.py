@@ -629,6 +629,435 @@ def get_vulnerabilities(
         return {"error": str(e), "vulnerabilities": []}
 
 
+@tool
+def get_events(ticker: Optional[str] = None, limit: int = 10) -> dict:
+    """Get general business events for companies from SEC filings.
+
+    Args:
+        ticker: Stock ticker to get events for a specific company (e.g., CRWD, PANW)
+        limit: Maximum events to return (default: 10)
+
+    Use when asked about company events, news, or significant occurrences mentioned in filings.
+    This is different from executive events - use get_executive_events for leadership changes.
+    """
+    neo4j = get_neo4j_service()
+    if not neo4j:
+        return {
+            "error": "Knowledge graph not available",
+            "message": "Neo4j service is not connected",
+        }
+
+    try:
+        params = {"limit": limit}
+
+        if ticker:
+            ticker = ticker.upper()
+            params["ticker"] = ticker
+            query = """
+                MATCH (e:Event)<-[:MENTIONS]-(d:Document)<-[:HAS_FILING]-(o:Organization {ticker: $ticker})
+                RETURN e.name as event_name,
+                       e.type as event_type,
+                       e.date as event_date,
+                       e.description as description,
+                       o.name as company_name,
+                       o.ticker as ticker,
+                       d.type as document_type,
+                       d.date as document_date
+                ORDER BY e.date DESC, d.date DESC
+                LIMIT $limit
+            """
+        else:
+            query = """
+                MATCH (e:Event)
+                OPTIONAL MATCH (e)<-[:MENTIONS]-(d:Document)<-[:HAS_FILING]-(o:Organization)
+                RETURN e.name as event_name,
+                       e.type as event_type,
+                       e.date as event_date,
+                       e.description as description,
+                       collect(DISTINCT o.name)[0..3] as companies,
+                       collect(DISTINCT o.ticker)[0..3] as tickers
+                ORDER BY e.date DESC
+                LIMIT $limit
+            """
+
+        results = neo4j.execute_read(query, params)
+
+        # Get total count
+        count_query = "MATCH (e:Event) RETURN count(e) as total"
+        count_result = neo4j.execute_read(count_query, {})
+        total = count_result[0]["total"] if count_result else 0
+
+        return {
+            "events": results,
+            "count": len(results),
+            "total_in_database": total,
+            "ticker": ticker,
+            "message": f"Found {len(results)} events" + (f" for {ticker}" if ticker else ""),
+        }
+    except Exception as e:
+        return {"error": str(e), "events": []}
+
+
+@tool
+def get_persons(
+    ticker: Optional[str] = None,
+    name: Optional[str] = None,
+    role: Optional[str] = None,
+    limit: int = 10,
+) -> dict:
+    """Get people mentioned in SEC filings or associated with patents.
+
+    Args:
+        ticker: Stock ticker to get people for a specific company
+        name: Search for a specific person by name (partial match)
+        role: Filter by role (e.g., "CEO", "inventor")
+        limit: Maximum people to return (default: 10)
+
+    Use when asked about people, executives, inventors, or individuals in the database.
+    """
+    neo4j = get_neo4j_service()
+    if not neo4j:
+        return {
+            "error": "Knowledge graph not available",
+            "message": "Neo4j service is not connected",
+        }
+
+    try:
+        params = {"limit": limit}
+        where_clauses = []
+
+        if name:
+            params["name"] = name.upper()
+            where_clauses.append("toUpper(p.name) CONTAINS $name")
+
+        where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        if ticker:
+            ticker = ticker.upper()
+            params["ticker"] = ticker
+            query = f"""
+                MATCH (p:Person)-[:INVENTED]->(pat:Patent)<-[:FILED]-(o:Organization {{ticker: $ticker}})
+                {where_clause}
+                RETURN p.name as name,
+                       count(DISTINCT pat) as patent_count,
+                       collect(DISTINCT pat.title)[0..3] as sample_patents,
+                       o.name as company_name,
+                       o.ticker as ticker
+                ORDER BY patent_count DESC
+                LIMIT $limit
+            """
+        else:
+            query = f"""
+                MATCH (p:Person)
+                {where_clause}
+                OPTIONAL MATCH (p)-[:INVENTED]->(pat:Patent)
+                OPTIONAL MATCH (p)-[:INVOLVED_IN]->(e:ExecutiveEvent)
+                RETURN p.name as name,
+                       count(DISTINCT pat) as patent_count,
+                       count(DISTINCT e) as executive_event_count,
+                       collect(DISTINCT pat.title)[0..2] as sample_patents
+                ORDER BY patent_count DESC, executive_event_count DESC
+                LIMIT $limit
+            """
+
+        results = neo4j.execute_read(query, params)
+
+        # Get total count
+        count_query = "MATCH (p:Person) RETURN count(p) as total"
+        count_result = neo4j.execute_read(count_query, {})
+        total = count_result[0]["total"] if count_result else 0
+
+        return {
+            "persons": results,
+            "count": len(results),
+            "total_in_database": total,
+            "ticker": ticker,
+            "message": f"Found {len(results)} people" + (f" for {ticker}" if ticker else ""),
+        }
+    except Exception as e:
+        return {"error": str(e), "persons": []}
+
+
+@tool
+def get_ma_events(ticker: Optional[str] = None, limit: int = 10) -> dict:
+    """Get merger and acquisition (M&A) events for companies.
+
+    Args:
+        ticker: Stock ticker to get M&A events for a specific company
+        limit: Maximum events to return (default: 10)
+
+    Use when asked about mergers, acquisitions, buyouts, or M&A activity.
+    """
+    neo4j = get_neo4j_service()
+    if not neo4j:
+        return {
+            "error": "Knowledge graph not available",
+            "message": "Neo4j service is not connected",
+        }
+
+    try:
+        params = {"limit": limit}
+
+        if ticker:
+            ticker = ticker.upper()
+            params["ticker"] = ticker
+            query = """
+                MATCH (o:Organization {ticker: $ticker})-[:HAS_MA_EVENT]->(m:MAEvent)
+                RETURN m.event_type as event_type,
+                       m.target_company as target_company,
+                       m.acquirer as acquirer,
+                       m.deal_value as deal_value,
+                       m.announcement_date as announcement_date,
+                       m.status as status,
+                       m.description as description,
+                       o.name as company_name,
+                       o.ticker as ticker
+                ORDER BY m.announcement_date DESC
+                LIMIT $limit
+            """
+        else:
+            query = """
+                MATCH (o:Organization)-[:HAS_MA_EVENT]->(m:MAEvent)
+                RETURN m.event_type as event_type,
+                       m.target_company as target_company,
+                       m.acquirer as acquirer,
+                       m.deal_value as deal_value,
+                       m.announcement_date as announcement_date,
+                       m.status as status,
+                       m.description as description,
+                       o.name as company_name,
+                       o.ticker as ticker
+                ORDER BY m.announcement_date DESC
+                LIMIT $limit
+            """
+
+        results = neo4j.execute_read(query, params)
+
+        # Get total count
+        count_query = "MATCH ()-[:HAS_MA_EVENT]->(m:MAEvent) RETURN count(m) as total"
+        count_result = neo4j.execute_read(count_query, {})
+        total = count_result[0]["total"] if count_result else 0
+
+        return {
+            "ma_events": results,
+            "count": len(results),
+            "total_in_database": total,
+            "ticker": ticker,
+            "message": f"Found {len(results)} M&A events" + (f" for {ticker}" if ticker else ""),
+        }
+    except Exception as e:
+        return {"error": str(e), "ma_events": []}
+
+
+@tool
+def get_security_incidents(ticker: Optional[str] = None, limit: int = 10) -> dict:
+    """Get security incidents and breach events for companies.
+
+    Args:
+        ticker: Stock ticker to get security incidents for a specific company
+        limit: Maximum incidents to return (default: 10)
+
+    Use when asked about security breaches, data breaches, cyber attacks, or security incidents.
+    """
+    neo4j = get_neo4j_service()
+    if not neo4j:
+        return {
+            "error": "Knowledge graph not available",
+            "message": "Neo4j service is not connected",
+        }
+
+    try:
+        params = {"limit": limit}
+
+        if ticker:
+            ticker = ticker.upper()
+            params["ticker"] = ticker
+            # Check both SecurityEvent nodes and restructuring events that might be security-related
+            query = """
+                MATCH (o:Organization {ticker: $ticker})
+                OPTIONAL MATCH (o)-[:HAS_SECURITY_EVENT]->(s:SecurityEvent)
+                OPTIONAL MATCH (o)-[:HAS_RESTRUCTURING_EVENT]->(r:RestructuringEvent)
+                WITH o, collect(s) as security_events, collect(r) as restructuring_events
+                UNWIND (security_events + restructuring_events) as event
+                RETURN event.type as event_type,
+                       event.description as description,
+                       event.date as event_date,
+                       event.impact as impact,
+                       o.name as company_name,
+                       o.ticker as ticker
+                LIMIT $limit
+            """
+        else:
+            query = """
+                MATCH (s:SecurityEvent)
+                OPTIONAL MATCH (o:Organization)-[:HAS_SECURITY_EVENT]->(s)
+                RETURN s.type as event_type,
+                       s.description as description,
+                       s.date as event_date,
+                       s.impact as impact,
+                       o.name as company_name,
+                       o.ticker as ticker
+                LIMIT $limit
+            """
+
+        results = neo4j.execute_read(query, params)
+
+        # Get total count
+        count_query = "MATCH (s:SecurityEvent) RETURN count(s) as total"
+        count_result = neo4j.execute_read(count_query, {})
+        total = count_result[0]["total"] if count_result else 0
+
+        return {
+            "security_incidents": results,
+            "count": len(results),
+            "total_in_database": total,
+            "ticker": ticker,
+            "message": f"Found {len(results)} security incidents" + (f" for {ticker}" if ticker else ""),
+        }
+    except Exception as e:
+        return {"error": str(e), "security_incidents": []}
+
+
+@tool
+def get_graph_documents(
+    ticker: Optional[str] = None,
+    doc_type: Optional[str] = None,
+    limit: int = 10,
+) -> dict:
+    """Get documents (SEC filings, transcripts) from the knowledge graph.
+
+    Args:
+        ticker: Stock ticker to get documents for a specific company
+        doc_type: Filter by document type (10-K, 10-Q, 8-K, transcript)
+        limit: Maximum documents to return (default: 10)
+
+    Use when asked about what documents are available or to list filings.
+    For searching document content, use search_documents instead.
+    """
+    neo4j = get_neo4j_service()
+    if not neo4j:
+        return {
+            "error": "Knowledge graph not available",
+            "message": "Neo4j service is not connected",
+        }
+
+    try:
+        params = {"limit": limit}
+        where_clauses = []
+
+        if ticker:
+            ticker = ticker.upper()
+            params["ticker"] = ticker
+            where_clauses.append("o.ticker = $ticker")
+
+        if doc_type:
+            params["doc_type"] = doc_type
+            where_clauses.append("d.type = $doc_type")
+
+        where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        query = f"""
+            MATCH (o:Organization)-[:HAS_FILING]->(d:Document)
+            {where_clause}
+            RETURN d.type as document_type,
+                   d.date as document_date,
+                   d.title as title,
+                   d.s3_key as s3_key,
+                   o.name as company_name,
+                   o.ticker as ticker
+            ORDER BY d.date DESC
+            LIMIT $limit
+        """
+
+        results = neo4j.execute_read(query, params)
+
+        # Get total count and type breakdown
+        count_query = f"""
+            MATCH (o:Organization)-[:HAS_FILING]->(d:Document)
+            {where_clause}
+            RETURN d.type as doc_type, count(d) as count
+            ORDER BY count DESC
+        """
+        count_results = neo4j.execute_read(count_query, params)
+        type_breakdown = {r["doc_type"]: r["count"] for r in count_results}
+        total = sum(type_breakdown.values())
+
+        return {
+            "documents": results,
+            "count": len(results),
+            "total_in_database": total,
+            "type_breakdown": type_breakdown,
+            "ticker": ticker,
+            "message": f"Found {len(results)} documents" + (f" for {ticker}" if ticker else ""),
+        }
+    except Exception as e:
+        return {"error": str(e), "documents": []}
+
+
+@tool
+def get_locations(ticker: Optional[str] = None, limit: int = 10) -> dict:
+    """Get geographic locations associated with companies.
+
+    Args:
+        ticker: Stock ticker to get locations for a specific company
+        limit: Maximum locations to return (default: 10)
+
+    Use when asked about where companies operate, geographic presence, or office locations.
+    """
+    neo4j = get_neo4j_service()
+    if not neo4j:
+        return {
+            "error": "Knowledge graph not available",
+            "message": "Neo4j service is not connected",
+        }
+
+    try:
+        params = {"limit": limit}
+
+        if ticker:
+            ticker = ticker.upper()
+            params["ticker"] = ticker
+            query = """
+                MATCH (o:Organization {ticker: $ticker})-[:OPERATES_IN]->(l:Location)
+                RETURN l.name as location_name,
+                       l.type as location_type,
+                       l.country as country,
+                       l.region as region,
+                       o.name as company_name,
+                       o.ticker as ticker
+                ORDER BY l.name
+                LIMIT $limit
+            """
+        else:
+            query = """
+                MATCH (o:Organization)-[:OPERATES_IN]->(l:Location)
+                RETURN l.name as location_name,
+                       l.type as location_type,
+                       l.country as country,
+                       count(DISTINCT o) as company_count,
+                       collect(DISTINCT o.ticker)[0..5] as sample_tickers
+                ORDER BY company_count DESC
+                LIMIT $limit
+            """
+
+        results = neo4j.execute_read(query, params)
+
+        # Get total count
+        count_query = "MATCH (l:Location) RETURN count(l) as total"
+        count_result = neo4j.execute_read(count_query, {})
+        total = count_result[0]["total"] if count_result else 0
+
+        return {
+            "locations": results,
+            "count": len(results),
+            "total_in_database": total,
+            "ticker": ticker,
+            "message": f"Found {len(results)} locations" + (f" for {ticker}" if ticker else ""),
+        }
+    except Exception as e:
+        return {"error": str(e), "locations": []}
+
+
 # =============================================================================
 # RAG Tools
 # =============================================================================
@@ -788,18 +1217,29 @@ def get_dashboard_help() -> dict:
 def get_all_tools():
     """Return all available tools for the LangChain agent."""
     return [
+        # Company tools
         list_companies,
         get_company_info,
         add_company,
+        # Analytics tools
         get_sentiment,
         get_forecast,
         get_growth_metrics,
         get_documents,
+        # Knowledge graph tools
         query_knowledge_graph,
         get_patents,
         get_executive_events,
         get_vulnerabilities,
+        get_events,
+        get_persons,
+        get_ma_events,
+        get_security_incidents,
+        get_graph_documents,
+        get_locations,
+        # RAG tools
         search_documents,
         get_document_context,
+        # Help
         get_dashboard_help,
     ]
