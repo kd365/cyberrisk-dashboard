@@ -94,20 +94,24 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
   useEffect(() => {
     const checkDocumentStatus = async () => {
       const statusMap = {};
-      
+
       for (const ticker of selectedCompanies) {
         try {
           const response = await fetch(`/api/artifacts/status/${ticker}`);
           const data = await response.json();
-          statusMap[ticker] = data.to_fetch;
+          // Store the full status info including existing count
+          statusMap[ticker] = {
+            existing: data.status?.total || 0,
+            breakdown: data.status?.by_type || {}
+          };
         } catch (error) {
           console.error(`Error checking status for ${ticker}:`, error);
         }
       }
-      
+
       setDocumentStatus(statusMap);
     };
-    
+
     if (isAuthenticated && selectedCompanies.length > 0) {
       checkDocumentStatus();
     }
@@ -333,8 +337,7 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
           ) : (
             companies.map((company) => {
               const status = documentStatus[company.ticker];
-              const hasDocuments = status && status.existing > 0;
-              const toFetch = status?.to_fetch || 0;
+              const docCount = status?.existing || 0;
               
               return (
                 <label key={company.ticker} style={{
@@ -359,17 +362,11 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
                     </span>
                     {status && (
                       <div style={{ fontSize: '11px', marginTop: '4px' }}>
-                        {hasDocuments && (
+                        {docCount > 0 ? (
                           <span style={{ color: '#28a745' }}>
-                            {status.existing} documents saved
+                            {docCount} documents saved
                           </span>
-                        )}
-                        {toFetch > 0 && (
-                          <span style={{ color: '#ff6b6b', marginLeft: hasDocuments ? '8px' : '0' }}>
-                            {toFetch} more available
-                          </span>
-                        )}
-                        {!hasDocuments && toFetch === 0 && (
+                        ) : (
                           <span style={{ color: '#999' }}>No documents yet</span>
                         )}
                       </div>
