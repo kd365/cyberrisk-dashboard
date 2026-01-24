@@ -28,20 +28,24 @@ def test_single_company(ticker: str):
     print(f"  Restructuring:    {len(result['restructuring_events'])}")
 
     # Print sample events
-    if result['executive_events']:
+    if result["executive_events"]:
         print(f"\n  Sample Executive Event:")
-        evt = result['executive_events'][0]
-        print(f"    - {evt.get('event_type')}: {evt.get('person_name')} as {evt.get('title')}")
+        evt = result["executive_events"][0]
+        print(
+            f"    - {evt.get('event_type')}: {evt.get('person_name')} as {evt.get('title')}"
+        )
 
-    if result['ma_events']:
+    if result["ma_events"]:
         print(f"\n  Sample M&A Event:")
-        evt = result['ma_events'][0]
+        evt = result["ma_events"][0]
         print(f"    - {evt.get('event_type')}: {evt.get('summary', 'N/A')[:80]}")
 
-    if result['security_events']:
+    if result["security_events"]:
         print(f"\n  Sample Security Event:")
-        evt = result['security_events'][0]
-        print(f"    - {evt.get('event_type')} ({evt.get('severity')}): {evt.get('summary', 'N/A')[:80]}")
+        evt = result["security_events"][0]
+        print(
+            f"    - {evt.get('event_type')} ({evt.get('severity')}): {evt.get('summary', 'N/A')[:80]}"
+        )
 
     return result
 
