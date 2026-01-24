@@ -127,21 +127,29 @@ class LangChainAgentService:
             messages.append(HumanMessage(content=message))
 
             # Invoke the LangGraph agent
+            # Higher recursion_limit allows complex multi-tool queries
             result = self.agent.invoke(
                 {"messages": messages},
-                config={"recursion_limit": 10},
+                config={"recursion_limit": 25},
             )
 
             # Extract response from the last AI message
             response_text = "I'm not sure how to respond to that."
             tools_used = []
 
+            # Collect ALL tools used across the entire agent run (not just last message)
+            for msg in result.get("messages", []):
+                if isinstance(msg, AIMessage):
+                    if hasattr(msg, "tool_calls") and msg.tool_calls:
+                        for tc in msg.tool_calls:
+                            tool_name = tc.get("name", "")
+                            if tool_name and tool_name not in tools_used:
+                                tools_used.append(tool_name)
+
+            # Get the final response from the last AI message
             for msg in reversed(result.get("messages", [])):
                 if isinstance(msg, AIMessage):
                     response_text = msg.content
-                    # Extract tool calls if any
-                    if hasattr(msg, "tool_calls") and msg.tool_calls:
-                        tools_used = [tc.get("name", "") for tc in msg.tool_calls]
                     break
 
             # Save to PostgreSQL conversation memory
