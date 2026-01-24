@@ -151,10 +151,11 @@ class GraphEnrichmentService:
         """Ensure company node exists in Neo4j."""
         company = self.db.get_company(ticker)
         if company:
-            self.neo4j.create_company(
-                ticker=ticker,
+            self.neo4j.create_organization(
                 name=company.get("company_name", ticker),
-                sector=company.get("sector", "Cybersecurity"),
+                ticker=ticker,
+                tracked=True,
+                cyber_sector=company.get("sector", "Cybersecurity"),
             )
 
     def _add_sentiment_snapshots(self, ticker: str) -> int:
