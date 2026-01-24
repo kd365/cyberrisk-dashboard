@@ -195,6 +195,28 @@ Added strict anti-hallucination rules:
 
 ---
 
+### 2026-01-24: Fixed Cache-to-Graph Sync Error
+
+**Issue**: `/api/admin/sync-cache-to-graph` endpoint failing with:
+```
+'Neo4jService' object has no attribute 'create_company'
+```
+
+**Root Cause**: `GraphEnrichmentService._ensure_company_node()` called `neo4j.create_company()` but the method is actually `create_organization()`.
+
+**Fix**: Updated method call in [graph_enrichment_service.py](backend/services/graph_enrichment_service.py) (line 154):
+```python
+# Before (broken):
+self.neo4j.create_company(ticker=ticker, name=..., sector=...)
+
+# After (fixed):
+self.neo4j.create_organization(name=..., ticker=ticker, tracked=True, cyber_sector=...)
+```
+
+**Commit**: `67aa517` - Fix Neo4j method call in graph enrichment service
+
+---
+
 ### LLM Chat Assistant Test Questions
 
 **Company Research**
