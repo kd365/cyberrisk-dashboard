@@ -3,7 +3,7 @@ import { useAuth, LoginForm } from './AuthProvider';
 
 function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplete }) {
   // Use Cognito auth context
-  const { user, isAuthenticated: authIsAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated: authIsAuthenticated } = useAuth();
 
   // Combine prop-based and context-based authentication
   const isAuthenticated = authIsAuthenticated || propIsAuthenticated;
@@ -168,16 +168,10 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
     }
   };
 
-  // Show loading while auth is being checked
-  if (authLoading) {
-    return (
-      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '40px', textAlign: 'center' }}>
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
   // If not authenticated, show Cognito login form
+  // Note: We don't show a loading screen here because the LoginForm handles its own
+  // loading states. Showing a loading screen during login/signup would unmount the
+  // LoginForm and lose its internal state (like switching to verify mode after signup).
   if (!isAuthenticated) {
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>

@@ -496,22 +496,44 @@ export function LoginForm({ onSuccess }) {
   const handleSignUp = async (e) => {
     e.preventDefault();
     setLocalError('');
+    console.log('[Auth] Starting signup for:', email);
 
     if (password !== confirmPassword) {
       setLocalError('Passwords do not match');
       return;
     }
+    // Validate password against Cognito policy
     if (password.length < 8) {
       setLocalError('Password must be at least 8 characters');
       return;
     }
+    if (!/[A-Z]/.test(password)) {
+      setLocalError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setLocalError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setLocalError('Password must contain at least one number');
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+      setLocalError('Password must contain at least one special character');
+      return;
+    }
 
     try {
-      await signUp(email, password);
+      console.log('[Auth] Calling signUp API...');
+      const result = await signUp(email, password);
+      console.log('[Auth] Signup successful:', result);
+      console.log('[Auth] Switching to verify mode');
       setMode('verify');
       setSuccessMessage(`Verification code sent to ${email}. Please check your inbox (and spam folder).`);
       setLocalError('');
     } catch (err) {
+      console.error('[Auth] Signup error:', err);
       setLocalError(err.message);
     }
   };
@@ -761,10 +783,19 @@ export function LoginForm({ onSuccess }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             style={styles.input}
-            placeholder="At least 8 characters"
+            placeholder="Create a password"
             required
             minLength={8}
           />
+          <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '6px', lineHeight: '1.4' }}>
+            Password must contain:
+            <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+              <li>At least 8 characters</li>
+              <li>Uppercase and lowercase letters</li>
+              <li>At least one number</li>
+              <li>At least one special character (!@#$%^&*)</li>
+            </ul>
+          </div>
         </div>
         <div style={styles.field}>
           <label style={styles.label}>Confirm Password</label>
