@@ -3292,7 +3292,8 @@ def sync_cache_to_graph():
         return jsonify(
             {
                 "success": True,
-                "message": f"Cache data synced to Neo4j" + (f" for {ticker}" if ticker else " for all companies"),
+                "message": f"Cache data synced to Neo4j"
+                + (f" for {ticker}" if ticker else " for all companies"),
                 "results": results,
             }
         )

@@ -472,13 +472,19 @@ def get_executive_events(ticker: Optional[str] = None, limit: int = 10) -> dict:
             results = neo4j.execute_read(query, {"limit": limit})
 
         # Get total count
-        count_query = """
+        count_query = (
+            """
             MATCH (o:Organization)-[:HAS_EXECUTIVE_EVENT]->(e:ExecutiveEvent)
-            """ + (f"WHERE o.ticker = '{ticker}'" if ticker else "") + """
+            """
+            + (f"WHERE o.ticker = '{ticker}'" if ticker else "")
+            + """
             RETURN count(e) as total
         """
-        count_result = neo4j.execute_read(count_query.replace(f"'{ticker}'", "$ticker") if ticker else count_query,
-                                          {"ticker": ticker} if ticker else {})
+        )
+        count_result = neo4j.execute_read(
+            count_query.replace(f"'{ticker}'", "$ticker") if ticker else count_query,
+            {"ticker": ticker} if ticker else {},
+        )
         total = count_result[0]["total"] if count_result else 0
 
         return {
@@ -486,14 +492,17 @@ def get_executive_events(ticker: Optional[str] = None, limit: int = 10) -> dict:
             "count": len(results),
             "total_in_database": total,
             "ticker": ticker,
-            "message": f"Found {len(results)} executive events" + (f" for {ticker}" if ticker else ""),
+            "message": f"Found {len(results)} executive events"
+            + (f" for {ticker}" if ticker else ""),
         }
     except Exception as e:
         return {"error": str(e), "events": []}
 
 
 @tool
-def get_vulnerabilities(ticker: Optional[str] = None, severity: Optional[str] = None, limit: int = 10) -> dict:
+def get_vulnerabilities(
+    ticker: Optional[str] = None, severity: Optional[str] = None, limit: int = 10
+) -> dict:
     """Get CVE vulnerabilities associated with companies.
 
     Args:
@@ -550,13 +559,19 @@ def get_vulnerabilities(ticker: Optional[str] = None, severity: Optional[str] = 
         results = neo4j.execute_read(query, params)
 
         # Get severity breakdown
-        breakdown_query = """
+        breakdown_query = (
+            """
             MATCH (o:Organization)-[:HAS_VULNERABILITY]->(v:Vulnerability)
-            """ + (f"WHERE o.ticker = $ticker" if ticker else "") + """
+            """
+            + (f"WHERE o.ticker = $ticker" if ticker else "")
+            + """
             RETURN v.severity as severity, count(*) as count
             ORDER BY count DESC
         """
-        breakdown = neo4j.execute_read(breakdown_query, {"ticker": ticker} if ticker else {})
+        )
+        breakdown = neo4j.execute_read(
+            breakdown_query, {"ticker": ticker} if ticker else {}
+        )
         severity_counts = {r["severity"]: r["count"] for r in breakdown}
 
         return {
@@ -564,7 +579,8 @@ def get_vulnerabilities(ticker: Optional[str] = None, severity: Optional[str] = 
             "count": len(results),
             "severity_breakdown": severity_counts,
             "ticker": ticker,
-            "message": f"Found {len(results)} vulnerabilities" + (f" for {ticker}" if ticker else ""),
+            "message": f"Found {len(results)} vulnerabilities"
+            + (f" for {ticker}" if ticker else ""),
         }
     except Exception as e:
         return {"error": str(e), "vulnerabilities": []}
