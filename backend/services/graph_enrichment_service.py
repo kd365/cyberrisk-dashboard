@@ -169,23 +169,23 @@ class GraphEnrichmentService:
         cursor = conn.cursor()
 
         try:
-            # Query sentiment_cache table
+            # Query sentiment_cache table (actual schema: id, ticker, artifact_hash, sentiment_data, computed_at)
             cursor.execute(
                 """
-                SELECT cache_key, sentiment_data, cached_at
+                SELECT id, ticker, artifact_hash, sentiment_data, computed_at
                 FROM sentiment_cache
-                WHERE cache_key LIKE %s
-                ORDER BY cached_at DESC
+                WHERE ticker = %s
+                ORDER BY computed_at DESC
                 LIMIT 10
             """,
-                (f"{ticker}_%",),
+                (ticker,),
             )
 
             rows = cursor.fetchall()
             count = 0
 
             for row in rows:
-                cache_key, sentiment_data, cached_at = row
+                row_id, row_ticker, artifact_hash, sentiment_data, computed_at = row
 
                 if not sentiment_data:
                     continue
@@ -199,6 +199,7 @@ class GraphEnrichmentService:
                     data = sentiment_data
 
                 overall = data.get("overall", {})
+                cache_key = f"{ticker}_{artifact_hash}"
 
                 # Create snapshot node
                 query = """
@@ -226,8 +227,8 @@ class GraphEnrichmentService:
                         "neutral": overall.get("neutral", 0),
                         "mixed": overall.get("mixed", 0),
                         "cached_at": (
-                            cached_at.isoformat()
-                            if cached_at
+                            computed_at.isoformat()
+                            if computed_at
                             else datetime.now().isoformat()
                         ),
                     },
@@ -242,7 +243,11 @@ class GraphEnrichmentService:
 
     def _add_growth_snapshots(self, ticker: str) -> int:
         """
-        Add growth cache data as GrowthSnapshot nodes.
+        Add growth data as GrowthSnapshot nodes.
+
+        Uses company_jobs_snapshot table (actual schema: id, ticker, snapshot_date,
+        jobs_by_function, jobs_by_seniority, total_jobs, employee_count, hiring_intensity,
+        data_source, created_at)
 
         Returns:
             Number of snapshots added
@@ -251,11 +256,11 @@ class GraphEnrichmentService:
         cursor = conn.cursor()
 
         try:
-            # Query growth_cache table
+            # Query company_jobs_snapshot table for growth data
             cursor.execute(
                 """
-                SELECT ticker, snapshot_date, employee_count, hiring_intensity
-                FROM growth_cache
+                SELECT ticker, snapshot_date, employee_count, hiring_intensity, total_jobs
+                FROM company_jobs_snapshot
                 WHERE ticker = %s
                 ORDER BY snapshot_date DESC
                 LIMIT 10
@@ -267,7 +272,7 @@ class GraphEnrichmentService:
             count = 0
 
             for row in rows:
-                _, snapshot_date, employee_count, hiring_intensity = row
+                _, snapshot_date, employee_count, hiring_intensity, total_jobs = row
 
                 if not snapshot_date:
                     continue
@@ -283,7 +288,8 @@ class GraphEnrichmentService:
                     MATCH (o:Organization {ticker: $ticker})
                     MERGE (g:GrowthSnapshot {ticker: $ticker, date: date($date)})
                     SET g.employee_count = $employee_count,
-                        g.hiring_intensity = $hiring_intensity
+                        g.hiring_intensity = $hiring_intensity,
+                        g.total_jobs = $total_jobs
                     MERGE (o)-[:HAS_GROWTH_DATA]->(g)
                 """
 
@@ -293,7 +299,8 @@ class GraphEnrichmentService:
                         "ticker": ticker,
                         "date": date_str[:10],  # YYYY-MM-DD
                         "employee_count": employee_count or 0,
-                        "hiring_intensity": hiring_intensity or 0,
+                        "hiring_intensity": float(hiring_intensity) if hiring_intensity else 0,
+                        "total_jobs": total_jobs or 0,
                     },
                 )
 
@@ -308,6 +315,8 @@ class GraphEnrichmentService:
         """
         Add forecast cache data as ForecastSnapshot nodes.
 
+        Actual schema: id, ticker, forecast_days, forecast_data, model_metrics, computed_at, model_type
+
         Returns:
             Number of snapshots added
         """
@@ -315,23 +324,23 @@ class GraphEnrichmentService:
         cursor = conn.cursor()
 
         try:
-            # Query forecast_cache table
+            # Query forecast_cache table with actual schema
             cursor.execute(
                 """
-                SELECT cache_key, forecast_data, cached_at
+                SELECT id, ticker, forecast_days, model_type, forecast_data, computed_at
                 FROM forecast_cache
-                WHERE cache_key LIKE %s
-                ORDER BY cached_at DESC
+                WHERE ticker = %s
+                ORDER BY computed_at DESC
                 LIMIT 5
             """,
-                (f"{ticker}_%",),
+                (ticker,),
             )
 
             rows = cursor.fetchall()
             count = 0
 
             for row in rows:
-                cache_key, forecast_data, cached_at = row
+                row_id, row_ticker, forecast_days, model_type, forecast_data, computed_at = row
 
                 if not forecast_data:
                     continue
@@ -344,8 +353,8 @@ class GraphEnrichmentService:
                 else:
                     data = forecast_data
 
-                model = data.get("model", "prophet")
-                forecast_days = data.get("forecast_days", 30)
+                # Construct cache key from id and ticker
+                cache_key = f"{ticker}_{forecast_days}_{row_id}"
 
                 # Create forecast snapshot node
                 query = """
@@ -366,14 +375,14 @@ class GraphEnrichmentService:
                     {
                         "ticker": ticker,
                         "cache_key": cache_key,
-                        "model": model,
-                        "forecast_days": forecast_days,
+                        "model": model_type or data.get("model", "prophet"),
+                        "forecast_days": forecast_days or data.get("forecast_days", 30),
                         "current_price": data.get("current_price", 0),
                         "predicted_price": data.get("predicted_price", 0),
                         "expected_return": data.get("expected_return_pct", 0),
                         "cached_at": (
-                            cached_at.isoformat()
-                            if cached_at
+                            computed_at.isoformat()
+                            if computed_at
                             else datetime.now().isoformat()
                         ),
                     },
@@ -390,6 +399,10 @@ class GraphEnrichmentService:
         """
         Add headcount history as HeadcountPoint nodes.
 
+        Actual table: company_headcount_history
+        Schema: id, ticker, snapshot_date, employee_count, by_department, by_country,
+                by_seniority, by_region, data_source, created_at
+
         Returns:
             Number of points added
         """
@@ -397,12 +410,12 @@ class GraphEnrichmentService:
         cursor = conn.cursor()
 
         try:
-            # Query headcount_history table (if exists)
+            # Query company_headcount_history table
             cursor.execute(
                 """
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables
-                    WHERE table_name = 'headcount_history'
+                    WHERE table_name = 'company_headcount_history'
                 )
             """
             )
@@ -410,13 +423,13 @@ class GraphEnrichmentService:
             table_exists = cursor.fetchone()[0]
 
             if not table_exists:
-                logger.info("headcount_history table does not exist")
+                logger.info("company_headcount_history table does not exist")
                 return 0
 
             cursor.execute(
                 """
                 SELECT ticker, snapshot_date, employee_count
-                FROM headcount_history
+                FROM company_headcount_history
                 WHERE ticker = %s
                 ORDER BY snapshot_date DESC
                 LIMIT 50
@@ -465,7 +478,11 @@ class GraphEnrichmentService:
 
     def _add_job_functions(self, ticker: str) -> int:
         """
-        Add job function data from growth cache.
+        Add job function data from company_jobs_snapshot.
+
+        Actual table: company_jobs_snapshot
+        Schema: id, ticker, snapshot_date, jobs_by_function, jobs_by_seniority,
+                total_jobs, employee_count, hiring_intensity, data_source, created_at
 
         Returns:
             Number of job functions added
@@ -474,11 +491,11 @@ class GraphEnrichmentService:
         cursor = conn.cursor()
 
         try:
-            # Get latest growth data with jobs breakdown
+            # Get latest jobs data with jobs breakdown
             cursor.execute(
                 """
                 SELECT jobs_by_function, snapshot_date
-                FROM growth_cache
+                FROM company_jobs_snapshot
                 WHERE ticker = %s
                   AND jobs_by_function IS NOT NULL
                 ORDER BY snapshot_date DESC
