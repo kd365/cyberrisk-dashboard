@@ -299,7 +299,9 @@ class GraphEnrichmentService:
                         "ticker": ticker,
                         "date": date_str[:10],  # YYYY-MM-DD
                         "employee_count": employee_count or 0,
-                        "hiring_intensity": float(hiring_intensity) if hiring_intensity else 0,
+                        "hiring_intensity": (
+                            float(hiring_intensity) if hiring_intensity else 0
+                        ),
                         "total_jobs": total_jobs or 0,
                     },
                 )
@@ -340,7 +342,14 @@ class GraphEnrichmentService:
             count = 0
 
             for row in rows:
-                row_id, row_ticker, forecast_days, model_type, forecast_data, computed_at = row
+                (
+                    row_id,
+                    row_ticker,
+                    forecast_days,
+                    model_type,
+                    forecast_data,
+                    computed_at,
+                ) = row
 
                 if not forecast_data:
                     continue
