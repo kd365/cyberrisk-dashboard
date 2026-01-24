@@ -117,6 +117,54 @@ def get_company_info(ticker: str) -> dict:
         return {"error": str(e)}
 
 
+@tool
+def add_company(ticker: str, company_name: str, sector: str = "Cybersecurity") -> dict:
+    """Add a new company to track in the CyberRisk dashboard.
+
+    Use this when a user wants to start tracking a new cybersecurity company.
+    The company will be added to the database and can then be scraped for
+    SEC filings and earnings transcripts.
+
+    Args:
+        ticker: Stock ticker symbol (e.g., CRWD, PANW, ZS)
+        company_name: Full company name (e.g., "CrowdStrike Holdings, Inc.")
+        sector: Business sector (defaults to "Cybersecurity")
+
+    Returns:
+        Success message or error if company already exists or creation failed.
+    """
+    ticker = ticker.upper().strip()
+    company_name = company_name.strip()
+
+    try:
+        db = get_db_service()
+
+        # Check if company already exists
+        if db.company_exists(ticker):
+            return {
+                "status": "exists",
+                "message": f"Company {ticker} is already being tracked.",
+            }
+
+        # Create the company
+        company = db.create_company(company_name, ticker, sector)
+        if company:
+            return {
+                "status": "success",
+                "message": f"Successfully added {company_name} ({ticker}) to tracking. You can now scrape SEC filings and earnings transcripts for this company.",
+                "company": {
+                    "ticker": ticker,
+                    "name": company_name,
+                    "sector": sector,
+                },
+            }
+        else:
+            return {"status": "error", "message": "Failed to create company"}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 # =============================================================================
 # Analysis Tools
 # =============================================================================
@@ -529,6 +577,7 @@ def get_all_tools():
     return [
         list_companies,
         get_company_info,
+        add_company,
         get_sentiment,
         get_forecast,
         get_growth_metrics,
