@@ -22,7 +22,7 @@ services:
       - S3_BUCKET=${S3_BUCKET}
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
-      - USE_LANGCHAIN=${USE_LANGCHAIN:-false}
+      - USE_LANGCHAIN=${USE_LANGCHAIN:-true}
     volumes:
       - ./backend:/app:ro
     depends_on:
