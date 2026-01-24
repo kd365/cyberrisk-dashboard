@@ -519,7 +519,7 @@ export function LoginForm({ onSuccess }) {
       setLocalError('Password must contain at least one number');
       return;
     }
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    if (!/[!@#$%^&*()_+=[\]{};':"\\|,.<>/?-]/.test(password)) {
       setLocalError('Password must contain at least one special character');
       return;
     }
