@@ -296,6 +296,58 @@ WRITE PHASE (After Agent):
 
 ---
 
+### 2026-01-24: Migrated from LangChain AgentExecutor to LangGraph
+
+**Problem**: LangChain 1.x removed `create_tool_calling_agent` from `langchain.agents`. The backend was falling back to legacy chat (no tools, no Mem0) with error:
+```
+cannot import name 'create_tool_calling_agent' from 'langchain.agents'
+```
+
+**Background - LangChain vs LangGraph**:
+| Package | Purpose |
+|---------|---------|
+| `langchain` | Core library - prompts, chains, tools, message types |
+| `langchain-aws` | AWS integrations (Bedrock, etc.) |
+| `langgraph` | Agent orchestration graphs - replaces old `AgentExecutor` |
+
+In LangChain 1.x, agent APIs were restructured:
+- **Old (0.x)**: `create_tool_calling_agent()` + `AgentExecutor` from `langchain.agents`
+- **New (1.x)**: `create_react_agent()` from `langgraph.prebuilt`
+
+**Fix** ([langchain_agent.py](backend/services/langchain_agent.py)):
+```python
+# Old import (broken in LangChain 1.x):
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+
+# New import:
+from langgraph.prebuilt import create_react_agent
+
+# Old agent creation:
+agent = create_tool_calling_agent(llm, tools, prompt)
+executor = AgentExecutor(agent=agent, tools=tools, ...)
+result = executor.invoke({"input": message, "chat_history": history})
+
+# New agent creation:
+agent = create_react_agent(model=llm, tools=tools, state_modifier=system_prompt)
+result = agent.invoke({"messages": messages}, config={"recursion_limit": 10})
+```
+
+**Commit**: `3e31075` - Migrate from LangChain AgentExecutor to LangGraph create_react_agent
+
+---
+
+### 2026-01-24: Fixed user_email Not Being Passed to Chat Endpoint
+
+**Problem**: Mem0 semantic memory wasn't persisting across sessions because `user_email` was `None`. The backend fell back to `session_id` for memory isolation, but each browser session got a new ID.
+
+**Fix**:
+- [Dashboard.jsx](frontend/src/components/Dashboard.jsx): Get `user` from `useAuth()`, pass `user.email` to GraphRAGAssistant
+- [GraphRAGAssistant.jsx](frontend/src/components/GraphRAGAssistant.jsx): Accept `userEmail` prop, include in `/api/chat` request body
+
+**Commit**: `2558292` - Pass user_email to chat endpoint for Mem0 semantic memory
+
+---
+
 ### 2026-01-24: Fixed Cognito Email Verification Flow
 
 **Problem**: After signup, users were redirected to signin screen with no indication that email verification was needed. When they tried to sign in, they got "User is not confirmed" error but had no way to enter the verification code.
