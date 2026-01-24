@@ -109,7 +109,7 @@ const Icons = {
 
 function Dashboard() {
   // Use Cognito auth from AuthProvider
-  const { isAuthenticated, signOut } = useAuth();
+  const { isAuthenticated, signOut, user } = useAuth();
 
   const [activeTab, setActiveTab] = useState('scraping');
   const [selectedCompany, setSelectedCompany] = useState('CRWD');
@@ -540,7 +540,7 @@ function Dashboard() {
               )}
 
               {activeTab === 'knowledge' && isAuthenticated && (
-                <GraphRAGAssistant ticker={selectedCompany} />
+                <GraphRAGAssistant ticker={selectedCompany} userEmail={user?.email} />
               )}
 
               {activeTab === 'assistant' && isAuthenticated && (

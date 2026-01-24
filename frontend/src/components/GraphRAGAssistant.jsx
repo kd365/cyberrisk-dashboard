@@ -69,7 +69,7 @@ const Icons = {
 // Main Component
 // ============================================================================
 
-function GraphRAGAssistant({ ticker = 'CRWD', authToken = null }) {
+function GraphRAGAssistant({ ticker = 'CRWD', authToken = null, userEmail = null }) {
   const [activeSubTab, setActiveSubTab] = useState('chat');
   const [graphStats, setGraphStats] = useState(null);
   const [graphConnected, setGraphConnected] = useState(false);
@@ -226,7 +226,7 @@ function GraphRAGAssistant({ ticker = 'CRWD', authToken = null }) {
       {/* Content */}
       <div style={styles.content}>
         {activeSubTab === 'chat' && (
-          <ChatInterface ticker={ticker} authToken={authToken} />
+          <ChatInterface ticker={ticker} authToken={authToken} userEmail={userEmail} />
         )}
         {activeSubTab === 'cypher' && (
           <CypherConsole />
@@ -240,7 +240,7 @@ function GraphRAGAssistant({ ticker = 'CRWD', authToken = null }) {
 // Chat Interface
 // ============================================================================
 
-function ChatInterface({ ticker, authToken }) {
+function ChatInterface({ ticker, authToken, userEmail }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -287,7 +287,8 @@ What would you like to know about ${ticker} or other tracked companies?`
         },
         body: JSON.stringify({
           message: userMessage,
-          session_id: sessionId
+          session_id: sessionId,
+          user_email: userEmail
         })
       });
 
