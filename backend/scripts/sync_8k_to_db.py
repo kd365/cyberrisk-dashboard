@@ -38,9 +38,9 @@ def sync_8k_files():
     errors = 0
 
     for s3_key in eightk_files:
-        # Parse: raw/sec/TICKER_8-K_YYYY-MM-DD.pdf
+        # Parse: raw/sec/TICKER_8-K_YYYY-MM-DD.txt (or .pdf for legacy)
         filename = s3_key.split("/")[-1]
-        match = re.match(r"([A-Z]+)_8-K_(\d{4}-\d{2}-\d{2})\.pdf", filename)
+        match = re.match(r"([A-Z]+)_8-K_(\d{4}-\d{2}-\d{2})\.(txt|pdf)", filename)
         if match:
             ticker = match.group(1)
             date = match.group(2)

@@ -477,19 +477,38 @@ class VulnerabilityEventService:
 
 
 # =============================================================================
-# 3. SEC 8-K Executive Event Extraction
+# 3. SEC 8-K Event Extraction (Executive Changes, M&A, Security Incidents)
 # =============================================================================
 
 
-class ExecutiveEventExtractor:
+class SEC8KEventExtractor:
     """
-    Extract executive change events from SEC 8-K filings.
-    Item 5.02 reports departures/appointments of directors and executives.
+    Extract material events from SEC 8-K filings by parsing Item sections.
+
+    Supported Items:
+    - 1.01: Entry into Material Agreements (M&A, partnerships)
+    - 1.02: Termination of Material Agreements
+    - 2.01: Completion of Acquisition/Disposition
+    - 2.05: Costs Associated with Exit/Restructuring
+    - 5.02: Departure/Appointment of Directors/Officers
+    - 8.01: Other Events (cybersecurity incidents, breaches)
 
     FREE - uses existing SEC filing data.
     """
 
-    EXECUTIVE_PROMPT = """Analyze this SEC 8-K filing and extract executive change events.
+    # Item section patterns for parsing (handles single-line and multi-line text)
+    ITEM_PATTERNS = {
+        "1.01": r"item\s*1\.01[^a-zA-Z0-9]*(.{100,}?)(?=item\s*\d+\.\d+|signature|$)",
+        "1.02": r"item\s*1\.02[^a-zA-Z0-9]*(.{100,}?)(?=item\s*\d+\.\d+|signature|$)",
+        "2.01": r"item\s*2\.01[^a-zA-Z0-9]*(.{100,}?)(?=item\s*\d+\.\d+|signature|$)",
+        "2.05": r"item\s*2\.05[^a-zA-Z0-9]*(.{100,}?)(?=item\s*\d+\.\d+|signature|$)",
+        "5.02": r"item\s*5\.02[^a-zA-Z0-9]*(.{100,}?)(?=item\s*\d+\.\d+|signature|$)",
+        "8.01": r"item\s*8\.01[^a-zA-Z0-9]*(.{100,}?)(?=item\s*\d+\.\d+|signature|$)",
+    }
+
+    # Prompts for each Item type
+    PROMPTS = {
+        "5.02": """Analyze this SEC 8-K Item 5.02 section and extract executive change events.
 Return ONLY valid JSON, no markdown:
 
 {text}
@@ -507,7 +526,109 @@ Extract:
     ]
 }}
 
-If no executive changes, return {{"events": []}}"""
+If no executive changes found, return {{"events": []}}""",
+
+        "1.01": """Analyze this SEC 8-K Item 1.01 section about material agreements.
+Return ONLY valid JSON, no markdown:
+
+{text}
+
+Extract:
+{{
+    "events": [
+        {{
+            "event_type": "<acquisition|merger|partnership|licensing|credit_agreement|other>",
+            "counterparty": "<other company/entity name>",
+            "deal_value": "<dollar amount or null>",
+            "effective_date": "<YYYY-MM-DD or null>",
+            "summary": "<1-2 sentence description>"
+        }}
+    ]
+}}
+
+If no material agreements found, return {{"events": []}}""",
+
+        "2.01": """Analyze this SEC 8-K Item 2.01 section about completed acquisitions/dispositions.
+Return ONLY valid JSON, no markdown:
+
+{text}
+
+Extract:
+{{
+    "events": [
+        {{
+            "event_type": "<acquisition_completed|disposition_completed>",
+            "target_company": "<acquired/disposed company name>",
+            "deal_value": "<dollar amount or null>",
+            "completion_date": "<YYYY-MM-DD or null>",
+            "summary": "<1-2 sentence description>"
+        }}
+    ]
+}}
+
+If no completed deals found, return {{"events": []}}""",
+
+        "8.01": """Analyze this SEC 8-K Item 8.01 section for cybersecurity or material events.
+Return ONLY valid JSON, no markdown:
+
+{text}
+
+Extract:
+{{
+    "events": [
+        {{
+            "event_type": "<cybersecurity_incident|data_breach|vulnerability|ransomware|other_security|material_event>",
+            "severity": "<critical|high|medium|low|unknown>",
+            "discovery_date": "<YYYY-MM-DD or null>",
+            "affected_systems": "<description or null>",
+            "data_compromised": "<yes|no|unknown>",
+            "summary": "<1-2 sentence description>"
+        }}
+    ]
+}}
+
+If no security/material events found, return {{"events": []}}""",
+
+        "1.02": """Analyze this SEC 8-K Item 1.02 section about terminated agreements.
+Return ONLY valid JSON, no markdown:
+
+{text}
+
+Extract:
+{{
+    "events": [
+        {{
+            "event_type": "<contract_termination|partnership_end|license_revoked>",
+            "counterparty": "<other company/entity name>",
+            "termination_date": "<YYYY-MM-DD or null>",
+            "reason": "<reason if stated or null>",
+            "summary": "<1-2 sentence description>"
+        }}
+    ]
+}}
+
+If no terminations found, return {{"events": []}}""",
+
+        "2.05": """Analyze this SEC 8-K Item 2.05 section about restructuring/exit costs.
+Return ONLY valid JSON, no markdown:
+
+{text}
+
+Extract:
+{{
+    "events": [
+        {{
+            "event_type": "<layoff|restructuring|facility_closure|cost_reduction>",
+            "estimated_cost": "<dollar amount or null>",
+            "employees_affected": "<number or null>",
+            "expected_completion": "<YYYY-MM-DD or null>",
+            "summary": "<1-2 sentence description>"
+        }}
+    ]
+}}
+
+If no restructuring events found, return {{"events": []}}""",
+    }
 
     def __init__(self):
         self.llm = LLMFeatureExtractor()
@@ -529,7 +650,7 @@ If no executive changes, return {{"events": []}}"""
         return self._s3
 
     def get_8k_filings(self, ticker: str) -> List[Dict]:
-        """Get 8-K filings for a company."""
+        """Get all 8-K filings for a company."""
         try:
             from services.database_service import db_service
 
@@ -539,48 +660,108 @@ If no executive changes, return {{"events": []}}"""
             logger.error(f"Error getting 8-K filings for {ticker}: {e}")
             return []
 
-    def extract_executive_events(self, ticker: str) -> List[Dict]:
-        """Extract executive events from 8-K filings."""
-        filings = self.get_8k_filings(ticker)
-        all_events = []
+    def parse_item_sections(self, text: str) -> Dict[str, str]:
+        """Parse 8-K text into Item sections."""
+        sections = {}
+        text_lower = text.lower()
 
+        for item_num, pattern in self.ITEM_PATTERNS.items():
+            match = re.search(pattern, text_lower, re.IGNORECASE)
+            if match:
+                # Get the actual text (not lowercased) using the match positions
+                start = match.start(1)
+                end = match.end(1)
+                section_text = text[start:end].strip()
+                # Limit section to 6000 chars to stay within LLM context
+                if len(section_text) > 6000:
+                    section_text = section_text[:6000]
+                if len(section_text) > 100:  # Only include if substantial
+                    sections[item_num] = section_text
+
+        return sections
+
+    def extract_events_from_section(
+        self, item_num: str, section_text: str, ticker: str, filing_date: str, s3_key: str
+    ) -> List[Dict]:
+        """Extract events from a single Item section using LLM."""
+        if item_num not in self.PROMPTS:
+            return []
+
+        try:
+            prompt = self.PROMPTS[item_num].format(text=section_text)
+            response_text = self.llm.extract_features(prompt, max_tokens=800)
+
+            json_match = re.search(r"\{[\s\S]*\}", response_text)
+            if json_match:
+                data = json.loads(json_match.group())
+                events = []
+                for event in data.get("events", []):
+                    event["ticker"] = ticker
+                    event["filing_date"] = filing_date
+                    event["s3_key"] = s3_key
+                    event["item_number"] = item_num
+                    events.append(event)
+                return events
+        except Exception as e:
+            logger.warning(f"Error extracting from Item {item_num}: {e}")
+
+        return []
+
+    def extract_all_events(self, ticker: str) -> Dict[str, List[Dict]]:
+        """Extract all event types from all 8-K filings for a company."""
+        filings = self.get_8k_filings(ticker)
         bucket = os.environ.get("S3_BUCKET", "cyberrisk-data")
 
-        for filing in filings[:5]:  # Process recent 5 8-Ks
+        all_events = {
+            "executive_events": [],
+            "ma_events": [],
+            "security_events": [],
+            "restructuring_events": [],
+        }
+
+        for filing in filings:  # Process ALL 8-Ks
             try:
                 s3_key = filing["s3_key"]
                 response = self.s3.get_object(Bucket=bucket, Key=s3_key)
-                text = response["Body"].read().decode("utf-8")[:8000]
+                text = response["Body"].read().decode("utf-8")
+                filing_date = filing.get("date")
 
-                # Check if this 8-K might have executive changes
-                if not any(
-                    kw in text.lower()
-                    for kw in [
-                        "item 5.02",
-                        "departure",
-                        "appointment",
-                        "officer",
-                        "director",
-                    ]
-                ):
-                    continue
+                # Parse into sections
+                sections = self.parse_item_sections(text)
 
-                prompt = self.EXECUTIVE_PROMPT.format(text=text)
-                response_text = self.llm.extract_features(prompt, max_tokens=500)
+                # Extract from each section
+                for item_num, section_text in sections.items():
+                    events = self.extract_events_from_section(
+                        item_num, section_text, ticker, filing_date, s3_key
+                    )
 
-                json_match = re.search(r"\{[\s\S]*\}", response_text)
-                if json_match:
-                    data = json.loads(json_match.group())
-                    for event in data.get("events", []):
-                        event["ticker"] = ticker
-                        event["filing_date"] = filing.get("date")
-                        event["s3_key"] = s3_key
-                        all_events.append(event)
+                    # Categorize events
+                    for event in events:
+                        if item_num == "5.02":
+                            all_events["executive_events"].append(event)
+                        elif item_num in ["1.01", "1.02", "2.01"]:
+                            all_events["ma_events"].append(event)
+                        elif item_num == "8.01":
+                            all_events["security_events"].append(event)
+                        elif item_num == "2.05":
+                            all_events["restructuring_events"].append(event)
 
             except Exception as e:
                 logger.warning(f"Error processing 8-K {filing.get('s3_key')}: {e}")
 
+        logger.info(
+            f"{ticker}: Found {len(all_events['executive_events'])} exec, "
+            f"{len(all_events['ma_events'])} M&A, "
+            f"{len(all_events['security_events'])} security, "
+            f"{len(all_events['restructuring_events'])} restructuring events"
+        )
+
         return all_events
+
+    def extract_executive_events(self, ticker: str) -> List[Dict]:
+        """Extract only executive events (backward compatible)."""
+        all_events = self.extract_all_events(ticker)
+        return all_events["executive_events"]
 
     def create_executive_events(self, ticker: str) -> Dict[str, Any]:
         """Create executive event nodes and relationships."""
@@ -589,9 +770,6 @@ If no executive changes, return {{"events": []}}"""
 
         for event in events:
             try:
-                # Create Person node if doesn't exist
-                # Create ExecutiveChange event
-                # Link to Organization
                 query = """
                     MATCH (o:Organization {ticker: $ticker})
                     MERGE (p:Person {name: $person_name})
@@ -632,23 +810,260 @@ If no executive changes, return {{"events": []}}"""
 
         return {"ticker": ticker, "events_created": created, "events": events}
 
+    def create_ma_events(self, ticker: str, events: List[Dict]) -> int:
+        """Create M&A event nodes in Neo4j with relationships to other companies."""
+        created = 0
+        for event in events:
+            try:
+                # Get counterparty/target company name
+                other_company = event.get("counterparty") or event.get("target_company")
+
+                query = """
+                    MATCH (o:Organization {ticker: $ticker})
+                    CREATE (e:MAEvent {
+                        event_type: $event_type,
+                        counterparty: $counterparty,
+                        target_company: $target_company,
+                        deal_value: $deal_value,
+                        effective_date: $effective_date,
+                        summary: $summary,
+                        filing_date: $filing_date,
+                        item_number: $item_number,
+                        created_at: $now
+                    })
+                    MERGE (o)-[:HAS_MA_EVENT]->(e)
+
+                    // Create/link counterparty organization if named
+                    WITH o, e
+                    WHERE $other_company IS NOT NULL AND $other_company <> ''
+                    MERGE (other:Organization {name: $other_company})
+                    ON CREATE SET other.created_from = 'ma_event'
+                    MERGE (e)-[:INVOLVES_COMPANY]->(other)
+                    MERGE (o)-[:MA_RELATIONSHIP {type: $event_type, date: $effective_date}]->(other)
+
+                    RETURN e.event_type as created
+                """
+                result = self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "event_type": event.get("event_type"),
+                        "counterparty": event.get("counterparty"),
+                        "target_company": event.get("target_company"),
+                        "other_company": other_company,
+                        "deal_value": event.get("deal_value"),
+                        "effective_date": event.get("effective_date") or event.get("completion_date") or event.get("termination_date"),
+                        "summary": event.get("summary"),
+                        "filing_date": event.get("filing_date"),
+                        "item_number": event.get("item_number"),
+                        "now": datetime.utcnow().isoformat(),
+                    },
+                )
+                if result:
+                    created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create M&A event: {e}")
+        return created
+
+    def create_security_events(self, ticker: str, events: List[Dict]) -> int:
+        """Create security/cyber incident nodes in Neo4j with vulnerability links."""
+        created = 0
+        for event in events:
+            try:
+                query = """
+                    MATCH (o:Organization {ticker: $ticker})
+                    CREATE (e:SecurityEvent {
+                        event_type: $event_type,
+                        severity: $severity,
+                        discovery_date: $discovery_date,
+                        affected_systems: $affected_systems,
+                        data_compromised: $data_compromised,
+                        summary: $summary,
+                        filing_date: $filing_date,
+                        created_at: $now
+                    })
+                    MERGE (o)-[:HAS_SECURITY_EVENT]->(e)
+                    MERGE (o)-[:EXPERIENCED_INCIDENT {
+                        date: $discovery_date,
+                        severity: $severity,
+                        type: $event_type
+                    }]->(e)
+
+                    // Link to Vulnerability node if it's a vulnerability disclosure
+                    WITH o, e
+                    WHERE $event_type IN ['vulnerability', 'data_breach', 'cybersecurity_incident']
+                    MERGE (v:Vulnerability {
+                        name: $summary,
+                        severity: $severity,
+                        disclosed_date: $discovery_date
+                    })
+                    ON CREATE SET v.source = 'sec_8k', v.created_at = $now
+                    MERGE (e)-[:RELATES_TO_VULNERABILITY]->(v)
+                    MERGE (o)-[:DISCLOSED_VULNERABILITY]->(v)
+
+                    RETURN e.event_type as created
+                """
+                result = self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "event_type": event.get("event_type"),
+                        "severity": event.get("severity"),
+                        "discovery_date": event.get("discovery_date"),
+                        "affected_systems": event.get("affected_systems"),
+                        "data_compromised": event.get("data_compromised"),
+                        "summary": event.get("summary"),
+                        "filing_date": event.get("filing_date"),
+                        "now": datetime.utcnow().isoformat(),
+                    },
+                )
+                if result:
+                    created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create security event: {e}")
+        return created
+
+    def create_restructuring_events(self, ticker: str, events: List[Dict]) -> int:
+        """Create restructuring event nodes in Neo4j."""
+        created = 0
+        for event in events:
+            try:
+                query = """
+                    MATCH (o:Organization {ticker: $ticker})
+                    CREATE (e:RestructuringEvent {
+                        event_type: $event_type,
+                        estimated_cost: $estimated_cost,
+                        employees_affected: $employees_affected,
+                        expected_completion: $expected_completion,
+                        summary: $summary,
+                        filing_date: $filing_date,
+                        created_at: $now
+                    })
+                    MERGE (o)-[:HAS_RESTRUCTURING_EVENT]->(e)
+                    RETURN e.event_type as created
+                """
+                result = self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "event_type": event.get("event_type"),
+                        "estimated_cost": event.get("estimated_cost"),
+                        "employees_affected": event.get("employees_affected"),
+                        "expected_completion": event.get("expected_completion"),
+                        "summary": event.get("summary"),
+                        "filing_date": event.get("filing_date"),
+                        "now": datetime.utcnow().isoformat(),
+                    },
+                )
+                if result:
+                    created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create restructuring event: {e}")
+        return created
+
+    def create_all_events(self, ticker: str) -> Dict[str, Any]:
+        """Extract and create all event types for a company."""
+        all_events = self.extract_all_events(ticker)
+
+        results = {
+            "ticker": ticker,
+            "executive_events": 0,
+            "ma_events": 0,
+            "security_events": 0,
+            "restructuring_events": 0,
+        }
+
+        # Create executive events
+        for event in all_events["executive_events"]:
+            try:
+                query = """
+                    MATCH (o:Organization {ticker: $ticker})
+                    MERGE (p:Person {name: $person_name})
+                    SET p.last_title = $title
+                    CREATE (e:ExecutiveEvent {
+                        event_type: $event_type,
+                        person_name: $person_name,
+                        title: $title,
+                        effective_date: $effective_date,
+                        reason: $reason,
+                        filing_date: $filing_date,
+                        created_at: $now
+                    })
+                    MERGE (o)-[:HAS_EXECUTIVE_EVENT]->(e)
+                    MERGE (p)-[:INVOLVED_IN]->(e)
+                    RETURN e.event_type as created
+                """
+                result = self.neo4j.execute_write(
+                    query,
+                    {
+                        "ticker": ticker,
+                        "event_type": event.get("event_type"),
+                        "person_name": event.get("person_name"),
+                        "title": event.get("title"),
+                        "effective_date": event.get("effective_date"),
+                        "reason": event.get("reason"),
+                        "filing_date": event.get("filing_date"),
+                        "now": datetime.utcnow().isoformat(),
+                    },
+                )
+                if result:
+                    results["executive_events"] += 1
+            except Exception as e:
+                logger.warning(f"Failed to create executive event: {e}")
+
+        # Create M&A events
+        results["ma_events"] = self.create_ma_events(ticker, all_events["ma_events"])
+
+        # Create security events
+        results["security_events"] = self.create_security_events(
+            ticker, all_events["security_events"]
+        )
+
+        # Create restructuring events
+        results["restructuring_events"] = self.create_restructuring_events(
+            ticker, all_events["restructuring_events"]
+        )
+
+        total = sum([
+            results["executive_events"],
+            results["ma_events"],
+            results["security_events"],
+            results["restructuring_events"],
+        ])
+        logger.info(f"{ticker}: Created {total} total events in graph")
+
+        return results
+
     def enrich_all_companies(self) -> Dict[str, Any]:
-        """Extract executive events for all companies."""
+        """Extract all 8-K events for all companies."""
         from services.database_service import db_service
 
         companies = db_service.get_all_companies()
-        results = {"success": [], "total_events": 0}
+        results = {
+            "success": [],
+            "totals": {
+                "executive_events": 0,
+                "ma_events": 0,
+                "security_events": 0,
+                "restructuring_events": 0,
+            },
+        }
 
         for company in companies:
             ticker = company["ticker"]
-            logger.info(f"Extracting executive events for {ticker}...")
-            result = self.create_executive_events(ticker)
-            results["success"].append(
-                {"ticker": ticker, "events": result["events_created"]}
-            )
-            results["total_events"] += result["events_created"]
+            logger.info(f"Extracting 8-K events for {ticker}...")
+            result = self.create_all_events(ticker)
+            results["success"].append(result)
+            results["totals"]["executive_events"] += result["executive_events"]
+            results["totals"]["ma_events"] += result["ma_events"]
+            results["totals"]["security_events"] += result["security_events"]
+            results["totals"]["restructuring_events"] += result["restructuring_events"]
 
         return results
+
+
+# Backward compatibility alias
+ExecutiveEventExtractor = SEC8KEventExtractor
 
 
 # =============================================================================

@@ -17,7 +17,6 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [scrapeType, setScrapeType] = useState('all');
-  const [include8K, setInclude8K] = useState(false);
   const [documentStatus, setDocumentStatus] = useState({});
   const [showInfo, setShowInfo] = useState(true);
 
@@ -144,9 +143,9 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: scrapeType,
+          type: scrapeType === 'sec_no_8k' ? 'sec' : scrapeType,
           companies: selectedCompanies,
-          include_8k: include8K,
+          include_8k: scrapeType !== 'sec_no_8k' && scrapeType !== 'transcripts',
           generate_artifacts: true
         })
       });
@@ -154,7 +153,7 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
       const data = await response.json();
       
       if (response.ok) {
-        setStatus(`Success: Queued ${selectedCompanies.length} company/companies for scraping`);
+        setStatus(`Success: Started scraping ${selectedCompanies.length} company/companies. Documents will be scraped and 8-K events (executive changes, M&A, security incidents) will be automatically extracted to the knowledge graph.`);
       } else {
         setStatus(`Error: Scraping failed - ${data.message || data.error}`);
       }
@@ -395,11 +394,12 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
           border: '1px solid #b3d9ff',
           marginBottom: '20px'
         }}>
-          <h4 style={{ marginTop: 0, color: '#004085' }}>How It Works</h4>
+          <h4 style={{ marginTop: 0, color: '#004085' }}>Document Types</h4>
           <ul style={{ marginLeft: '20px', lineHeight: '1.6', color: '#004085', marginBottom: 0 }}>
-            <li><strong>10-K Filings:</strong> Annual reports with cybersecurity risk disclosures</li>
-            <li><strong>10-Q Filings:</strong> Quarterly reports (more frequent updates)</li>
-            <li><strong>Earnings Transcripts:</strong> Call transcripts from Alpha Vantage</li>
+            <li><strong>10-K:</strong> Annual reports with cybersecurity risk disclosures</li>
+            <li><strong>10-Q:</strong> Quarterly reports with updates</li>
+            <li><strong>8-K:</strong> Material events - breaches, executive changes, M&A</li>
+            <li><strong>Transcripts:</strong> Earnings call transcripts from Alpha Vantage</li>
           </ul>
         </div>
 
@@ -420,39 +420,21 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
               onChange={(e) => setScrapeType(e.target.value)}
               style={{
                 width: '100%',
-                padding: '8px',
+                padding: '10px',
                 border: '1px solid #ddd',
-                borderRadius: '4px'
+                borderRadius: '4px',
+                fontSize: '14px'
               }}
             >
-              <option value="all">All Documents (10-K, 10-Q, Transcripts)</option>
-              <option value="sec">SEC Filings Only (10-K, 10-Q)</option>
+              <option value="all">All Documents (10-K, 10-Q, 8-K, Transcripts)</option>
+              <option value="sec">SEC Filings Only (10-K, 10-Q, 8-K)</option>
+              <option value="sec_no_8k">SEC Filings (10-K, 10-Q only)</option>
               <option value="transcripts">Earnings Transcripts Only</option>
               <option value="8k">8-K Current Reports Only</option>
             </select>
-          </div>
-
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{
-              display: 'flex',
-              alignItems: 'center',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}>
-              <input
-                type="checkbox"
-                checked={include8K}
-                onChange={(e) => setInclude8K(e.target.checked)}
-                disabled={scrapeType === '8k'}
-                style={{ marginRight: '8px', cursor: 'pointer' }}
-              />
-              <span>
-                <strong>Include 8-K Filings</strong>
-                <span style={{ color: '#666', marginLeft: '8px' }}>
-                  (Cybersecurity incidents, leadership changes, material events)
-                </span>
-              </span>
-            </label>
+            <p style={{ fontSize: '12px', color: '#666', marginTop: '8px', marginBottom: 0 }}>
+              8-K filings include cybersecurity incidents, leadership changes, M&A, and material events
+            </p>
           </div>
 
           <button
