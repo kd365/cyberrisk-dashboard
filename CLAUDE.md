@@ -245,4 +245,48 @@ self.neo4j.create_organization(name=..., ticker=ticker, tracked=True, cyber_sect
 13. "How do I use this dashboard?"
 
 ---
+
+### 2026-01-24: Integrated Mem0 Semantic Memory into LangChain Agent
+
+**Problem**: Mem0 infrastructure existed but wasn't wired into the chat workflow. The `MemoryService` had `add_semantic_memory()` and `search_semantic_memory()` methods, but `LangChainAgentService` only used PostgreSQL conversation history.
+
+**Fix** ([langchain_agent.py](backend/services/langchain_agent.py)):
+Added full Mem0 integration:
+- `_get_semantic_memories(query, user_id)` - Searches Mem0 for relevant past facts before agent invocation
+- `_save_to_semantic_memory(user_id, user_msg, assistant_msg)` - Extracts facts via Claude Haiku and stores embeddings
+- Modified `chat()` to inject semantic context as SystemMessage before chat history
+- Uses `user_email` when available, falls back to `session_id` for memory isolation
+- Response includes `semantic_memory_used: true/false` flag
+
+**Architecture**:
+```
+READ PHASE (Before Agent):
+  search_semantic_memory(query) → Mem0 → pgvector similarity search
+  get_context_for_llm(session_id) → PostgreSQL chat_messages
+
+WRITE PHASE (After Agent):
+  add_message() → PostgreSQL chat_messages
+  add_semantic_memory() → Claude Haiku extracts facts → Titan embeds → pgvector
+```
+
+**Commit**: `86cb497` - Integrate Mem0 semantic memory into LangChain agent
+
+---
+
+### 2026-01-24: Fixed Cognito Email Verification Flow
+
+**Problem**: After signup, users were redirected to signin screen with no indication that email verification was needed. When they tried to sign in, they got "User is not confirmed" error but had no way to enter the verification code.
+
+**Fix** ([AuthProvider.jsx](frontend/src/components/AuthProvider.jsx)):
+- Modified `handleSignIn` to detect "not confirmed" errors and switch to verify mode
+- Improved signup success message to clearly indicate verification email was sent
+- User now automatically sees verification code input form when needed
+
+---
+
+### EC2 Instance Reference
+- **Flask Backend**: `i-0bdafbb7e0387b4cb` (cyberrisk-dev-kh-flask-backend)
+- **Neo4j**: `i-0aefeaee10f6fdeea` (cyberrisk-dev-kh-neo4j)
+
+---
 *Last Updated: 2026-01-24*

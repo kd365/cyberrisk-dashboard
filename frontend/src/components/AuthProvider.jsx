@@ -481,7 +481,15 @@ export function LoginForm({ onSuccess }) {
         onSuccess?.();
       }
     } catch (err) {
-      setLocalError(err.message);
+      // Check if user needs to verify email first
+      const errorMsg = err.message.toLowerCase();
+      if (errorMsg.includes('not confirmed') || errorMsg.includes('not verified')) {
+        setMode('verify');
+        setSuccessMessage('Please verify your email first. Check your inbox for the verification code.');
+        setLocalError('');
+      } else {
+        setLocalError(err.message);
+      }
     }
   };
 
@@ -501,7 +509,8 @@ export function LoginForm({ onSuccess }) {
     try {
       await signUp(email, password);
       setMode('verify');
-      setSuccessMessage('Verification code sent to your email');
+      setSuccessMessage(`Verification code sent to ${email}. Please check your inbox (and spam folder).`);
+      setLocalError('');
     } catch (err) {
       setLocalError(err.message);
     }
