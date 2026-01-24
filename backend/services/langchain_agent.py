@@ -62,7 +62,7 @@ class LangChainAgentService:
         self.agent = create_react_agent(
             model=self.llm,
             tools=self.tools,
-            state_modifier=self.system_prompt,
+            prompt=self.system_prompt,
         )
 
         # Memory service (lazy loaded)
