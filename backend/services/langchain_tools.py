@@ -692,7 +692,8 @@ def get_events(ticker: Optional[str] = None, limit: int = 10) -> dict:
             "count": len(results),
             "total_in_database": total,
             "ticker": ticker,
-            "message": f"Found {len(results)} events" + (f" for {ticker}" if ticker else ""),
+            "message": f"Found {len(results)} events"
+            + (f" for {ticker}" if ticker else ""),
         }
     except Exception as e:
         return {"error": str(e), "events": []}
@@ -772,7 +773,8 @@ def get_persons(
             "count": len(results),
             "total_in_database": total,
             "ticker": ticker,
-            "message": f"Found {len(results)} people" + (f" for {ticker}" if ticker else ""),
+            "message": f"Found {len(results)} people"
+            + (f" for {ticker}" if ticker else ""),
         }
     except Exception as e:
         return {"error": str(e), "persons": []}
@@ -843,7 +845,8 @@ def get_ma_events(ticker: Optional[str] = None, limit: int = 10) -> dict:
             "count": len(results),
             "total_in_database": total,
             "ticker": ticker,
-            "message": f"Found {len(results)} M&A events" + (f" for {ticker}" if ticker else ""),
+            "message": f"Found {len(results)} M&A events"
+            + (f" for {ticker}" if ticker else ""),
         }
     except Exception as e:
         return {"error": str(e), "ma_events": []}
@@ -912,7 +915,8 @@ def get_security_incidents(ticker: Optional[str] = None, limit: int = 10) -> dic
             "count": len(results),
             "total_in_database": total,
             "ticker": ticker,
-            "message": f"Found {len(results)} security incidents" + (f" for {ticker}" if ticker else ""),
+            "message": f"Found {len(results)} security incidents"
+            + (f" for {ticker}" if ticker else ""),
         }
     except Exception as e:
         return {"error": str(e), "security_incidents": []}
@@ -988,7 +992,8 @@ def get_graph_documents(
             "total_in_database": total,
             "type_breakdown": type_breakdown,
             "ticker": ticker,
-            "message": f"Found {len(results)} documents" + (f" for {ticker}" if ticker else ""),
+            "message": f"Found {len(results)} documents"
+            + (f" for {ticker}" if ticker else ""),
         }
     except Exception as e:
         return {"error": str(e), "documents": []}
@@ -1052,7 +1057,8 @@ def get_locations(ticker: Optional[str] = None, limit: int = 10) -> dict:
             "count": len(results),
             "total_in_database": total,
             "ticker": ticker,
-            "message": f"Found {len(results)} locations" + (f" for {ticker}" if ticker else ""),
+            "message": f"Found {len(results)} locations"
+            + (f" for {ticker}" if ticker else ""),
         }
     except Exception as e:
         return {"error": str(e), "locations": []}
