@@ -327,12 +327,14 @@ agent = create_tool_calling_agent(llm, tools, prompt)
 executor = AgentExecutor(agent=agent, tools=tools, ...)
 result = executor.invoke({"input": message, "chat_history": history})
 
-# New agent creation:
-agent = create_react_agent(model=llm, tools=tools, state_modifier=system_prompt)
+# New agent creation (NOTE: use 'prompt', NOT 'state_modifier'):
+agent = create_react_agent(model=llm, tools=tools, prompt=system_prompt)
 result = agent.invoke({"messages": messages}, config={"recursion_limit": 10})
 ```
 
-**Commit**: `3e31075` - Migrate from LangChain AgentExecutor to LangGraph create_react_agent
+**Commits**:
+- `3e31075` - Migrate from LangChain AgentExecutor to LangGraph create_react_agent
+- `133a9ab` - Fix parameter: `state_modifier` → `prompt`
 
 ---
 
