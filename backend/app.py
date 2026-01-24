@@ -3243,6 +3243,66 @@ def infer_graph_relationships():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/admin/sync-cache-to-graph", methods=["POST"])
+@require_cognito_auth
+def sync_cache_to_graph():
+    """
+    Sync PostgreSQL cache data to Neo4j knowledge graph.
+
+    Creates nodes from cache tables:
+    - SentimentSnapshot from sentiment_cache
+    - GrowthSnapshot from growth_cache
+    - ForecastSnapshot from forecast_cache
+    - HeadcountPoint from headcount_history
+    - JobFunction from jobs_by_function in growth_cache
+
+    Request body (optional):
+        {
+            "ticker": "CRWD"  // Optional: sync single company
+        }
+
+    Requires authentication.
+    """
+    try:
+        neo4j = get_neo4j()
+        if not neo4j or not neo4j.is_connected():
+            return (
+                jsonify(
+                    {
+                        "error": "Knowledge graph not available",
+                        "message": "Neo4j service is not connected",
+                    }
+                ),
+                503,
+            )
+
+        from services.graph_enrichment_service import get_graph_enrichment_service
+
+        enrichment_svc = get_graph_enrichment_service()
+
+        data = request.json or {}
+        ticker = data.get("ticker")
+
+        if ticker:
+            ticker = ticker.upper()
+            results = enrichment_svc.enrich_graph_for_ticker(ticker)
+        else:
+            results = enrichment_svc.enrich_all_tickers()
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Cache data synced to Neo4j" + (f" for {ticker}" if ticker else " for all companies"),
+                "results": results,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error syncing cache to graph: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/knowledge-graph/schema", methods=["GET"])
 def get_graph_schema():
     """

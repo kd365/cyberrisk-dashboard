@@ -132,10 +132,22 @@ A comprehensive cybersecurity risk analytics platform analyzing SEC filings, ear
 - **Neo4j documents**: 670 documents
 - **Missing**: ~187 documents (mainly 8-K filings not synced to graph)
 - **Root Cause**: Graph build only runs for companies with new docs in *current* scrape. If previous scrape succeeded but graph build failed, documents are orphaned.
-- **Fix Options**:
-  1. `POST /api/admin/build-graph` (requires auth) - Rebuilds all company graphs
-  2. `POST /api/graph/build-all` - Alternative rebuild endpoint
-  3. `POST /api/enrichment/run-all` - Full enrichment pipeline including graph
+
+### Graph Sync API Endpoints
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/admin/build-graph` | Rebuild document graphs for all companies |
+| `POST /api/admin/sync-cache-to-graph` | **NEW** - Sync cache nodes (sentiment, growth, forecast, headcount, jobs) |
+| `POST /api/admin/infer-relationships` | Infer entity/concept relationships |
+| `POST /api/enrichment/run-all` | Full LLM enrichment pipeline |
+
+### Cache-to-Graph Sync
+The `/api/admin/sync-cache-to-graph` endpoint populates these nodes from PostgreSQL:
+- `SentimentSnapshot` ← `sentiment_cache` table
+- `GrowthSnapshot` ← `growth_cache` table
+- `ForecastSnapshot` ← `forecast_cache` table
+- `HeadcountPoint` ← `headcount_history` table
+- `JobFunction` ← `jobs_by_function` in `growth_cache`
 
 ---
 
