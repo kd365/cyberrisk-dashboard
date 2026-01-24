@@ -527,7 +527,6 @@ Extract:
 }}
 
 If no executive changes found, return {{"events": []}}""",
-
         "1.01": """Analyze this SEC 8-K Item 1.01 section about material agreements.
 Return ONLY valid JSON, no markdown:
 
@@ -547,7 +546,6 @@ Extract:
 }}
 
 If no material agreements found, return {{"events": []}}""",
-
         "2.01": """Analyze this SEC 8-K Item 2.01 section about completed acquisitions/dispositions.
 Return ONLY valid JSON, no markdown:
 
@@ -567,7 +565,6 @@ Extract:
 }}
 
 If no completed deals found, return {{"events": []}}""",
-
         "8.01": """Analyze this SEC 8-K Item 8.01 section for cybersecurity or material events.
 Return ONLY valid JSON, no markdown:
 
@@ -588,7 +585,6 @@ Extract:
 }}
 
 If no security/material events found, return {{"events": []}}""",
-
         "1.02": """Analyze this SEC 8-K Item 1.02 section about terminated agreements.
 Return ONLY valid JSON, no markdown:
 
@@ -608,7 +604,6 @@ Extract:
 }}
 
 If no terminations found, return {{"events": []}}""",
-
         "2.05": """Analyze this SEC 8-K Item 2.05 section about restructuring/exit costs.
 Return ONLY valid JSON, no markdown:
 
@@ -681,7 +676,12 @@ If no restructuring events found, return {{"events": []}}""",
         return sections
 
     def extract_events_from_section(
-        self, item_num: str, section_text: str, ticker: str, filing_date: str, s3_key: str
+        self,
+        item_num: str,
+        section_text: str,
+        ticker: str,
+        filing_date: str,
+        s3_key: str,
     ) -> List[Dict]:
         """Extract events from a single Item section using LLM."""
         if item_num not in self.PROMPTS:
@@ -852,7 +852,9 @@ If no restructuring events found, return {{"events": []}}""",
                         "target_company": event.get("target_company"),
                         "other_company": other_company,
                         "deal_value": event.get("deal_value"),
-                        "effective_date": event.get("effective_date") or event.get("completion_date") or event.get("termination_date"),
+                        "effective_date": event.get("effective_date")
+                        or event.get("completion_date")
+                        or event.get("termination_date"),
                         "summary": event.get("summary"),
                         "filing_date": event.get("filing_date"),
                         "item_number": event.get("item_number"),
@@ -1024,12 +1026,14 @@ If no restructuring events found, return {{"events": []}}""",
             ticker, all_events["restructuring_events"]
         )
 
-        total = sum([
-            results["executive_events"],
-            results["ma_events"],
-            results["security_events"],
-            results["restructuring_events"],
-        ])
+        total = sum(
+            [
+                results["executive_events"],
+                results["ma_events"],
+                results["security_events"],
+                results["restructuring_events"],
+            ]
+        )
         logger.info(f"{ticker}: Created {total} total events in graph")
 
         return results

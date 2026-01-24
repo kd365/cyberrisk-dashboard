@@ -846,19 +846,20 @@ def run_scraping_task(companies, scrape_type, include_8k=False):
     # === AUTO-ENRICHMENT AFTER SCRAPING ===
     # Track which companies got which types of new files
     companies_with_8k = [
-        r["ticker"] for r in scraping_status["results"]
+        r["ticker"]
+        for r in scraping_status["results"]
         if r.get("eightk_filings", 0) > 0
     ]
     companies_with_sec = [
-        r["ticker"] for r in scraping_status["results"]
-        if r.get("sec_filings", 0) > 0
+        r["ticker"] for r in scraping_status["results"] if r.get("sec_filings", 0) > 0
     ]
     companies_with_transcripts = [
-        r["ticker"] for r in scraping_status["results"]
-        if r.get("transcripts", 0) > 0
+        r["ticker"] for r in scraping_status["results"] if r.get("transcripts", 0) > 0
     ]
     # Any company with new documents needs graph building
-    companies_with_new_docs = list(set(companies_with_8k + companies_with_sec + companies_with_transcripts))
+    companies_with_new_docs = list(
+        set(companies_with_8k + companies_with_sec + companies_with_transcripts)
+    )
 
     enrichment_results = {
         # 8-K event extraction
@@ -876,19 +877,30 @@ def run_scraping_task(companies, scrape_type, include_8k=False):
 
     # 1. Extract 8-K events (executive changes, M&A, security incidents) - uses LLM
     if companies_with_8k:
-        scraping_status["message"] = f"Extracting 8-K events from {len(companies_with_8k)} companies..."
+        scraping_status["message"] = (
+            f"Extracting 8-K events from {len(companies_with_8k)} companies..."
+        )
         try:
             from services.data_enrichment_service import SEC8KEventExtractor
+
             extractor = SEC8KEventExtractor()
 
             for i, ticker in enumerate(companies_with_8k):
-                scraping_status["message"] = f"Extracting 8-K events for {ticker} ({i+1}/{len(companies_with_8k)})..."
+                scraping_status["message"] = (
+                    f"Extracting 8-K events for {ticker} ({i+1}/{len(companies_with_8k)})..."
+                )
                 try:
                     result = extractor.create_all_events(ticker)
-                    enrichment_results["executive_events"] += result.get("executive_events", 0)
+                    enrichment_results["executive_events"] += result.get(
+                        "executive_events", 0
+                    )
                     enrichment_results["ma_events"] += result.get("ma_events", 0)
-                    enrichment_results["security_events"] += result.get("security_events", 0)
-                    enrichment_results["restructuring_events"] += result.get("restructuring_events", 0)
+                    enrichment_results["security_events"] += result.get(
+                        "security_events", 0
+                    )
+                    enrichment_results["restructuring_events"] += result.get(
+                        "restructuring_events", 0
+                    )
                 except Exception as e:
                     print(f"8-K enrichment error for {ticker}: {e}")
 
@@ -899,13 +911,18 @@ def run_scraping_task(companies, scrape_type, include_8k=False):
 
     # 2. Build knowledge graph (entities, concepts, risks, key phrases) - uses AWS Comprehend
     if companies_with_new_docs:
-        scraping_status["message"] = f"Building knowledge graph for {len(companies_with_new_docs)} companies..."
+        scraping_status["message"] = (
+            f"Building knowledge graph for {len(companies_with_new_docs)} companies..."
+        )
         try:
             from services.graph_builder_service import GraphBuilderService
+
             graph_builder = GraphBuilderService()
 
             for i, ticker in enumerate(companies_with_new_docs):
-                scraping_status["message"] = f"Building graph for {ticker} ({i+1}/{len(companies_with_new_docs)})..."
+                scraping_status["message"] = (
+                    f"Building graph for {ticker} ({i+1}/{len(companies_with_new_docs)})..."
+                )
                 try:
                     result = graph_builder.build_graph_for_ticker(
                         ticker,
@@ -913,13 +930,21 @@ def run_scraping_task(companies, scrape_type, include_8k=False):
                         include_concepts=True,  # RISK, TECHNOLOGY, FINANCIAL, etc.
                         include_key_phrases=True,
                     )
-                    enrichment_results["entities_created"] += result.get("entities_created", 0)
-                    enrichment_results["concepts_created"] += result.get("concepts_created", 0)
-                    enrichment_results["documents_processed"] += result.get("documents_processed", 0)
+                    enrichment_results["entities_created"] += result.get(
+                        "entities_created", 0
+                    )
+                    enrichment_results["concepts_created"] += result.get(
+                        "concepts_created", 0
+                    )
+                    enrichment_results["documents_processed"] += result.get(
+                        "documents_processed", 0
+                    )
                 except Exception as e:
                     print(f"Graph building error for {ticker}: {e}")
 
-            print(f"Graph building complete: {enrichment_results['entities_created']} entities, {enrichment_results['concepts_created']} concepts")
+            print(
+                f"Graph building complete: {enrichment_results['entities_created']} entities, {enrichment_results['concepts_created']} concepts"
+            )
         except Exception as e:
             print(f"Graph building failed: {e}")
 
@@ -929,7 +954,9 @@ def run_scraping_task(companies, scrape_type, include_8k=False):
     scraping_status["running"] = False
     scraping_status["progress"] = 100
     scraping_status["current_company"] = None
-    scraping_status["message"] = f"Completed scraping {total} companies" + (f", enriched {len(companies_with_new_docs)}" if companies_with_new_docs else "")
+    scraping_status["message"] = f"Completed scraping {total} companies" + (
+        f", enriched {len(companies_with_new_docs)}" if companies_with_new_docs else ""
+    )
 
 
 @app.route("/api/scraping/status", methods=["GET"])
@@ -2933,10 +2960,12 @@ def run_migration():
         cursor = conn.cursor()
 
         # Add alternate_names column if it doesn't exist
-        cursor.execute("""
+        cursor.execute(
+            """
             ALTER TABLE companies
             ADD COLUMN IF NOT EXISTS alternate_names TEXT
-        """)
+        """
+        )
         conn.commit()
 
         cursor.close()
