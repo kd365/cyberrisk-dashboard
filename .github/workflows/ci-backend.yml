@@ -27,7 +27,7 @@ jobs:
 
       - name: Install linting tools
         run: |
-          pip install flake8 black
+          pip install flake8 'black==24.4.2'
 
       - name: Run flake8
         run: |
