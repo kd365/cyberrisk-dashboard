@@ -115,6 +115,10 @@ class FeatureEvaluationService:
                 # Count analyst concerns
                 concerns = features.get("analyst_concerns") or []
                 features["concern_count"] = len(concerns) if concerns else 0
+                # Remove list fields - they can't be used in NumPy arrays
+                # We keep the numeric counts (threat_spec_count, concern_count) instead
+                features.pop("threat_specialization", None)
+                features.pop("analyst_concerns", None)
                 return features
             return {}
         except Exception as e:
