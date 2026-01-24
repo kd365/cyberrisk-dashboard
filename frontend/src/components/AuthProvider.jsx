@@ -827,6 +827,23 @@ export function LoginForm({ onSuccess }) {
           Sign Up
         </button>
       </div>
+      <div style={{ ...styles.footer, marginTop: '12px' }}>
+        <button
+          type="button"
+          onClick={() => {
+            if (!email.trim()) {
+              setLocalError('Please enter your email address first');
+              return;
+            }
+            setMode('verify');
+            setSuccessMessage('Enter the verification code sent to your email.');
+            setLocalError('');
+          }}
+          style={styles.link}
+        >
+          Need to verify your email?
+        </button>
+      </div>
     </form>
   );
 }
