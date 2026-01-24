@@ -119,6 +119,9 @@ CRITICAL INSTRUCTIONS FOR TOOL USAGE:
 - When asked about executive events/changes, call get_executive_events
 - When asked about vulnerabilities/CVEs, call get_vulnerabilities
 - When asked about patents, call get_patents
+- When asked about CONTENT from filings (risks, strategies, business model, revenue, competitors, etc.), call search_documents with a relevant query - this searches the ACTUAL TEXT of 10-K, 10-Q, 8-K filings and earnings transcripts
+- For questions like "What risks are in the 10-K?" or "Summarize the earnings call" or "What does the filing say about...", ALWAYS use search_documents first
+- search_documents performs semantic search over indexed SEC filings and returns relevant text excerpts
 
 CRITICAL - PRESENTING TOOL RESULTS:
 - After calling a tool, you MUST include the actual data from the tool results in your response
