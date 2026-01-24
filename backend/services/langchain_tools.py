@@ -182,8 +182,9 @@ def get_sentiment(ticker: str) -> dict:
     """
     ticker = ticker.upper()
     try:
-        from services.sentiment_cache import get_cached_sentiment
+        from services.sentiment_cache import get_cached_sentiment, get_sentiment_cache
 
+        # Try cache first
         sentiment = get_cached_sentiment(ticker)
 
         if sentiment:
@@ -194,7 +195,49 @@ def get_sentiment(ticker: str) -> dict:
                 "top_keywords": sentiment.get("wordFrequency", [])[:10],
                 "cached_at": sentiment.get("cached_at"),
             }
-        return {"error": f"No sentiment data for {ticker}"}
+
+        # Cache miss - run Comprehend analysis
+        try:
+            from services.s3_service import S3ArtifactService
+            from services.comprehend_service import ComprehendService
+
+            # Get artifacts from S3
+            s3_service = S3ArtifactService()
+            artifacts = s3_service.get_artifacts_table()
+
+            if not artifacts:
+                return {"error": f"No artifacts available for analysis"}
+
+            # Filter for this ticker
+            ticker_artifacts = [a for a in artifacts if a.get("ticker") == ticker]
+            if not ticker_artifacts:
+                return {"error": f"No documents found for {ticker}"}
+
+            # Run Comprehend analysis
+            comprehend = ComprehendService()
+            result = comprehend.analyze_ticker_sentiment(
+                ticker, artifacts, include_entities=False
+            )
+
+            if not result:
+                return {"error": f"Sentiment analysis failed for {ticker}"}
+
+            # Cache the result
+            cache = get_sentiment_cache()
+            cache.set(ticker, artifacts, result)
+
+            return {
+                "ticker": ticker,
+                "overall_sentiment": result.get("overall", {}),
+                "document_count": result.get("document_count", 0),
+                "top_keywords": result.get("wordFrequency", [])[:10],
+                "cached_at": result.get("cached_at"),
+                "freshly_computed": True,
+            }
+
+        except Exception as analysis_error:
+            return {"error": f"Analysis failed: {str(analysis_error)}"}
+
     except Exception as e:
         return {"error": str(e)}
 
