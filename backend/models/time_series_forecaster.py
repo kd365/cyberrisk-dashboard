@@ -184,9 +184,7 @@ class CyberRiskForecaster:
             # Merge with stock data dates (forward-fill sentiment)
             daily_dates = pd.DataFrame({"ds": self.data["ds"]})
             df = daily_dates.merge(df, on="ds", how="left")
-            df["cyber_sentiment"] = (
-                df["cyber_sentiment"].ffill().fillna(0)
-            )
+            df["cyber_sentiment"] = df["cyber_sentiment"].ffill().fillna(0)
 
             print(f"  ✅ Extracted sentiment from {len(timeline)} documents")
             print(f"     Mean sentiment: {df['cyber_sentiment'].mean():.3f}")
