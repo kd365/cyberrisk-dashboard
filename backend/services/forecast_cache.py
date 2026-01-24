@@ -85,7 +85,8 @@ class ForecastCache:
         try:
             cursor = self.db_connection.cursor()
             # Create table with model_type column
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS forecast_cache (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(10) NOT NULL,
@@ -95,11 +96,13 @@ class ForecastCache:
                     model_metrics JSONB,
                     computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
-            """)
+            """
+            )
             self.db_connection.commit()
 
             # Add model_type column if it doesn't exist (migration for existing tables)
-            cursor.execute("""
+            cursor.execute(
+                """
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
@@ -110,14 +113,17 @@ class ForecastCache:
                         ADD COLUMN model_type VARCHAR(20) NOT NULL DEFAULT 'prophet';
                     END IF;
                 END $$;
-            """)
+            """
+            )
             self.db_connection.commit()
 
             # Create index including model_type
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_forecast_cache_model_lookup
                     ON forecast_cache(ticker, forecast_days, model_type, computed_at);
-            """)
+            """
+            )
             self.db_connection.commit()
             cursor.close()
         except Exception as e:
@@ -399,13 +405,15 @@ class ForecastCache:
             if conn:
                 try:
                     cursor = conn.cursor(cursor_factory=RealDictCursor)
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         SELECT ticker, forecast_days, COUNT(*) as count,
                                MAX(computed_at) as last_computed
                         FROM forecast_cache
                         GROUP BY ticker, forecast_days
                         ORDER BY last_computed DESC
-                    """)
+                    """
+                    )
                     rows = cursor.fetchall()
                     cursor.close()
 

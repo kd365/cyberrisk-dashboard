@@ -66,7 +66,8 @@ class DatabaseService:
 
         try:
             cursor = self.connection.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS companies (
                     id SERIAL PRIMARY KEY,
                     company_name VARCHAR(255) NOT NULL,
@@ -78,7 +79,8 @@ class DatabaseService:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX IF NOT EXISTS idx_companies_ticker ON companies(ticker);
-            """)
+            """
+            )
             self.connection.commit()
             cursor.close()
         except Exception as e:
@@ -195,11 +197,13 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, company_name, ticker, sector, description, exchange, location, alternate_names, created_at
                 FROM companies
                 ORDER BY ticker
-            """)
+            """
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -331,7 +335,8 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     a.id,
                     c.ticker,
@@ -344,7 +349,8 @@ class DatabaseService:
                 FROM artifacts a
                 JOIN companies c ON a.company_id = c.id
                 ORDER BY a.published_date DESC
-            """)
+            """
+            )
 
             rows = cursor.fetchall()
             cursor.close()
