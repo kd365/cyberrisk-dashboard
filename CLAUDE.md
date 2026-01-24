@@ -8,6 +8,29 @@
 
 A comprehensive cybersecurity risk analytics platform analyzing SEC filings, earnings transcripts, and financial data for 30+ cybersecurity companies. Features AI-powered sentiment analysis, knowledge graph exploration, price forecasting, and a conversational chatbot assistant.
 
+## CRITICAL: AWS Profile Requirement
+
+**ALWAYS use the `cyber-risk` AWS profile when working in this directory.**
+
+```bash
+# Set before ANY AWS commands
+export AWS_PROFILE=cyber-risk
+
+# Or source the helper script
+source scripts/set-aws-profile.sh
+
+# Verify correct account (MUST be 000018673740)
+aws sts get-caller-identity
+```
+
+| Correct Account | Wrong Account |
+|-----------------|---------------|
+| `000018673740` (cyber-risk) | Any other account ID |
+
+If you see a different account ID, STOP and switch profiles. Infrastructure resources (EC2, RDS, etc.) only exist in the cyber-risk account.
+
+---
+
 ## Tech Stack
 
 ### Backend

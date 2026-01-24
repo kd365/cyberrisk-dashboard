@@ -2,8 +2,8 @@
 # LangChain Agent Service - Claude 3.5 Sonnet Powered Chat
 # =============================================================================
 #
-# Uses LangChain with AWS Bedrock to provide agentic chat functionality.
-# Replaces direct Bedrock API calls with LangChain's agent framework.
+# Uses LangGraph with AWS Bedrock to provide agentic chat functionality.
+# Replaces direct Bedrock API calls with LangGraph's agent framework.
 #
 # Benefits:
 # - Automatic tool-calling loop management
@@ -22,8 +22,7 @@ from datetime import datetime
 
 from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langgraph.prebuilt import create_react_agent
 
 from services.langchain_tools import get_all_tools
 from services.prompts import get_system_prompt
@@ -58,27 +57,12 @@ class LangChainAgentService:
         # Get system prompt (dynamically loads companies from RDS)
         self.system_prompt = get_system_prompt()
 
-        # Create prompt template
-        self.prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", self.system_prompt),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
-            ]
-        )
-
-        # Create the agent
-        self.agent = create_tool_calling_agent(self.llm, self.tools, self.prompt)
-
-        # Create executor with iteration limit
-        self.executor = AgentExecutor(
-            agent=self.agent,
+        # Create the agent using LangGraph's create_react_agent
+        # This returns a compiled graph that handles tool calling automatically
+        self.agent = create_react_agent(
+            model=self.llm,
             tools=self.tools,
-            verbose=False,
-            max_iterations=5,
-            handle_parsing_errors=True,
-            return_intermediate_steps=True,
+            state_modifier=self.system_prompt,
         )
 
         # Memory service (lazy loaded)
@@ -125,26 +109,40 @@ class LangChainAgentService:
             # Get relevant semantic memories from Mem0
             semantic_context = self._get_semantic_memories(message, user_id)
 
-            # If we have semantic memories, prepend them to chat history
-            if semantic_context:
-                memory_message = SystemMessage(
-                    content=f"Relevant context from previous conversations:\n{semantic_context}"
-                )
-                chat_history = [memory_message] + chat_history
+            # Build messages list for LangGraph agent
+            messages = []
 
-            # Invoke the agent
-            result = self.executor.invoke(
-                {"input": message, "chat_history": chat_history}
+            # If we have semantic memories, add as system message
+            if semantic_context:
+                messages.append(
+                    SystemMessage(
+                        content=f"Relevant context from previous conversations:\n{semantic_context}"
+                    )
+                )
+
+            # Add chat history
+            messages.extend(chat_history)
+
+            # Add current user message
+            messages.append(HumanMessage(content=message))
+
+            # Invoke the LangGraph agent
+            result = self.agent.invoke(
+                {"messages": messages},
+                config={"recursion_limit": 10},
             )
 
-            # Extract response
-            response_text = result.get("output", "I'm not sure how to respond to that.")
-
-            # Extract tools used from intermediate steps
+            # Extract response from the last AI message
+            response_text = "I'm not sure how to respond to that."
             tools_used = []
-            for step in result.get("intermediate_steps", []):
-                if hasattr(step[0], "tool"):
-                    tools_used.append(step[0].tool)
+
+            for msg in reversed(result.get("messages", [])):
+                if isinstance(msg, AIMessage):
+                    response_text = msg.content
+                    # Extract tool calls if any
+                    if hasattr(msg, "tool_calls") and msg.tool_calls:
+                        tools_used = [tc.get("name", "") for tc in msg.tool_calls]
+                    break
 
             # Save to PostgreSQL conversation memory
             self._save_to_memory(session_id, message, response_text)
