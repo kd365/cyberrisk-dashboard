@@ -109,15 +109,28 @@ class LangChainAgentService:
         Args:
             message: User's message
             session_id: Conversation session ID
-            user_email: Optional user email
+            user_email: Optional user email for semantic memory
             auth_token: Optional auth token for protected operations
 
         Returns:
             Response dict with message and metadata
         """
         try:
-            # Get conversation history
+            # Determine user_id for semantic memory (prefer email, fallback to session)
+            user_id = user_email or session_id
+
+            # Get conversation history from PostgreSQL
             chat_history = self._get_chat_history(session_id)
+
+            # Get relevant semantic memories from Mem0
+            semantic_context = self._get_semantic_memories(message, user_id)
+
+            # If we have semantic memories, prepend them to chat history
+            if semantic_context:
+                memory_message = SystemMessage(
+                    content=f"Relevant context from previous conversations:\n{semantic_context}"
+                )
+                chat_history = [memory_message] + chat_history
 
             # Invoke the agent
             result = self.executor.invoke(
@@ -133,8 +146,11 @@ class LangChainAgentService:
                 if hasattr(step[0], "tool"):
                     tools_used.append(step[0].tool)
 
-            # Save to memory
+            # Save to PostgreSQL conversation memory
             self._save_to_memory(session_id, message, response_text)
+
+            # Save to Mem0 semantic memory (extracts facts asynchronously)
+            self._save_to_semantic_memory(user_id, message, response_text)
 
             return {
                 "response": response_text,
@@ -142,6 +158,7 @@ class LangChainAgentService:
                 "tools_used": tools_used,
                 "model": "claude-3.5-sonnet",
                 "timestamp": datetime.now().isoformat(),
+                "semantic_memory_used": bool(semantic_context),
             }
 
         except Exception as e:
@@ -173,13 +190,92 @@ class LangChainAgentService:
         return []
 
     def _save_to_memory(self, session_id: str, user_msg: str, assistant_msg: str):
-        """Save messages to conversation memory."""
+        """Save messages to PostgreSQL conversation memory."""
         try:
             if self.memory_service:
                 self.memory_service.add_message(session_id, "user", user_msg)
                 self.memory_service.add_message(session_id, "assistant", assistant_msg)
         except Exception as e:
             logger.warning(f"Could not save to memory: {e}")
+
+    def _get_semantic_memories(self, query: str, user_id: str) -> Optional[str]:
+        """
+        Search Mem0 for relevant semantic memories.
+
+        Args:
+            query: The user's current message to find relevant context for
+            user_id: User identifier (email or session_id)
+
+        Returns:
+            Formatted string of relevant memories, or None if none found
+        """
+        try:
+            if not self.memory_service:
+                return None
+
+            # Search semantic memory for relevant facts
+            memories = self.memory_service.search_semantic_memory(
+                query=query, user_id=user_id, limit=3
+            )
+
+            if not memories:
+                return None
+
+            # Format memories into context string
+            memory_texts = []
+            for mem in memories:
+                # Mem0 returns dicts with 'memory' key containing the fact
+                if isinstance(mem, dict):
+                    text = mem.get("memory") or mem.get("text") or str(mem)
+                else:
+                    text = str(mem)
+                memory_texts.append(f"- {text}")
+
+            if memory_texts:
+                logger.debug(
+                    f"Found {len(memory_texts)} semantic memories for user {user_id}"
+                )
+                return "\n".join(memory_texts)
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"Could not get semantic memories: {e}")
+            return None
+
+    def _save_to_semantic_memory(self, user_id: str, user_msg: str, assistant_msg: str):
+        """
+        Save conversation to Mem0 semantic memory.
+
+        Mem0 automatically extracts facts and preferences from the conversation.
+
+        Args:
+            user_id: User identifier (email or session_id)
+            user_msg: User's message
+            assistant_msg: Assistant's response
+        """
+        try:
+            if not self.memory_service:
+                return
+
+            # Format as conversation for Mem0 to extract facts from
+            messages = [
+                {"role": "user", "content": user_msg},
+                {"role": "assistant", "content": assistant_msg},
+            ]
+
+            # Mem0 will extract facts/preferences and store as embeddings
+            result = self.memory_service.add_semantic_memory(
+                user_id=user_id,
+                messages=messages,
+                metadata={"source": "chat", "timestamp": datetime.now().isoformat()},
+            )
+
+            if result:
+                logger.debug(f"Saved semantic memory for user {user_id}: {result}")
+
+        except Exception as e:
+            logger.warning(f"Could not save semantic memory: {e}")
 
 
 # =============================================================================
