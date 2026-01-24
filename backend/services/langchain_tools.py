@@ -416,6 +416,160 @@ def get_patents(
         return {"error": str(e)}
 
 
+@tool
+def get_executive_events(ticker: Optional[str] = None, limit: int = 10) -> dict:
+    """Get executive events (appointments, departures, resignations) for companies.
+
+    Args:
+        ticker: Stock ticker to get events for a specific company (e.g., CRWD, PANW)
+        limit: Maximum events to return (default: 10)
+
+    Use when asked about executive changes, leadership transitions, C-suite appointments,
+    CEO/CFO/CTO changes, or management departures.
+    """
+    neo4j = get_neo4j_service()
+    if not neo4j:
+        return {
+            "error": "Knowledge graph not available",
+            "message": "Neo4j service is not connected",
+        }
+
+    try:
+        if ticker:
+            ticker = ticker.upper()
+            query = """
+                MATCH (o:Organization {ticker: $ticker})-[:HAS_EXECUTIVE_EVENT]->(e:ExecutiveEvent)
+                OPTIONAL MATCH (p:Person)-[:INVOLVED_IN]->(e)
+                RETURN e.event_type as event_type,
+                       e.person_name as person_name,
+                       e.title as title,
+                       e.effective_date as effective_date,
+                       e.reason as reason,
+                       e.filing_date as filing_date,
+                       o.name as company_name,
+                       o.ticker as ticker,
+                       collect(DISTINCT p.name) as involved_persons
+                ORDER BY e.filing_date DESC
+                LIMIT $limit
+            """
+            results = neo4j.execute_read(query, {"ticker": ticker, "limit": limit})
+        else:
+            query = """
+                MATCH (o:Organization)-[:HAS_EXECUTIVE_EVENT]->(e:ExecutiveEvent)
+                OPTIONAL MATCH (p:Person)-[:INVOLVED_IN]->(e)
+                RETURN e.event_type as event_type,
+                       e.person_name as person_name,
+                       e.title as title,
+                       e.effective_date as effective_date,
+                       e.reason as reason,
+                       e.filing_date as filing_date,
+                       o.name as company_name,
+                       o.ticker as ticker,
+                       collect(DISTINCT p.name) as involved_persons
+                ORDER BY e.filing_date DESC
+                LIMIT $limit
+            """
+            results = neo4j.execute_read(query, {"limit": limit})
+
+        # Get total count
+        count_query = """
+            MATCH (o:Organization)-[:HAS_EXECUTIVE_EVENT]->(e:ExecutiveEvent)
+            """ + (f"WHERE o.ticker = '{ticker}'" if ticker else "") + """
+            RETURN count(e) as total
+        """
+        count_result = neo4j.execute_read(count_query.replace(f"'{ticker}'", "$ticker") if ticker else count_query,
+                                          {"ticker": ticker} if ticker else {})
+        total = count_result[0]["total"] if count_result else 0
+
+        return {
+            "events": results,
+            "count": len(results),
+            "total_in_database": total,
+            "ticker": ticker,
+            "message": f"Found {len(results)} executive events" + (f" for {ticker}" if ticker else ""),
+        }
+    except Exception as e:
+        return {"error": str(e), "events": []}
+
+
+@tool
+def get_vulnerabilities(ticker: Optional[str] = None, severity: Optional[str] = None, limit: int = 10) -> dict:
+    """Get CVE vulnerabilities associated with companies.
+
+    Args:
+        ticker: Stock ticker to get vulnerabilities for a specific company (e.g., CRWD, PANW)
+        severity: Filter by severity level (CRITICAL, HIGH, MEDIUM, LOW)
+        limit: Maximum vulnerabilities to return (default: 10)
+
+    Use when asked about security vulnerabilities, CVEs, security issues, or security risks
+    affecting a company's products.
+    """
+    neo4j = get_neo4j_service()
+    if not neo4j:
+        return {
+            "error": "Knowledge graph not available",
+            "message": "Neo4j service is not connected",
+        }
+
+    try:
+        params = {"limit": limit}
+        where_clauses = []
+
+        if ticker:
+            ticker = ticker.upper()
+            params["ticker"] = ticker
+            where_clauses.append("o.ticker = $ticker")
+
+        if severity:
+            params["severity"] = severity.upper()
+            where_clauses.append("v.severity = $severity")
+
+        where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        query = f"""
+            MATCH (o:Organization)-[:HAS_VULNERABILITY]->(v:Vulnerability)
+            {where_clause}
+            RETURN v.cve_id as cve_id,
+                   v.description as description,
+                   v.severity as severity,
+                   v.published as published_date,
+                   v.vendor as vendor,
+                   o.name as company_name,
+                   o.ticker as ticker
+            ORDER BY
+                CASE v.severity
+                    WHEN 'CRITICAL' THEN 1
+                    WHEN 'HIGH' THEN 2
+                    WHEN 'MEDIUM' THEN 3
+                    WHEN 'LOW' THEN 4
+                    ELSE 5
+                END,
+                v.published DESC
+            LIMIT $limit
+        """
+        results = neo4j.execute_read(query, params)
+
+        # Get severity breakdown
+        breakdown_query = """
+            MATCH (o:Organization)-[:HAS_VULNERABILITY]->(v:Vulnerability)
+            """ + (f"WHERE o.ticker = $ticker" if ticker else "") + """
+            RETURN v.severity as severity, count(*) as count
+            ORDER BY count DESC
+        """
+        breakdown = neo4j.execute_read(breakdown_query, {"ticker": ticker} if ticker else {})
+        severity_counts = {r["severity"]: r["count"] for r in breakdown}
+
+        return {
+            "vulnerabilities": results,
+            "count": len(results),
+            "severity_breakdown": severity_counts,
+            "ticker": ticker,
+            "message": f"Found {len(results)} vulnerabilities" + (f" for {ticker}" if ticker else ""),
+        }
+    except Exception as e:
+        return {"error": str(e), "vulnerabilities": []}
+
+
 # =============================================================================
 # RAG Tools
 # =============================================================================
@@ -584,6 +738,8 @@ def get_all_tools():
         get_documents,
         query_knowledge_graph,
         get_patents,
+        get_executive_events,
+        get_vulnerabilities,
         search_documents,
         get_document_context,
         get_dashboard_help,
