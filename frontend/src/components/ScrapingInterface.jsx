@@ -334,7 +334,7 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
             companies.map((company) => {
               const status = documentStatus[company.ticker];
               const hasDocuments = status && status.existing > 0;
-              const needsMore = status && status.to_fetch > 0;
+              const toFetch = status?.to_fetch || 0;
               
               return (
                 <label key={company.ticker} style={{
@@ -364,12 +364,12 @@ function ScrapingInterface({ isAuthenticated: propIsAuthenticated, onAuthComplet
                             {status.existing} documents saved
                           </span>
                         )}
-                        {needsMore && (
+                        {toFetch > 0 && (
                           <span style={{ color: '#ff6b6b', marginLeft: hasDocuments ? '8px' : '0' }}>
-                            {needsMore > 0 && `${needsMore} more available`}
+                            {toFetch} more available
                           </span>
                         )}
-                        {!hasDocuments && !needsMore && (
+                        {!hasDocuments && toFetch === 0 && (
                           <span style={{ color: '#999' }}>No documents yet</span>
                         )}
                       </div>
