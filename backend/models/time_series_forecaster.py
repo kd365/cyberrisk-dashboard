@@ -94,8 +94,9 @@ class CyberRiskForecaster:
     def _get_mock_sentiment(self):
         """Generate mock sentiment data for testing"""
         # Create quarterly sentiment scores (simulating SEC filings)
+        # Note: 'QE' = Quarter End (replaces deprecated 'Q')
         dates = pd.date_range(
-            start=self.data["ds"].min(), end=self.data["ds"].max(), freq="Q"
+            start=self.data["ds"].min(), end=self.data["ds"].max(), freq="QE"
         )
 
         # Simulate sentiment: slightly negative with some variation
@@ -108,7 +109,7 @@ class CyberRiskForecaster:
         # Forward-fill to daily (sentiment stays constant between filings)
         daily_dates = pd.DataFrame({"ds": self.data["ds"]})
         df = daily_dates.merge(df, on="ds", how="left")
-        df["cyber_sentiment"] = df["cyber_sentiment"].fillna(method="ffill").fillna(0)
+        df["cyber_sentiment"] = df["cyber_sentiment"].ffill().fillna(0)
 
         return df
 
@@ -184,7 +185,7 @@ class CyberRiskForecaster:
             daily_dates = pd.DataFrame({"ds": self.data["ds"]})
             df = daily_dates.merge(df, on="ds", how="left")
             df["cyber_sentiment"] = (
-                df["cyber_sentiment"].fillna(method="ffill").fillna(0)
+                df["cyber_sentiment"].ffill().fillna(0)
             )
 
             print(f"  ✅ Extracted sentiment from {len(timeline)} documents")
@@ -329,11 +330,11 @@ class CyberRiskForecaster:
             future = future.merge(
                 self.data[["ds", "cyber_sentiment"]], on="ds", how="left"
             )
-            future["cyber_sentiment"] = future["cyber_sentiment"].fillna(method="ffill")
+            future["cyber_sentiment"] = future["cyber_sentiment"].ffill()
 
         if "volatility" in self.data.columns:
             future = future.merge(self.data[["ds", "volatility"]], on="ds", how="left")
-            future["volatility"] = future["volatility"].fillna(method="ffill")
+            future["volatility"] = future["volatility"].ffill()
 
         forecast = eval_model.predict(future)
 
