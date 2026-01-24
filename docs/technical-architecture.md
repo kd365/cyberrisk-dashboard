@@ -92,7 +92,7 @@ Tools are defined using LangChain's `@tool` decorator:
 | `add_company` | Add a new company to track | PostgreSQL |
 | `get_sentiment` | Retrieve sentiment analysis results | AWS Comprehend cache |
 | `get_forecast` | Get stock price predictions | Chronos/Prophet models |
-| `get_growth_metrics` | Employee count and hiring trends | CoreSignal API |
+| `get_growth_metrics` | Employee count and hiring trends | PostgreSQL (growth_cache) |
 | `get_documents` | List SEC filings for a company | S3 artifacts |
 | `query_knowledge_graph` | Search Neo4j for entities/relationships | Neo4j |
 | `get_patents` | Search patent database | Neo4j |
