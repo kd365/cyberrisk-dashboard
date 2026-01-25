@@ -123,6 +123,45 @@ function AlertOverview({ summary, alerts, onRefresh, loading, onAcknowledge }) {
         </div>
       </div>
 
+      {/* Impact Rating & Relevance Legend */}
+      <div style={{ marginBottom: '24px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '32px' }}>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Impact Rating</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ ...styles.impactBadge, backgroundColor: '#dc2626' }}>CRITICAL</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>Immediate action required</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ ...styles.impactBadge, backgroundColor: '#f59e0b' }}>HIGH</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>Review promptly</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ ...styles.impactBadge, backgroundColor: '#3b82f6' }}>MEDIUM</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>Monitor</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ ...styles.impactBadge, backgroundColor: '#22c55e' }}>LOW</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>Informational</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Relevance Score (%)</div>
+            <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6' }}>
+              <div>How closely the regulation matches a company:</div>
+              <div style={{ marginTop: '4px' }}>
+                <strong>70%+</strong> = High relevance → CRITICAL/HIGH impact<br/>
+                <strong>50-70%</strong> = Medium relevance → HIGH impact<br/>
+                <strong>30-50%</strong> = Some relevance → MEDIUM impact<br/>
+                <strong>&lt;30%</strong> = No alert created
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Pending Alerts List */}
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
