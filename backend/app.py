@@ -4474,6 +4474,44 @@ def ingest_regulations():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/regulatory/clear", methods=["DELETE"])
+@require_cognito_auth
+def clear_regulatory_data():
+    """
+    Clear all regulatory alerts and regulations (for re-ingestion).
+
+    Requires authentication. Use before re-running ingestion with new LLM validation.
+    """
+    try:
+        conn = db_service._get_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Delete alerts first (foreign key constraint)
+        cursor.execute("DELETE FROM regulatory_alerts")
+        alerts_deleted = cursor.rowcount
+
+        # Delete regulations
+        cursor.execute("DELETE FROM regulations")
+        regulations_deleted = cursor.rowcount
+
+        conn.commit()
+        cursor.close()
+
+        return jsonify(
+            {
+                "message": "Regulatory data cleared",
+                "alerts_deleted": alerts_deleted,
+                "regulations_deleted": regulations_deleted,
+            }
+        )
+    except Exception as e:
+        print(f"Error clearing regulatory data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("Starting Cyber Risk Dashboard API...")
     print("Endpoints:")
