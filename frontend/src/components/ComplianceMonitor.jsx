@@ -74,7 +74,7 @@ const IMPACT_COLORS = {
 // Alert Overview Tab
 // ============================================================================
 
-function AlertOverview({ summary, alerts, onRefresh, loading }) {
+function AlertOverview({ summary, alerts, onRefresh, loading, onAcknowledge }) {
   const pendingAlerts = alerts?.filter(a => a.status === 'UNACKNOWLEDGED') || [];
 
   return (
@@ -140,7 +140,7 @@ function AlertOverview({ summary, alerts, onRefresh, loading }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {pendingAlerts.slice(0, 10).map(alert => (
-              <AlertCard key={alert.id} alert={alert} />
+              <AlertCard key={alert.id} alert={alert} onAcknowledge={onAcknowledge} />
             ))}
           </div>
         )}
@@ -149,31 +149,70 @@ function AlertOverview({ summary, alerts, onRefresh, loading }) {
   );
 }
 
-function AlertCard({ alert }) {
+function AlertCard({ alert: alertData, onAcknowledge }) {
+  const [acknowledging, setAcknowledging] = useState(false);
+  const isAcknowledged = alertData.status === 'ACKNOWLEDGED';
+
+  const handleAcknowledge = async () => {
+    if (isAcknowledged || acknowledging) return;
+    setAcknowledging(true);
+    try {
+      const response = await fetch(`/api/regulatory/alerts/${alertData.id}/acknowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (response.ok) {
+        if (onAcknowledge) onAcknowledge(alertData.id);
+      } else {
+        console.error('Failed to acknowledge alert');
+      }
+    } catch (error) {
+      console.error('Error acknowledging alert:', error);
+    }
+    setAcknowledging(false);
+  };
+
   return (
     <div style={styles.alertCard}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-            <span style={{ ...styles.impactBadge, backgroundColor: IMPACT_COLORS[alert.impact_level] || '#6b7280' }}>
-              {alert.impact_level}
+            <span style={{ ...styles.impactBadge, backgroundColor: IMPACT_COLORS[alertData.impact_level] || '#6b7880' }}>
+              {alertData.impact_level}
             </span>
-            <span style={styles.agencyTag}>{alert.agency}</span>
+            <span style={styles.agencyTag}>{alertData.agency}</span>
+            {isAcknowledged && (
+              <span style={styles.acknowledgedBadge}>
+                <Icons.Check /> Acknowledged
+              </span>
+            )}
           </div>
           <div style={{ fontWeight: '500', color: '#1e293b', marginBottom: '4px' }}>
-            {alert.regulation_title?.substring(0, 100)}{alert.regulation_title?.length > 100 ? '...' : ''}
+            {alertData.regulation_title?.substring(0, 100)}{alertData.regulation_title?.length > 100 ? '...' : ''}
           </div>
           <div style={{ fontSize: '13px', color: '#64748b' }}>
-            Affects: <strong>{alert.ticker}</strong> ({alert.company_name}) |
-            Relevance: {(alert.relevance_score * 100).toFixed(0)}%
-            {alert.effective_date && ` | Effective: ${alert.effective_date}`}
+            Affects: <strong>{alertData.ticker}</strong> ({alertData.company_name}) |
+            Relevance: {(alertData.relevance_score * 100).toFixed(0)}%
+            {alertData.effective_date && ` | Effective: ${alertData.effective_date}`}
           </div>
         </div>
-        {alert.source_url && (
-          <a href={alert.source_url} target="_blank" rel="noopener noreferrer" style={styles.linkButton}>
-            <Icons.ExternalLink />
-          </a>
-        )}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {!isAcknowledged && (
+            <button
+              onClick={handleAcknowledge}
+              disabled={acknowledging}
+              style={styles.acknowledgeButton}
+              title="Mark as acknowledged"
+            >
+              {acknowledging ? '...' : <Icons.Check />}
+            </button>
+          )}
+          {alertData.source_url && (
+            <a href={alertData.source_url} target="_blank" rel="noopener noreferrer" style={styles.linkButton}>
+              <Icons.ExternalLink />
+            </a>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -381,7 +420,7 @@ function ImpactAnalysis({ alerts, companies }) {
 // Compliance Status Tab
 // ============================================================================
 
-function ComplianceStatus({ alerts, companies, selectedTicker }) {
+function ComplianceStatus({ alerts, companies, selectedTicker, onAcknowledge }) {
   const [ticker, setTicker] = useState(selectedTicker || '');
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -466,7 +505,7 @@ function ComplianceStatus({ alerts, companies, selectedTicker }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {companyAlerts.map(alert => (
-                <AlertCard key={alert.id} alert={alert} />
+                <AlertCard key={alert.id} alert={alert} onAcknowledge={onAcknowledge} />
               ))}
             </div>
           )}
@@ -530,6 +569,11 @@ function ComplianceMonitor({ ticker = null }) {
   }, []);
 
   useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleAcknowledge = useCallback((alertId) => {
+    // Refresh data after acknowledging
     fetchData();
   }, [fetchData]);
 
@@ -613,6 +657,7 @@ function ComplianceMonitor({ ticker = null }) {
                 alerts={alerts}
                 onRefresh={fetchData}
                 loading={loading}
+                onAcknowledge={handleAcknowledge}
               />
             )}
             {activeSubTab === 'timeline' && (
@@ -632,6 +677,7 @@ function ComplianceMonitor({ ticker = null }) {
                 alerts={alerts}
                 companies={companies}
                 selectedTicker={ticker}
+                onAcknowledge={handleAcknowledge}
               />
             )}
           </>
@@ -781,6 +827,30 @@ const styles = {
     borderRadius: '6px',
     color: '#475569',
     textDecoration: 'none'
+  },
+  acknowledgeButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    background: '#22c55e',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    cursor: 'pointer',
+    transition: 'background 150ms ease'
+  },
+  acknowledgedBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 8px',
+    background: '#dcfce7',
+    borderRadius: '4px',
+    fontSize: '11px',
+    fontWeight: '500',
+    color: '#166534'
   },
   emptyState: {
     display: 'flex',
