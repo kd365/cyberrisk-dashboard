@@ -545,7 +545,6 @@ class DatabaseService:
             print(f"⚠️  Error creating artifact: {e}")
             return None
 
-
     # =========================================================================
     # REGULATION CRUD OPERATIONS
     # =========================================================================
@@ -691,7 +690,9 @@ class DatabaseService:
                 query += " AND severity = %s"
                 params.append(severity)
 
-            query += " ORDER BY effective_date DESC NULLS LAST, created_at DESC LIMIT %s"
+            query += (
+                " ORDER BY effective_date DESC NULLS LAST, created_at DESC LIMIT %s"
+            )
             params.append(limit)
 
             cursor.execute(query, params)
@@ -764,7 +765,9 @@ class DatabaseService:
             conn.commit()
             cursor.close()
 
-            print(f"✅ Created regulatory alert for regulation {regulation_id}, company {company_id}")
+            print(
+                f"✅ Created regulatory alert for regulation {regulation_id}, company {company_id}"
+            )
             return alert
 
         except Exception as e:
@@ -937,7 +940,9 @@ class DatabaseService:
                 GROUP BY impact_level
             """
             )
-            impact_counts = {row["impact_level"]: row["count"] for row in cursor.fetchall()}
+            impact_counts = {
+                row["impact_level"]: row["count"] for row in cursor.fetchall()
+            }
 
             # Get regulation counts by agency
             cursor.execute(
@@ -970,7 +975,9 @@ class DatabaseService:
                 "upcoming_regulations": upcoming,
                 "total_regulations": sum(agency_counts.values()),
                 "total_active_alerts": sum(
-                    count for status, count in status_counts.items() if status != "RESOLVED"
+                    count
+                    for status, count in status_counts.items()
+                    if status != "RESOLVED"
                 ),
             }
 

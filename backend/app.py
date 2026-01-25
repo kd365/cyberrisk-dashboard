@@ -3899,6 +3899,7 @@ def get_gds_service():
     if _gds_service is None:
         try:
             from services.gds_service import GDSService
+
             _gds_service = GDSService()
         except Exception as e:
             print(f"Failed to initialize GDS service: {e}")
@@ -3986,11 +3987,13 @@ def gds_pagerank():
         limit = int(request.args.get("limit", 20))
         results = gds.run_pagerank(limit=limit)
 
-        return jsonify({
-            "algorithm": "pagerank",
-            "description": "Market leaders - companies central to competition network",
-            "results": results
-        })
+        return jsonify(
+            {
+                "algorithm": "pagerank",
+                "description": "Market leaders - companies central to competition network",
+                "results": results,
+            }
+        )
 
     except Exception as e:
         print(f"Error running PageRank: {e}")
@@ -4013,11 +4016,13 @@ def gds_betweenness():
         limit = int(request.args.get("limit", 20))
         results = gds.run_betweenness_centrality(limit=limit)
 
-        return jsonify({
-            "algorithm": "betweenness_centrality",
-            "description": "Strategic bridges - acquisition targets, consolidation points",
-            "results": results
-        })
+        return jsonify(
+            {
+                "algorithm": "betweenness_centrality",
+                "description": "Strategic bridges - acquisition targets, consolidation points",
+                "results": results,
+            }
+        )
 
     except Exception as e:
         print(f"Error running betweenness: {e}")
@@ -4040,11 +4045,13 @@ def gds_degree():
         limit = int(request.args.get("limit", 20))
         results = gds.run_degree_centrality(limit=limit)
 
-        return jsonify({
-            "algorithm": "degree_centrality",
-            "description": "Competitive breadth - companies with most competitors",
-            "results": results
-        })
+        return jsonify(
+            {
+                "algorithm": "degree_centrality",
+                "description": "Competitive breadth - companies with most competitors",
+                "results": results,
+            }
+        )
 
     except Exception as e:
         print(f"Error running degree centrality: {e}")
@@ -4063,11 +4070,13 @@ def gds_louvain():
 
         results = gds.run_louvain_communities()
 
-        return jsonify({
-            "algorithm": "louvain",
-            "description": "Market segments - clusters of closely competing companies",
-            **results
-        })
+        return jsonify(
+            {
+                "algorithm": "louvain",
+                "description": "Market segments - clusters of closely competing companies",
+                **results,
+            }
+        )
 
     except Exception as e:
         print(f"Error running Louvain: {e}")
@@ -4086,11 +4095,13 @@ def gds_wcc():
 
         results = gds.run_wcc()
 
-        return jsonify({
-            "algorithm": "wcc",
-            "description": "Connected components - isolated market niches",
-            **results
-        })
+        return jsonify(
+            {
+                "algorithm": "wcc",
+                "description": "Connected components - isolated market niches",
+                **results,
+            }
+        )
 
     except Exception as e:
         print(f"Error running WCC: {e}")
@@ -4113,11 +4124,13 @@ def gds_patent_similarity():
         top_k = int(request.args.get("top_k", 10))
         results = gds.run_node_similarity(top_k=top_k)
 
-        return jsonify({
-            "algorithm": "node_similarity",
-            "description": "Patent portfolio similarity - companies with similar IP strategies",
-            "results": results
-        })
+        return jsonify(
+            {
+                "algorithm": "node_similarity",
+                "description": "Patent portfolio similarity - companies with similar IP strategies",
+                "results": results,
+            }
+        )
 
     except Exception as e:
         print(f"Error running patent similarity: {e}")
@@ -4140,11 +4153,13 @@ def gds_similar_to_company(ticker):
         top_k = int(request.args.get("top_k", 10))
         results = gds.find_similar_to_company(ticker=ticker, top_k=top_k)
 
-        return jsonify({
-            "ticker": ticker.upper(),
-            "description": f"Companies most similar to {ticker.upper()}",
-            "results": results
-        })
+        return jsonify(
+            {
+                "ticker": ticker.upper(),
+                "description": f"Companies most similar to {ticker.upper()}",
+                "results": results,
+            }
+        )
 
     except Exception as e:
         print(f"Error finding similar companies: {e}")
@@ -4163,11 +4178,13 @@ def gds_vulnerability_analysis():
 
         results = gds.analyze_vulnerability_spread()
 
-        return jsonify({
-            "analysis": "vulnerability_spread",
-            "description": "Companies with vulnerabilities and their network connections",
-            **results
-        })
+        return jsonify(
+            {
+                "analysis": "vulnerability_spread",
+                "description": "Companies with vulnerabilities and their network connections",
+                **results,
+            }
+        )
 
     except Exception as e:
         print(f"Error analyzing vulnerabilities: {e}")
@@ -4190,11 +4207,13 @@ def gds_executive_network():
         limit = int(request.args.get("limit", 20))
         results = gds.analyze_executive_network(limit=limit)
 
-        return jsonify({
-            "analysis": "executive_network",
-            "description": "Key executives and their company associations",
-            "results": results
-        })
+        return jsonify(
+            {
+                "analysis": "executive_network",
+                "description": "Key executives and their company associations",
+                "results": results,
+            }
+        )
 
     except Exception as e:
         print(f"Error analyzing executive network: {e}")
@@ -4421,11 +4440,9 @@ def get_company_regulatory_alerts(ticker: str):
             ticker=ticker.upper(), status=status, limit=limit
         )
 
-        return jsonify({
-            "ticker": ticker.upper(),
-            "alerts": alerts,
-            "count": len(alerts)
-        })
+        return jsonify(
+            {"ticker": ticker.upper(), "alerts": alerts, "count": len(alerts)}
+        )
     except Exception as e:
         print(f"Error getting company alerts: {e}")
         return jsonify({"error": str(e)}), 500
@@ -4451,10 +4468,7 @@ def ingest_regulations():
 
         result = regulatory_service.ingest_regulations(start_date, end_date)
 
-        return jsonify({
-            "message": "Ingestion complete",
-            **result
-        })
+        return jsonify({"message": "Ingestion complete", **result})
     except Exception as e:
         print(f"Error ingesting regulations: {e}")
         return jsonify({"error": str(e)}), 500

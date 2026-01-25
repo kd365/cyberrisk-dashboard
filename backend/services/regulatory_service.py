@@ -95,7 +95,9 @@ class RegulatoryService:
         all_articles = []
 
         # Search for each keyword to maximize coverage
-        search_terms = [search_term] if search_term != "cybersecurity" else self.CYBER_KEYWORDS[:5]
+        search_terms = (
+            [search_term] if search_term != "cybersecurity" else self.CYBER_KEYWORDS[:5]
+        )
 
         for term in search_terms:
             try:
@@ -126,11 +128,17 @@ class RegulatoryService:
 
                 # Filter to tracked agencies and deduplicate
                 for article in articles:
-                    article_agencies = [a.get("slug", "") for a in article.get("agencies", [])]
-                    if any(agency in self.TRACKED_AGENCIES for agency in article_agencies):
+                    article_agencies = [
+                        a.get("slug", "") for a in article.get("agencies", [])
+                    ]
+                    if any(
+                        agency in self.TRACKED_AGENCIES for agency in article_agencies
+                    ):
                         # Check if we already have this article
                         doc_num = article.get("document_number")
-                        if not any(a.get("document_number") == doc_num for a in all_articles):
+                        if not any(
+                            a.get("document_number") == doc_num for a in all_articles
+                        ):
                             all_articles.append(article)
 
                 print(f"  Fetched {len(articles)} articles for term '{term}'")
@@ -167,7 +175,11 @@ class RegulatoryService:
         companies = self.db.get_all_companies()
         if not companies:
             print("No companies found in database")
-            return {"regulations_created": 0, "alerts_created": 0, "error": "No companies"}
+            return {
+                "regulations_created": 0,
+                "alerts_created": 0,
+                "error": "No companies",
+            }
 
         for article in articles:
             # Extract agency name
@@ -203,7 +215,9 @@ class RegulatoryService:
                     relevance = self._calculate_relevance_score(article, company)
 
                     if relevance["score"] >= 0.3:  # Threshold for creating an alert
-                        impact_level = self._determine_impact_level(relevance["score"], severity)
+                        impact_level = self._determine_impact_level(
+                            relevance["score"], severity
+                        )
 
                         alert = self.db.create_regulatory_alert(
                             regulation_id=regulation["id"],
@@ -245,12 +259,24 @@ class RegulatoryService:
         text = f"{title} {abstract}"
 
         # Critical indicators
-        critical_terms = ["final rule", "mandatory", "immediate", "enforcement action", "penalty"]
+        critical_terms = [
+            "final rule",
+            "mandatory",
+            "immediate",
+            "enforcement action",
+            "penalty",
+        ]
         if any(term in text for term in critical_terms) or doc_type == "rule":
             return "CRITICAL"
 
         # High indicators
-        high_terms = ["proposed rule", "requirement", "compliance", "deadline", "effective date"]
+        high_terms = [
+            "proposed rule",
+            "requirement",
+            "compliance",
+            "deadline",
+            "effective date",
+        ]
         if any(term in text for term in high_terms):
             return "HIGH"
 
@@ -404,7 +430,9 @@ class RegulatoryService:
         """
         return self.db.get_regulatory_dashboard_summary()
 
-    def acknowledge_alert(self, alert_id: int, username: str) -> Optional[Dict[str, Any]]:
+    def acknowledge_alert(
+        self, alert_id: int, username: str
+    ) -> Optional[Dict[str, Any]]:
         """
         Acknowledge a regulatory alert
 
@@ -417,7 +445,9 @@ class RegulatoryService:
         """
         return self.db.update_alert_status(alert_id, "ACKNOWLEDGED", username)
 
-    def update_alert_status(self, alert_id: int, status: str) -> Optional[Dict[str, Any]]:
+    def update_alert_status(
+        self, alert_id: int, status: str
+    ) -> Optional[Dict[str, Any]]:
         """
         Update alert status
 

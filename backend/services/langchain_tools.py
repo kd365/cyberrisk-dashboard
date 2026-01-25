@@ -1232,6 +1232,7 @@ def get_gds_service():
     if _gds_service is None:
         try:
             from services.gds_service import GDSService
+
             _gds_service = GDSService()
         except Exception as e:
             logger.warning(f"GDS service not available: {e}")
@@ -1258,7 +1259,7 @@ def get_market_segments() -> dict:
             "algorithm": "louvain_community_detection",
             "description": "Companies grouped by competitive proximity",
             "total_segments": result.get("total_segments", 0),
-            "segments": result.get("segments", [])
+            "segments": result.get("segments", []),
         }
     except Exception as e:
         return {"error": str(e)}
@@ -1286,7 +1287,7 @@ def get_market_leaders(limit: int = 10) -> dict:
         return {
             "algorithm": "pagerank",
             "description": "Companies ranked by centrality in competition network",
-            "leaders": results
+            "leaders": results,
         }
     except Exception as e:
         return {"error": str(e)}
@@ -1316,7 +1317,7 @@ def get_similar_companies(ticker: str, limit: int = 10) -> dict:
         return {
             "ticker": ticker,
             "description": f"Companies most similar to {ticker}",
-            "similar_companies": results
+            "similar_companies": results,
         }
     except Exception as e:
         return {"error": str(e)}
@@ -1350,17 +1351,17 @@ def get_competitive_intelligence_summary() -> dict:
         return {
             "market_leaders": {
                 "description": "Top 5 companies by network centrality",
-                "companies": leaders
+                "companies": leaders,
             },
             "market_segments": {
                 "description": "Competitive clusters (companies that compete closely)",
                 "total_segments": segments.get("total_segments", 0),
-                "segments": segments.get("segments", [])[:5]  # Top 5 segments
+                "segments": segments.get("segments", [])[:5],  # Top 5 segments
             },
             "most_competitive": {
                 "description": "Companies with most direct competitors",
-                "companies": degree[:5]
-            }
+                "companies": degree[:5],
+            },
         }
     except Exception as e:
         return {"error": str(e)}
@@ -1385,7 +1386,7 @@ def get_strategic_positions() -> dict:
         return {
             "algorithm": "betweenness_centrality",
             "description": "Companies that bridge different market segments",
-            "strategic_positions": results
+            "strategic_positions": results,
         }
     except Exception as e:
         return {"error": str(e)}
@@ -1404,6 +1405,7 @@ def get_regulatory_service():
     if _regulatory_service is None:
         try:
             from services.regulatory_service import regulatory_service
+
             _regulatory_service = regulatory_service
         except Exception as e:
             logger.warning(f"Regulatory service not available: {e}")
@@ -1411,7 +1413,9 @@ def get_regulatory_service():
 
 
 @tool
-def get_regulatory_alerts(ticker: Optional[str] = None, status: Optional[str] = None) -> dict:
+def get_regulatory_alerts(
+    ticker: Optional[str] = None, status: Optional[str] = None
+) -> dict:
     """Get regulatory alerts for tracked companies.
 
     Use when asked about compliance, regulations, regulatory risk, or regulatory alerts.
@@ -1445,7 +1449,11 @@ def get_regulatory_alerts(ticker: Optional[str] = None, status: Optional[str] = 
                     "status": a.get("status"),
                     "ticker": a.get("ticker"),
                     "company_name": a.get("company_name"),
-                    "effective_date": str(a.get("effective_date", "")) if a.get("effective_date") else None,
+                    "effective_date": (
+                        str(a.get("effective_date", ""))
+                        if a.get("effective_date")
+                        else None
+                    ),
                     "source_url": a.get("source_url"),
                 }
                 for a in alerts
@@ -1484,11 +1492,15 @@ def get_regulation_impact(regulation_id: int, ticker: Optional[str] = None) -> d
 
         # Get all alerts for this regulation
         all_alerts = reg_svc.get_alerts(limit=1000)
-        regulation_alerts = [a for a in all_alerts if a.get("regulation_id") == regulation_id]
+        regulation_alerts = [
+            a for a in all_alerts if a.get("regulation_id") == regulation_id
+        ]
 
         if ticker:
             ticker = ticker.upper()
-            regulation_alerts = [a for a in regulation_alerts if a.get("ticker") == ticker]
+            regulation_alerts = [
+                a for a in regulation_alerts if a.get("ticker") == ticker
+            ]
 
         return {
             "regulation": {
@@ -1497,7 +1509,11 @@ def get_regulation_impact(regulation_id: int, ticker: Optional[str] = None) -> d
                 "agency": regulation.get("agency"),
                 "summary": regulation.get("summary"),
                 "severity": regulation.get("severity"),
-                "effective_date": str(regulation.get("effective_date", "")) if regulation.get("effective_date") else None,
+                "effective_date": (
+                    str(regulation.get("effective_date", ""))
+                    if regulation.get("effective_date")
+                    else None
+                ),
                 "source_url": regulation.get("source_url"),
                 "keywords": regulation.get("keywords"),
             },
@@ -1558,12 +1574,18 @@ def get_company_compliance_status(ticker: str) -> dict:
 
             # Collect critical/high impact alerts
             if impact in ("CRITICAL", "HIGH"):
-                critical_alerts.append({
-                    "title": alert.get("regulation_title"),
-                    "agency": agency,
-                    "impact_level": impact,
-                    "effective_date": str(alert.get("effective_date", "")) if alert.get("effective_date") else None,
-                })
+                critical_alerts.append(
+                    {
+                        "title": alert.get("regulation_title"),
+                        "agency": agency,
+                        "impact_level": impact,
+                        "effective_date": (
+                            str(alert.get("effective_date", ""))
+                            if alert.get("effective_date")
+                            else None
+                        ),
+                    }
+                )
 
         return {
             "ticker": ticker,
@@ -1572,11 +1594,21 @@ def get_company_compliance_status(ticker: str) -> dict:
             "alerts_by_impact": impact_counts,
             "alerts_by_agency": agency_counts,
             "critical_alerts": critical_alerts[:5],  # Top 5 critical/high
-            "compliance_risk": "HIGH" if impact_counts.get("CRITICAL", 0) > 0 else
-                               "MEDIUM" if impact_counts.get("HIGH", 0) > 0 else
-                               "LOW" if len(alerts) > 0 else "NONE",
-            "message": f"Found {len(alerts)} regulatory alerts for {ticker}" +
-                       (f", including {len(critical_alerts)} critical/high impact" if critical_alerts else ""),
+            "compliance_risk": (
+                "HIGH"
+                if impact_counts.get("CRITICAL", 0) > 0
+                else (
+                    "MEDIUM"
+                    if impact_counts.get("HIGH", 0) > 0
+                    else "LOW" if len(alerts) > 0 else "NONE"
+                )
+            ),
+            "message": f"Found {len(alerts)} regulatory alerts for {ticker}"
+            + (
+                f", including {len(critical_alerts)} critical/high impact"
+                if critical_alerts
+                else ""
+            ),
         }
     except Exception as e:
         return {"error": str(e)}
