@@ -488,7 +488,7 @@ function ComplianceStatus({ alerts, companies, selectedTicker }) {
 // ============================================================================
 
 function ComplianceMonitor({ ticker = null }) {
-  const { getAccessToken } = useAuth();
+  const { authenticatedFetch } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState('overview');
   const [summary, setSummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -540,12 +540,10 @@ function ComplianceMonitor({ ticker = null }) {
 
     setIngesting(true);
     try {
-      const accessToken = await getAccessToken();
-      const response = await fetch('/api/regulatory/ingest', {
+      const response = await authenticatedFetch('/api/regulatory/ingest', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({})
       });

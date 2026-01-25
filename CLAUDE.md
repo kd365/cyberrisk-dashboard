@@ -31,6 +31,12 @@ If you see a different account ID, STOP and switch profiles. Infrastructure reso
 
 ---
 
+## User Preferences
+
+- **Git commits**: Do NOT add "Co-Authored-By" lines to commit messages
+
+---
+
 ## Tech Stack
 
 ### Backend
