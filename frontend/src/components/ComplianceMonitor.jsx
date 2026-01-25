@@ -150,12 +150,14 @@ function AlertOverview({ summary, alerts, onRefresh, loading, onAcknowledge }) {
           <div>
             <div style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Relevance Score (%)</div>
             <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6' }}>
-              <div>How closely the regulation matches a company:</div>
-              <div style={{ marginTop: '4px' }}>
-                <strong>70%+</strong> = High relevance → CRITICAL/HIGH impact<br/>
-                <strong>50-70%</strong> = Medium relevance → HIGH impact<br/>
-                <strong>30-50%</strong> = Some relevance → MEDIUM impact<br/>
-                <strong>&lt;30%</strong> = No alert created
+              <div><strong>Calculation:</strong> Sector (40%) + Keywords (40%) + Base (20%)</div>
+              <div style={{ marginTop: '4px', paddingLeft: '8px', borderLeft: '2px solid #e2e8f0' }}>
+                • <strong>Sector:</strong> Cybersecurity=40%, Tech=20%<br/>
+                • <strong>Keywords:</strong> 10% per match (max 40%)<br/>
+                • <strong>Base:</strong> Cyber companies=20%
+              </div>
+              <div style={{ marginTop: '6px' }}>
+                <strong>70%+</strong> → CRITICAL/HIGH | <strong>50-70%</strong> → HIGH | <strong>30-50%</strong> → MEDIUM
               </div>
             </div>
           </div>
