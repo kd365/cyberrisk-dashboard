@@ -106,7 +106,7 @@ class GDSService:
                 "graph_name": record["graphName"],
                 "node_count": record["nodeCount"],
                 "relationship_count": record["relationshipCount"],
-                "project_millis": record["projectMillis"]
+                "project_millis": record["projectMillis"],
             }
 
     def create_patent_similarity_graph(self) -> Dict[str, Any]:
@@ -140,7 +140,7 @@ class GDSService:
             return {
                 "graph_name": record["graphName"],
                 "node_count": record["nodeCount"],
-                "relationship_count": record["relationshipCount"]
+                "relationship_count": record["relationshipCount"],
             }
 
     def create_concept_similarity_graph(self) -> Dict[str, Any]:
@@ -172,7 +172,7 @@ class GDSService:
             return {
                 "graph_name": record["graphName"],
                 "node_count": record["nodeCount"],
-                "relationship_count": record["relationshipCount"]
+                "relationship_count": record["relationshipCount"],
             }
 
     def _drop_graph_if_exists(self, graph_name: str):
@@ -203,7 +203,9 @@ class GDSService:
                     "name": r["graphName"],
                     "nodes": r["nodeCount"],
                     "relationships": r["relationshipCount"],
-                    "created": r["creationTime"].isoformat() if r["creationTime"] else None
+                    "created": (
+                        r["creationTime"].isoformat() if r["creationTime"] else None
+                    ),
                 }
                 for r in result
             ]
@@ -212,8 +214,9 @@ class GDSService:
     # Centrality Algorithms - Competitive Intelligence
     # =========================================================================
 
-    def run_pagerank(self, graph_name: str = "competition_graph",
-                     limit: int = 20) -> List[Dict[str, Any]]:
+    def run_pagerank(
+        self, graph_name: str = "competition_graph", limit: int = 20
+    ) -> List[Dict[str, Any]]:
         """
         Run PageRank on competition graph to find market leaders.
 
@@ -246,13 +249,18 @@ class GDSService:
                     "company": r["company"],
                     "ticker": r["ticker"],
                     "pagerank_score": r["pagerank_score"],
-                    "interpretation": "Market leader" if r["pagerank_score"] > 0.1 else "Notable player"
+                    "interpretation": (
+                        "Market leader"
+                        if r["pagerank_score"] > 0.1
+                        else "Notable player"
+                    ),
                 }
                 for r in result
             ]
 
-    def run_betweenness_centrality(self, graph_name: str = "competition_graph",
-                                    limit: int = 20) -> List[Dict[str, Any]]:
+    def run_betweenness_centrality(
+        self, graph_name: str = "competition_graph", limit: int = 20
+    ) -> List[Dict[str, Any]]:
         """
         Run Betweenness Centrality to find strategic positions.
 
@@ -281,7 +289,11 @@ class GDSService:
                     "company": r["company"],
                     "ticker": r["ticker"],
                     "betweenness_score": r["betweenness_score"],
-                    "interpretation": "Strategic bridge" if r["betweenness_score"] > 100 else "Standard position"
+                    "interpretation": (
+                        "Strategic bridge"
+                        if r["betweenness_score"] > 100
+                        else "Standard position"
+                    ),
                 }
                 for r in result
             ]
@@ -309,7 +321,7 @@ class GDSService:
                 {
                     "company": r["company"],
                     "ticker": r["ticker"],
-                    "competitor_count": r["competitor_count"]
+                    "competitor_count": r["competitor_count"],
                 }
                 for r in result
             ]
@@ -364,16 +376,17 @@ class GDSService:
 
         try:
             with self.driver.session() as session:
-                result = session.run(query, {
-                    "tickers": tickers,
-                    "min_companies": min_companies
-                })
+                result = session.run(
+                    query, {"tickers": tickers, "min_companies": min_companies}
+                )
                 return [r["concept"] for r in result]
         except Exception as e:
             logger.warning(f"Error getting segment concepts: {e}")
             return []
 
-    def run_louvain_communities(self, graph_name: str = "competition_graph") -> Dict[str, Any]:
+    def run_louvain_communities(
+        self, graph_name: str = "competition_graph"
+    ) -> Dict[str, Any]:
         """
         Run Louvain community detection to find market segments.
 
@@ -410,16 +423,18 @@ class GDSService:
                 if len(companies) >= 2:
                     distinctive_concepts = self._get_segment_concepts(tickers)
 
-                segments.append({
-                    "segment_id": r["segment_id"],
-                    "company_count": r["company_count"],
-                    "companies": companies,
-                    "distinctive_concepts": distinctive_concepts
-                })
+                segments.append(
+                    {
+                        "segment_id": r["segment_id"],
+                        "company_count": r["company_count"],
+                        "companies": companies,
+                        "distinctive_concepts": distinctive_concepts,
+                    }
+                )
 
             return {
                 "total_segments": len(segments),
-                "segments": segments[:10]  # Top 10 segments
+                "segments": segments[:10],  # Top 10 segments
             }
 
     def run_wcc(self, graph_name: str = "competition_graph") -> Dict[str, Any]:
@@ -450,21 +465,19 @@ class GDSService:
                 {
                     "component_id": r["componentId"],
                     "size": r["size"],
-                    "companies": r["companies"][:10]
+                    "companies": r["companies"][:10],
                 }
                 for r in result
             ]
-            return {
-                "total_components": len(components),
-                "components": components
-            }
+            return {"total_components": len(components), "components": components}
 
     # =========================================================================
     # Similarity Analysis - Finding Similar Companies
     # =========================================================================
 
-    def run_node_similarity(self, graph_name: str = "patent_similarity_graph",
-                            top_k: int = 10) -> List[Dict[str, Any]]:
+    def run_node_similarity(
+        self, graph_name: str = "patent_similarity_graph", top_k: int = 10
+    ) -> List[Dict[str, Any]]:
         """
         Run Node Similarity based on patent portfolios.
 
@@ -500,12 +513,18 @@ class GDSService:
                     "company2": r["company2"],
                     "ticker2": r["ticker2"],
                     "similarity_score": r["similarity_score"],
-                    "interpretation": "High IP overlap" if r["similarity_score"] > 0.5 else "Some IP overlap"
+                    "interpretation": (
+                        "High IP overlap"
+                        if r["similarity_score"] > 0.5
+                        else "Some IP overlap"
+                    ),
                 }
                 for r in result
             ]
 
-    def find_similar_to_company(self, ticker: str, top_k: int = 10) -> List[Dict[str, Any]]:
+    def find_similar_to_company(
+        self, ticker: str, top_k: int = 10
+    ) -> List[Dict[str, Any]]:
         """
         Find companies most similar to a specific company based on multiple factors.
 
@@ -543,7 +562,7 @@ class GDSService:
                     "ticker": r["ticker"],
                     "shared_competitors": r["shared_competitors"],
                     "shared_concepts": r["shared_concepts"],
-                    "similarity_score": r["similarity_score"]
+                    "similarity_score": r["similarity_score"],
                 }
                 for r in result
             ]
@@ -583,14 +602,14 @@ class GDSService:
                     "ticker": r["ticker"],
                     "vulnerability_count": r["vulnerability_count"],
                     "sample_cves": r["sample_cves"],
-                    "connected_companies": r["connected_companies"]
+                    "connected_companies": r["connected_companies"],
                 }
                 for r in result
             ]
 
             return {
                 "companies_with_vulnerabilities": len(companies),
-                "companies": companies
+                "companies": companies,
             }
 
     # =========================================================================
@@ -620,7 +639,7 @@ class GDSService:
                 {
                     "executive": r["executive"],
                     "companies": r["companies"],
-                    "executive_events": r["executive_events"]
+                    "executive_events": r["executive_events"],
                 }
                 for r in result
             ]
@@ -649,8 +668,8 @@ class GDSService:
                 "community": ["louvain", "wcc"],
                 "similarity": ["node_similarity", "find_similar"],
                 "risk": ["vulnerability_spread"],
-                "executive": ["executive_network"]
-            }
+                "executive": ["executive_network"],
+            },
         }
 
 
