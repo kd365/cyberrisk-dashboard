@@ -115,40 +115,39 @@ If you see a different account ID, STOP and switch profiles. Infrastructure reso
 
 ## Neo4j Knowledge Graph Schema
 
-### Nodes (12 types, 83,346 total)
+### Nodes (12 types, ~136K total after cleanup)
 | Node Label | Count | Description |
 |------------|-------|-------------|
-| Concept | 76,821 | Key phrases from documents |
-| Organization | 2,249 | Companies (30 tracked + mentioned) |
-| Person | 2,086 | People mentioned in filings |
+| Concept | 129,344 | Key phrases from documents |
+| Organization | 2,732 | Companies (31 tracked + mentioned) |
+| Person | 2,662 | People mentioned in filings |
 | Patent | 791 | Filed patents |
-| Document | 670 | SEC filings & transcripts |
-| Location | 396 | Geographic locations |
+| Document | 869 | SEC filings & transcripts |
+| Location | 586 | Geographic locations |
+| Event | 156 | General events |
 | ExecutiveEvent | 127 | C-suite appointments/departures |
-| Event | 112 | General events |
 | Vulnerability | 77 | CVE vulnerabilities |
 | MAEvent | 15 | M&A events |
 | RestructuringEvent | 1 | Restructuring events |
 | SecurityEvent | 1 | Security incidents |
 
-### Relationships (14 types, 412,873 total)
+### Relationships (14 types, 668,339 total)
 | From | Relationship | To | Count |
 |------|--------------|-----|-------|
-| Document | DISCUSSES | Concept | 384,173 |
-| Document | MENTIONS | Organization | 12,148 |
-| Document | MENTIONS | Location | 5,084 |
+| Document | DISCUSSES | Concept | 632,197 |
+| Document | MENTIONS | * | 25,855 |
+| Organization | FILED | Patent | 2,634 |
 | Person | INVENTED | Patent | 2,343 |
-| Organization | COMPETES_WITH | Organization | 2,286 |
-| Organization | FILED | Patent | 2,035 |
-| Organization | OPERATES_IN | Location | 1,812 |
-| Document | MENTIONS | Person | 1,446 |
+| Organization | COMPETES_WITH | Organization | 2,285 |
+| Organization | OPERATES_IN | Location | 1,803 |
 | Organization | HAS_FILING | Document | 583 |
-| Document | MENTIONS | Event | 324 |
 | Event | INVOLVES | Organization | 291 |
 | Organization | HAS_EXECUTIVE_EVENT | ExecutiveEvent | 127 |
 | Person | INVOLVED_IN | ExecutiveEvent | 127 |
 | Organization | HAS_VULNERABILITY | Vulnerability | 77 |
 | Organization | HAS_MA_EVENT | MAEvent | 15 |
+| Organization | HAS_RESTRUCTURING_EVENT | RestructuringEvent | 1 |
+| Organization | HAS_SECURITY_EVENT | SecurityEvent | 1 |
 
 ### Known Issue: Graph Sync Gap
 - **PostgreSQL artifacts**: 857 documents (387 10-Q, 187 8-K, 179 10-K, 104 transcripts)
@@ -210,7 +209,7 @@ Added strict anti-hallucination rules:
 - `get_executive_events(ticker, limit)` - Queries HAS_EXECUTIVE_EVENT from Neo4j
 - `get_vulnerabilities(ticker, severity, limit)` - Queries HAS_VULNERABILITY from Neo4j
 
-**Tool Count**: 12 → 14 tools
+**Tool Count**: 12 → 14 → 20 tools (see session below for new additions)
 
 **Commits**:
 - `bf6a9ab` - Fix NumPy array error in evaluation API
@@ -361,9 +360,158 @@ result = agent.invoke({"messages": messages}, config={"recursion_limit": 10})
 
 ---
 
+### 2026-01-24: LangChain Agent Improvements
+
+**Issues Fixed**:
+
+1. **504 Gateway Timeouts**: Complex multi-tool queries were timing out because CloudFront's default origin timeout was 30 seconds.
+   - **Fix**: Updated CloudFront API origin settings via AWS CLI:
+     - `OriginReadTimeout`: 30s → 60s
+     - `OriginKeepaliveTimeout`: 5s → 60s
+
+2. **Recursion Limit Too Low**: LangGraph agent was limited to 10 turns, not enough for complex queries.
+   - **Fix**: Increased `recursion_limit` from 10 to 25 in [langchain_agent.py](backend/services/langchain_agent.py)
+
+3. **Tool Extraction Bug**: Only tools from the LAST AI message were reported, missing earlier tool calls.
+   - **Fix**: Now collects ALL tools used across entire agent run
+
+4. **Sentiment Cache Miss Not Running Comprehend**: `get_sentiment` tool only read from cache, returning error on miss.
+   - **Fix**: Now runs AWS Comprehend analysis on cache miss, caches result, returns data
+
+**Commits**:
+- `cc28f44` - Increase recursion limit and fix tool extraction
+- `e5a5610` - Add on-demand Comprehend analysis for sentiment cache misses
+
+**Test Results** (after fixes):
+- 15/15 tests passed (100%)
+- 10 unique tools used
+- Semantic memory active in all responses
+- Average response time: 26.5s
+
+---
+
+### 2026-01-24: Added Knowledge Graph Query Tools
+
+**Problem**: Agent could only query ExecutiveEvent and Vulnerability nodes. Users needed to query all 12 node types in the knowledge graph.
+
+**New Tools Added** ([langchain_tools.py](backend/services/langchain_tools.py)):
+| Tool | Node Type | Description |
+|------|-----------|-------------|
+| `get_events(ticker, limit)` | Event | General business events from SEC filings |
+| `get_persons(ticker, name, role, limit)` | Person | People mentioned or patent inventors |
+| `get_ma_events(ticker, limit)` | MAEvent | Merger & acquisition events |
+| `get_security_incidents(ticker, limit)` | SecurityEvent | Security breaches and incidents |
+| `get_graph_documents(ticker, doc_type, limit)` | Document | List documents in knowledge graph |
+| `get_locations(ticker, limit)` | Location | Geographic locations of operations |
+
+**Total Tools**: 14 → 20
+
+**Commit**: `2a198c0` - Add LangChain tools for all Neo4j node types
+
+---
+
+### Terraform State Issue (Important!)
+
+**Warning**: The main `terraform.tfstate` file was empty (0 bytes). Restored from backup:
+```bash
+cp terraform.tfstate.backup.20260119_225517 terraform.tfstate
+```
+
+**DO NOT run `terraform apply`** without first verifying the plan. Current state has drift that would recreate VPC resources. Use AWS CLI for infrastructure changes until state is fully reconciled.
+
+---
+
 ### EC2 Instance Reference
 - **Flask Backend**: `i-0bdafbb7e0387b4cb` (cyberrisk-dev-kh-flask-backend)
 - **Neo4j**: `i-0aefeaee10f6fdeea` (cyberrisk-dev-kh-neo4j)
+
+---
+
+### 2026-01-24: Knowledge Graph Cleanup & Quality Improvements
+
+**Problem**: Graph had data quality issues:
+- 6,428 Concept nodes with newlines/separators (parsing artifacts)
+- 346 orphan Organization nodes (garbage/misclassified)
+- 24 bad Location nodes (SEC metadata, incomplete phrases)
+- 4 duplicate Organization pairs (tracked + non-tracked versions)
+
+**Cleanup Script Enhancements** ([cleanup_graph.py](scripts/cleanup_graph.py)):
+
+1. **Location Cleanup with ISO Code Preservation**:
+   - Added comprehensive list of ISO 3166-1 country codes + US state abbreviations
+   - Preserves valid 2-letter codes (US, UK, CA, NY, etc.)
+   - Deletes: pure numbers, SEC metadata, incomplete phrases ("Middle East and"), company names as locations ("okta"), malformed newlines
+
+2. **Duplicate Organization Merge**:
+   - New `merge_duplicate_organizations()` function
+   - Moves relationships from non-tracked to tracked version
+   - Handles common relationship types without APOC dependency
+   - Deletes non-tracked duplicates after merging
+
+3. **Orphan Organization Cleanup**:
+   - Deletes organizations with no relationships
+   - Preserves all `tracked=true` companies
+
+**Execution Results**:
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| Concepts | 135,772 | 129,344 | -6,428 |
+| Locations | 610 | 586 | -24 |
+| Organizations | 3,078 | 2,732 | -346 |
+| Relationships | 681,059 | 668,339 | -12,720 |
+| Tracked Companies | 31 | 31 | 0 ✓ |
+
+**Admin API for Cleanup**:
+- `POST /api/admin/neo4j/write` with `admin_key: "cleanup-2026"`
+- Executes write Cypher queries for cleanup operations
+
+**Commit**: `03ace8a` - Enhance graph cleanup with ISO code preservation and org deduplication
+
+---
+
+### 2026-01-24: GDS (Graph Data Science) Implementation Plan
+
+**Current Graph Structure** (14 relationship types, 668K relationships):
+| Relationship | Count | Use Case |
+|--------------|-------|----------|
+| DISCUSSES | 632,197 | Document → Concept topic analysis |
+| MENTIONS | 25,855 | Document → Entity extraction |
+| FILED | 2,634 | Organization → Patent IP analysis |
+| INVENTED | 2,343 | Person → Patent inventor network |
+| COMPETES_WITH | 2,285 | Competition landscape |
+| OPERATES_IN | 1,803 | Geographic footprint |
+| HAS_FILING | 583 | Organization → SEC filings |
+| INVOLVES | 291 | Event participation |
+| HAS_EXECUTIVE_EVENT | 127 | Executive changes |
+| HAS_VULNERABILITY | 77 | Security risks |
+| HAS_MA_EVENT | 15 | M&A activity |
+
+**Proposed GDS Analytics**:
+
+**Phase 1 - Competitive Intelligence**:
+- PageRank on COMPETES_WITH → Market leaders
+- Betweenness Centrality → Acquisition targets
+- Louvain Community → Market segments
+
+**Phase 2 - Innovation Analysis**:
+- Node Similarity on FILED patents → Similar IP portfolios
+- Jaccard Similarity on concepts → Emerging competitors
+- Triangle Count → R&D collaboration density
+
+**Phase 3 - Risk Assessment**:
+- Label Propagation → Vulnerability spread patterns
+- Weakly Connected Components → Portfolio diversification
+- Shortest Path → Due diligence traces
+
+**Phase 4 - Executive Intelligence**:
+- Degree Centrality on Persons → Key executives
+- Common Neighbors → Board/executive connections
+
+**Implementation Steps**:
+1. Enable GDS plugin on Neo4j instance
+2. Create graph projections for each analysis type
+3. Add API endpoints to expose analytics
+4. Build dashboard visualizations
 
 ---
 *Last Updated: 2026-01-24*
