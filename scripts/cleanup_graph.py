@@ -41,6 +41,8 @@ class GraphCleaner:
             "locations_bad": 0,
             "documents_updated": 0,
             "orphan_persons_deleted": 0,
+            "orphan_orgs_deleted": 0,
+            "duplicate_orgs_merged": 0,
         }
 
     def close(self):
@@ -194,13 +196,48 @@ class GraphCleaner:
         return count
 
     def cleanup_bad_locations(self) -> int:
-        """Delete Location nodes with bad data."""
+        """Delete Location nodes with obvious garbage data only.
+
+        Keeps: Street addresses, geographic regions, cities, countries
+        Deletes: Pure numbers, very short names, SEC metadata, incomplete phrases
+        """
         logger.info("Cleaning up bad Location nodes...")
 
+        # Valid 2-letter ISO country codes and US state abbreviations to preserve
+        # ISO 3166-1 alpha-2 + US state codes
+        iso_codes = [
+            # Major countries
+            "US", "UK", "GB", "CA", "MX", "FR", "DE", "IT", "ES", "PT", "NL", "BE",
+            "CH", "AT", "SE", "NO", "DK", "FI", "PL", "CZ", "HU", "RO", "BG", "GR",
+            "TR", "RU", "UA", "JP", "CN", "KR", "TW", "HK", "SG", "MY", "TH", "VN",
+            "PH", "ID", "IN", "PK", "BD", "AU", "NZ", "ZA", "EG", "NG", "KE", "BR",
+            "AR", "CL", "CO", "PE", "VE", "IE", "IL", "AE", "SA", "QA", "KW",
+            # US States
+            "AL", "AK", "AZ", "AR", "CO", "CT", "DC", "FL", "GA", "HI",
+            "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT",
+            "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA",
+            "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+        ]
+
+        # Conservative garbage detection:
+        # - Pure numbers (not locations)
+        # - Very short names (< 3 chars) UNLESS they're valid ISO/state codes
+        # - SEC filing metadata accidentally extracted as locations
+        # - Incomplete phrases (ending with "and", starting with "a ")
+        # - Company names misclassified as locations
+        # - Names with embedded newlines (malformed extractions)
         query = """
         MATCH (n:Location)
         WHERE n.name =~ '^[0-9]+$'
+           OR (size(n.name) < 3 AND NOT n.name IN $iso_codes)
            OR n.name CONTAINS 'Table of Contents'
+           OR n.name CONTAINS 'Employer Identification'
+           OR n.name CONTAINS 'Identification No'
+           OR n.name CONTAINS 'Corporation '
+           OR toLower(n.name) =~ '.* and$'
+           OR toLower(n.name) =~ '^a [a-z]+$'
+           OR toLower(n.name) = 'okta'
+           OR n.name CONTAINS '\\n'
         DETACH DELETE n
         """
 
@@ -208,7 +245,124 @@ class GraphCleaner:
             count_query = """
             MATCH (n:Location)
             WHERE n.name =~ '^[0-9]+$'
+               OR (size(n.name) < 3 AND NOT n.name IN $iso_codes)
                OR n.name CONTAINS 'Table of Contents'
+               OR n.name CONTAINS 'Employer Identification'
+               OR n.name CONTAINS 'Identification No'
+               OR n.name CONTAINS 'Corporation '
+               OR toLower(n.name) =~ '.* and$'
+               OR toLower(n.name) =~ '^a [a-z]+$'
+               OR toLower(n.name) = 'okta'
+               OR n.name CONTAINS '\\n'
+            RETURN count(n) as count
+            """
+            result = self.run_query(count_query, {"iso_codes": iso_codes})
+            count = result[0]["count"] if result else 0
+        else:
+            with self.driver.session() as session:
+                result = session.run(query, {"iso_codes": iso_codes})
+                summary = result.consume()
+                count = summary.counters.nodes_deleted
+
+        self.stats["locations_bad"] = count
+        logger.info(f"  {'Would delete' if self.dry_run else 'Deleted'}: {count} bad location nodes")
+        return count
+
+    def merge_duplicate_organizations(self) -> int:
+        """Merge duplicate Organization nodes, keeping the tracked version.
+
+        For each org name with duplicates:
+        - If tracked version exists, move relationships from non-tracked to tracked
+        - Delete non-tracked duplicates
+
+        Handles common relationship types without requiring APOC.
+        """
+        logger.info("Merging duplicate Organization nodes...")
+
+        # Find duplicates where one is tracked and one is not
+        find_duplicates = """
+        MATCH (o:Organization)
+        WITH o.name AS name, collect(o) AS orgs
+        WHERE size(orgs) > 1
+        RETURN name
+        """
+
+        duplicates = self.run_query(find_duplicates)
+        merged_count = 0
+
+        # Common relationship types in the graph
+        rel_types = [
+            "COMPETES_WITH", "MENTIONS", "DISCUSSES", "FILED",
+            "HAS_VULNERABILITY", "HAS_EXECUTIVE_EVENT", "HAS_EVENT",
+            "LOCATED_IN", "EMPLOYS", "ACQUIRED", "PARTNERS_WITH"
+        ]
+
+        for dup in duplicates:
+            name = dup.get("name")
+            if not name:
+                continue
+
+            if self.dry_run:
+                logger.info(f"    Would merge duplicates for: {name}")
+                merged_count += 1
+            else:
+                try:
+                    with self.driver.session() as session:
+                        # For each relationship type, move from non-tracked to tracked
+                        for rel_type in rel_types:
+                            # Outgoing relationships
+                            session.run(f"""
+                                MATCH (tracked:Organization {{name: $name, tracked: true}})
+                                MATCH (nonTracked:Organization {{name: $name}})
+                                WHERE (nonTracked.tracked IS NULL OR nonTracked.tracked = false)
+                                MATCH (nonTracked)-[r:{rel_type}]->(target)
+                                MERGE (tracked)-[:{rel_type}]->(target)
+                                DELETE r
+                            """, {"name": name})
+
+                            # Incoming relationships
+                            session.run(f"""
+                                MATCH (tracked:Organization {{name: $name, tracked: true}})
+                                MATCH (nonTracked:Organization {{name: $name}})
+                                WHERE (nonTracked.tracked IS NULL OR nonTracked.tracked = false)
+                                MATCH (source)-[r:{rel_type}]->(nonTracked)
+                                MERGE (source)-[:{rel_type}]->(tracked)
+                                DELETE r
+                            """, {"name": name})
+
+                        # Delete the non-tracked duplicate(s)
+                        session.run("""
+                            MATCH (nonTracked:Organization {name: $name})
+                            WHERE (nonTracked.tracked IS NULL OR nonTracked.tracked = false)
+                            DETACH DELETE nonTracked
+                        """, {"name": name})
+
+                    merged_count += 1
+                    logger.info(f"    Merged duplicates for: {name}")
+                except Exception as e:
+                    logger.warning(f"    Could not merge {name}: {e}")
+
+        self.stats["duplicate_orgs_merged"] = merged_count
+        logger.info(f"  {'Would merge' if self.dry_run else 'Merged'}: {merged_count} duplicate organizations")
+        return merged_count
+
+    def cleanup_orphan_organizations(self) -> int:
+        """Delete orphan Organization nodes (no relationships)."""
+        logger.info("Cleaning up orphan Organization nodes...")
+
+        # Don't delete tracked organizations even if they have no relationships yet
+        query = """
+        MATCH (n:Organization)
+        WHERE NOT (n)--()
+          AND (n.tracked IS NULL OR n.tracked = false)
+        DETACH DELETE n
+        """
+
+        if self.dry_run:
+            count_query = """
+            MATCH (n:Organization)
+            WHERE NOT (n)--()
+              AND (n.tracked IS NULL OR n.tracked = false)
             RETURN count(n) as count
             """
             result = self.run_query(count_query)
@@ -219,8 +373,8 @@ class GraphCleaner:
                 summary = result.consume()
                 count = summary.counters.nodes_deleted
 
-        self.stats["locations_bad"] = count
-        logger.info(f"  {'Would delete' if self.dry_run else 'Deleted'}: {count} bad location nodes")
+        self.stats["orphan_orgs_deleted"] = count
+        logger.info(f"  {'Would delete' if self.dry_run else 'Deleted'}: {count} orphan organization nodes")
         return count
 
     def update_document_types(self) -> int:
@@ -299,6 +453,8 @@ class GraphCleaner:
         self.cleanup_persons_as_numbers()
         self.cleanup_persons_as_orgs()
         self.cleanup_bad_locations()
+        self.merge_duplicate_organizations()  # Must run before orphan cleanup
+        self.cleanup_orphan_organizations()
         self.update_document_types()
         self.cleanup_orphan_persons(delete=delete_orphans)
 
@@ -312,6 +468,7 @@ class GraphCleaner:
             self.stats["persons_as_numbers"] +
             self.stats["persons_as_orgs"] +
             self.stats["locations_bad"] +
+            self.stats["orphan_orgs_deleted"] +
             self.stats["orphan_persons_deleted"]
         )
 
