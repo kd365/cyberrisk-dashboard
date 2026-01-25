@@ -534,6 +534,12 @@ function ComplianceMonitor({ ticker = null }) {
   }, [fetchData]);
 
   const handleIngest = async () => {
+    const clearExisting = window.confirm(
+      'Clear existing regulatory data before ingesting?\n\n' +
+      'Click OK to clear and re-fetch (recommended for fresh start)\n' +
+      'Click Cancel to add to existing data'
+    );
+
     if (!window.confirm('This will fetch regulations from Federal Register API. Continue?')) {
       return;
     }
@@ -545,13 +551,20 @@ function ComplianceMonitor({ ticker = null }) {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({ clear_existing: clearExisting })
       });
 
       const result = await response.json();
 
       if (response.ok) {
-        alert(`Ingestion complete!\nRegulations: ${result.regulations_created}\nAlerts: ${result.alerts_created}`);
+        let message = `Ingestion complete!\n`;
+        if (result.cleared) {
+          message += `Cleared: ${result.cleared.regulations_cleared} regulations, ${result.cleared.alerts_cleared} alerts\n`;
+        }
+        message += `Created: ${result.regulations_created} regulations\n`;
+        message += `Skipped (LLM filtered): ${result.regulations_skipped || 0}\n`;
+        message += `Alerts: ${result.alerts_created}`;
+        alert(message);
         fetchData();
       } else {
         alert(`Ingestion failed: ${result.error || 'Unknown error'}`);

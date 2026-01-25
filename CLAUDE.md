@@ -731,5 +731,28 @@ References SEC Cybersecurity Disclosure Rule (effective 2023-12-18, 8-K Item 1.0
 
 **Tracked Agencies**: SEC, CISA, FTC, NIST, DOJ, Commerce, OCC
 
+**Enhancements** (same day):
+
+1. **Bedrock LLM Validation** ([regulatory_service.py:311-416](backend/services/regulatory_service.py#L311-L416)):
+   - Added `_validate_with_llm()` method to filter false positives
+   - Prompt covers all cybersecurity domains: endpoint, network, cloud, identity, SecOps, AppSec, data security, GRC, MSSP, IoT/OT, email security
+   - Returns YES/NO with confidence (HIGH/MEDIUM/LOW) and reasoning
+   - Skips irrelevant regulations (e.g., auto dealer rules) before creating alerts
+
+2. **Neo4j Graph Integration** ([regulatory_service.py:418-531](backend/services/regulatory_service.py#L418-L531)):
+   - Creates `:Regulation` nodes with timeline attributes (`effective_date`, `publication_date`, `timeline_status`)
+   - Adds source attributes (`source`, `source_url`, `summary`)
+   - Creates `(Regulation)-[:IMPACTS]->(Organization)` relationships with `relevance_score` and `impact_level`
+
+3. **Clear & Re-ingest** ([app.py](backend/app.py)):
+   - Added `clear_existing` flag to `/api/regulatory/ingest` endpoint
+   - Added `DELETE /api/regulatory/clear` endpoint
+   - Frontend prompts to clear before ingesting (recommended for fresh start)
+
+**Ingestion Statistics** now include:
+- `regulations_skipped` - count filtered by LLM
+- `graph_nodes_synced` - count synced to Neo4j
+- `cleared` - stats if clear_existing was used
+
 ---
 *Last Updated: 2026-01-25*

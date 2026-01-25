@@ -4457,6 +4457,7 @@ def ingest_regulations():
     Request body:
         start_date: str - Start date (YYYY-MM-DD), default 90 days ago
         end_date: str - End date (YYYY-MM-DD), default today
+        clear_existing: bool - If true, clears all existing data before ingesting
 
     Returns:
         Ingestion statistics
@@ -4465,8 +4466,32 @@ def ingest_regulations():
         data = request.get_json() or {}
         start_date = data.get("start_date")
         end_date = data.get("end_date")
+        clear_existing = data.get("clear_existing", False)
+
+        cleared_stats = None
+        if clear_existing:
+            # Clear existing regulatory data before ingesting
+            conn = db_service._get_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM regulatory_alerts")
+                alerts_deleted = cursor.rowcount
+                cursor.execute("DELETE FROM regulations")
+                regulations_deleted = cursor.rowcount
+                conn.commit()
+                cursor.close()
+                cleared_stats = {
+                    "alerts_cleared": alerts_deleted,
+                    "regulations_cleared": regulations_deleted,
+                }
+                print(
+                    f"Cleared {regulations_deleted} regulations and {alerts_deleted} alerts"
+                )
 
         result = regulatory_service.ingest_regulations(start_date, end_date)
+
+        if cleared_stats:
+            result["cleared"] = cleared_stats
 
         return jsonify({"message": "Ingestion complete", **result})
     except Exception as e:
