@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from './AuthProvider';
 
 // ============================================================================
 // Compliance Monitor - Regulatory Alert Dashboard
@@ -487,6 +488,7 @@ function ComplianceStatus({ alerts, companies, selectedTicker }) {
 // ============================================================================
 
 function ComplianceMonitor({ ticker = null }) {
+  const { getAccessToken } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState('overview');
   const [summary, setSummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -538,9 +540,13 @@ function ComplianceMonitor({ ticker = null }) {
 
     setIngesting(true);
     try {
+      const accessToken = await getAccessToken();
       const response = await fetch('/api/regulatory/ingest', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
         body: JSON.stringify({})
       });
 
