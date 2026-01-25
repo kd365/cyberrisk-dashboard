@@ -79,6 +79,43 @@ class DatabaseService:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX IF NOT EXISTS idx_companies_ticker ON companies(ticker);
+
+                -- Regulations table for regulatory tracking
+                CREATE TABLE IF NOT EXISTS regulations (
+                    id SERIAL PRIMARY KEY,
+                    external_id VARCHAR(100) UNIQUE,
+                    title VARCHAR(500) NOT NULL,
+                    agency VARCHAR(50) NOT NULL,
+                    summary TEXT,
+                    effective_date DATE,
+                    publication_date DATE,
+                    source_url TEXT,
+                    severity VARCHAR(20) DEFAULT 'MEDIUM',
+                    keywords JSONB,
+                    sectors_affected JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_regulations_agency ON regulations(agency);
+                CREATE INDEX IF NOT EXISTS idx_regulations_severity ON regulations(severity);
+                CREATE INDEX IF NOT EXISTS idx_regulations_effective_date ON regulations(effective_date);
+
+                -- Regulatory alerts linking regulations to companies
+                CREATE TABLE IF NOT EXISTS regulatory_alerts (
+                    id SERIAL PRIMARY KEY,
+                    regulation_id INT REFERENCES regulations(id) ON DELETE CASCADE,
+                    company_id INT REFERENCES companies(id) ON DELETE CASCADE,
+                    relevance_score FLOAT,
+                    impact_level VARCHAR(20),
+                    status VARCHAR(30) DEFAULT 'UNACKNOWLEDGED',
+                    ai_impact_analysis TEXT,
+                    matched_keywords JSONB,
+                    acknowledged_by VARCHAR(255),
+                    acknowledged_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(regulation_id, company_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_alerts_status ON regulatory_alerts(status);
+                CREATE INDEX IF NOT EXISTS idx_alerts_impact ON regulatory_alerts(impact_level);
             """
             )
             self.connection.commit()
@@ -507,6 +544,439 @@ class DatabaseService:
             conn.rollback()
             print(f"⚠️  Error creating artifact: {e}")
             return None
+
+
+    # =========================================================================
+    # REGULATION CRUD OPERATIONS
+    # =========================================================================
+
+    def create_regulation(
+        self,
+        title: str,
+        agency: str,
+        external_id: str = None,
+        summary: str = None,
+        effective_date: str = None,
+        publication_date: str = None,
+        source_url: str = None,
+        severity: str = "MEDIUM",
+        keywords: List[str] = None,
+        sectors_affected: List[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Create a new regulation
+
+        Args:
+            title: Regulation title
+            agency: Regulatory agency (SEC, CISA, FTC, etc.)
+            external_id: External ID (e.g., Federal Register doc number)
+            summary: Regulation summary/abstract
+            effective_date: When the regulation takes effect
+            publication_date: When the regulation was published
+            source_url: Link to the regulation
+            severity: CRITICAL, HIGH, MEDIUM, or INFO
+            keywords: List of relevant keywords
+            sectors_affected: List of affected sectors
+
+        Returns:
+            Created regulation dict or None if failed
+        """
+        conn = self._get_connection()
+        if not conn:
+            return None
+
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                """
+                INSERT INTO regulations (external_id, title, agency, summary, effective_date,
+                    publication_date, source_url, severity, keywords, sectors_affected)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (external_id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    summary = EXCLUDED.summary,
+                    effective_date = EXCLUDED.effective_date,
+                    severity = EXCLUDED.severity,
+                    keywords = EXCLUDED.keywords,
+                    sectors_affected = EXCLUDED.sectors_affected
+                RETURNING id, external_id, title, agency, summary, effective_date,
+                    publication_date, source_url, severity, keywords, sectors_affected, created_at
+            """,
+                (
+                    external_id,
+                    title,
+                    agency,
+                    summary,
+                    effective_date,
+                    publication_date,
+                    source_url,
+                    severity,
+                    json.dumps(keywords) if keywords else None,
+                    json.dumps(sectors_affected) if sectors_affected else None,
+                ),
+            )
+
+            regulation = dict(cursor.fetchone())
+            conn.commit()
+            cursor.close()
+
+            print(f"✅ Created/updated regulation: {title[:50]}...")
+            return regulation
+
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️  Error creating regulation: {e}")
+            return None
+
+    def get_regulation(self, regulation_id: int) -> Optional[Dict[str, Any]]:
+        """Get a regulation by ID"""
+        conn = self._get_connection()
+        if not conn:
+            return None
+
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                """
+                SELECT id, external_id, title, agency, summary, effective_date,
+                    publication_date, source_url, severity, keywords, sectors_affected, created_at
+                FROM regulations
+                WHERE id = %s
+            """,
+                (regulation_id,),
+            )
+
+            row = cursor.fetchone()
+            cursor.close()
+
+            return dict(row) if row else None
+
+        except Exception as e:
+            print(f"⚠️  Error getting regulation: {e}")
+            return None
+
+    def get_all_regulations(
+        self, agency: str = None, severity: str = None, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all regulations with optional filters
+
+        Args:
+            agency: Filter by agency (SEC, CISA, FTC, etc.)
+            severity: Filter by severity (CRITICAL, HIGH, MEDIUM, INFO)
+            limit: Maximum number of results
+
+        Returns:
+            List of regulation dicts
+        """
+        conn = self._get_connection()
+        if not conn:
+            return []
+
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+            query = """
+                SELECT id, external_id, title, agency, summary, effective_date,
+                    publication_date, source_url, severity, keywords, sectors_affected, created_at
+                FROM regulations
+                WHERE 1=1
+            """
+            params = []
+
+            if agency:
+                query += " AND agency = %s"
+                params.append(agency)
+            if severity:
+                query += " AND severity = %s"
+                params.append(severity)
+
+            query += " ORDER BY effective_date DESC NULLS LAST, created_at DESC LIMIT %s"
+            params.append(limit)
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            cursor.close()
+
+            return [dict(row) for row in rows]
+
+        except Exception as e:
+            print(f"⚠️  Error getting regulations: {e}")
+            return []
+
+    # =========================================================================
+    # REGULATORY ALERT CRUD OPERATIONS
+    # =========================================================================
+
+    def create_regulatory_alert(
+        self,
+        regulation_id: int,
+        company_id: int,
+        relevance_score: float,
+        impact_level: str = "MEDIUM",
+        matched_keywords: List[str] = None,
+        ai_impact_analysis: str = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Create a regulatory alert linking a regulation to a company
+
+        Args:
+            regulation_id: ID of the regulation
+            company_id: ID of the company
+            relevance_score: TF-IDF relevance score (0-1)
+            impact_level: CRITICAL, HIGH, MEDIUM, or LOW
+            matched_keywords: Keywords that matched
+            ai_impact_analysis: AI-generated impact analysis
+
+        Returns:
+            Created alert dict or None if failed
+        """
+        conn = self._get_connection()
+        if not conn:
+            return None
+
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                """
+                INSERT INTO regulatory_alerts (regulation_id, company_id, relevance_score,
+                    impact_level, matched_keywords, ai_impact_analysis)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (regulation_id, company_id) DO UPDATE SET
+                    relevance_score = EXCLUDED.relevance_score,
+                    impact_level = EXCLUDED.impact_level,
+                    matched_keywords = EXCLUDED.matched_keywords,
+                    ai_impact_analysis = EXCLUDED.ai_impact_analysis
+                RETURNING id, regulation_id, company_id, relevance_score, impact_level,
+                    status, matched_keywords, ai_impact_analysis, created_at
+            """,
+                (
+                    regulation_id,
+                    company_id,
+                    relevance_score,
+                    impact_level,
+                    json.dumps(matched_keywords) if matched_keywords else None,
+                    ai_impact_analysis,
+                ),
+            )
+
+            alert = dict(cursor.fetchone())
+            conn.commit()
+            cursor.close()
+
+            print(f"✅ Created regulatory alert for regulation {regulation_id}, company {company_id}")
+            return alert
+
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️  Error creating regulatory alert: {e}")
+            return None
+
+    def get_regulatory_alerts(
+        self,
+        ticker: str = None,
+        status: str = None,
+        impact_level: str = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get regulatory alerts with optional filters
+
+        Args:
+            ticker: Filter by company ticker
+            status: Filter by status (UNACKNOWLEDGED, ACKNOWLEDGED, RESOLVED, etc.)
+            impact_level: Filter by impact level (CRITICAL, HIGH, MEDIUM, LOW)
+            limit: Maximum number of results
+
+        Returns:
+            List of alert dicts with regulation and company info
+        """
+        conn = self._get_connection()
+        if not conn:
+            return []
+
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+            query = """
+                SELECT
+                    ra.id,
+                    ra.regulation_id,
+                    ra.company_id,
+                    ra.relevance_score,
+                    ra.impact_level,
+                    ra.status,
+                    ra.matched_keywords,
+                    ra.ai_impact_analysis,
+                    ra.acknowledged_by,
+                    ra.acknowledged_at,
+                    ra.created_at,
+                    r.title as regulation_title,
+                    r.agency,
+                    r.severity as regulation_severity,
+                    r.effective_date,
+                    r.source_url,
+                    c.ticker,
+                    c.company_name
+                FROM regulatory_alerts ra
+                JOIN regulations r ON ra.regulation_id = r.id
+                JOIN companies c ON ra.company_id = c.id
+                WHERE 1=1
+            """
+            params = []
+
+            if ticker:
+                query += " AND c.ticker = %s"
+                params.append(ticker.upper())
+            if status:
+                query += " AND ra.status = %s"
+                params.append(status)
+            if impact_level:
+                query += " AND ra.impact_level = %s"
+                params.append(impact_level)
+
+            query += " ORDER BY ra.created_at DESC LIMIT %s"
+            params.append(limit)
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            cursor.close()
+
+            return [dict(row) for row in rows]
+
+        except Exception as e:
+            print(f"⚠️  Error getting regulatory alerts: {e}")
+            return []
+
+    def update_alert_status(
+        self, alert_id: int, status: str, acknowledged_by: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update regulatory alert status
+
+        Args:
+            alert_id: ID of the alert
+            status: New status (UNACKNOWLEDGED, ACKNOWLEDGED, RESOLVED, etc.)
+            acknowledged_by: Username who acknowledged
+
+        Returns:
+            Updated alert dict or None if failed
+        """
+        conn = self._get_connection()
+        if not conn:
+            return None
+
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+            if status == "ACKNOWLEDGED" and acknowledged_by:
+                cursor.execute(
+                    """
+                    UPDATE regulatory_alerts
+                    SET status = %s, acknowledged_by = %s, acknowledged_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    RETURNING id, regulation_id, company_id, status, acknowledged_by, acknowledged_at
+                """,
+                    (status, acknowledged_by, alert_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE regulatory_alerts
+                    SET status = %s
+                    WHERE id = %s
+                    RETURNING id, regulation_id, company_id, status, acknowledged_by, acknowledged_at
+                """,
+                    (status, alert_id),
+                )
+
+            row = cursor.fetchone()
+            conn.commit()
+            cursor.close()
+
+            if row:
+                print(f"✅ Updated alert {alert_id} status to {status}")
+                return dict(row)
+            return None
+
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️  Error updating alert status: {e}")
+            return None
+
+    def get_regulatory_dashboard_summary(self) -> Dict[str, Any]:
+        """
+        Get summary statistics for the regulatory dashboard
+
+        Returns:
+            Dict with alert counts by status, severity, agency, etc.
+        """
+        conn = self._get_connection()
+        if not conn:
+            return {}
+
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+            # Get alert counts by status
+            cursor.execute(
+                """
+                SELECT status, COUNT(*) as count
+                FROM regulatory_alerts
+                GROUP BY status
+            """
+            )
+            status_counts = {row["status"]: row["count"] for row in cursor.fetchall()}
+
+            # Get alert counts by impact level
+            cursor.execute(
+                """
+                SELECT impact_level, COUNT(*) as count
+                FROM regulatory_alerts
+                WHERE status != 'RESOLVED'
+                GROUP BY impact_level
+            """
+            )
+            impact_counts = {row["impact_level"]: row["count"] for row in cursor.fetchall()}
+
+            # Get regulation counts by agency
+            cursor.execute(
+                """
+                SELECT agency, COUNT(*) as count
+                FROM regulations
+                GROUP BY agency
+            """
+            )
+            agency_counts = {row["agency"]: row["count"] for row in cursor.fetchall()}
+
+            # Get upcoming effective dates
+            cursor.execute(
+                """
+                SELECT id, title, agency, effective_date, severity
+                FROM regulations
+                WHERE effective_date >= CURRENT_DATE
+                ORDER BY effective_date ASC
+                LIMIT 5
+            """
+            )
+            upcoming = [dict(row) for row in cursor.fetchall()]
+
+            cursor.close()
+
+            return {
+                "alerts_by_status": status_counts,
+                "alerts_by_impact": impact_counts,
+                "regulations_by_agency": agency_counts,
+                "upcoming_regulations": upcoming,
+                "total_regulations": sum(agency_counts.values()),
+                "total_active_alerts": sum(
+                    count for status, count in status_counts.items() if status != "RESOLVED"
+                ),
+            }
+
+        except Exception as e:
+            print(f"⚠️  Error getting dashboard summary: {e}")
+            return {}
 
 
 # Global database service instance

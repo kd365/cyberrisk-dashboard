@@ -6,6 +6,7 @@ import SentimentAnalysis from './SentimentAnalysisEnhanced';
 import CompanyGrowth from './CompanyGrowth';
 import LexChatbot from './LexChatbot';
 import GraphRAGAssistant from './GraphRAGAssistant';
+import ComplianceMonitor from './ComplianceMonitor';
 import { useAuth } from './AuthProvider';
 
 // Icon components (simple SVG icons)
@@ -186,6 +187,7 @@ function Dashboard() {
     { id: 'sentiment', label: 'Sentiment Analysis', icon: Icons.Sentiment },
     { id: 'growth', label: 'Company Growth', icon: Icons.Growth },
     { id: 'knowledge', label: 'Knowledge Assistant', icon: Icons.Network },
+    { id: 'compliance', label: 'Regulatory Alerts', icon: Icons.Shield },
     { id: 'assistant', label: 'Lex Assistant', icon: Icons.Chat },
   ];
 
@@ -541,6 +543,10 @@ function Dashboard() {
 
               {activeTab === 'knowledge' && isAuthenticated && (
                 <GraphRAGAssistant ticker={selectedCompany} userEmail={user?.email} />
+              )}
+
+              {activeTab === 'compliance' && isAuthenticated && (
+                <ComplianceMonitor ticker={selectedCompany} />
               )}
 
               {activeTab === 'assistant' && isAuthenticated && (

@@ -1196,6 +1196,10 @@ def get_dashboard_help() -> dict:
                 "description": "Entity relationships from company documents",
             },
             {
+                "name": "Competitive Intelligence",
+                "description": "Market segments, leaders, and strategic positions via GDS analytics",
+            },
+            {
                 "name": "AI Chat",
                 "description": "This assistant - ask questions about any company",
             },
@@ -1213,6 +1217,369 @@ def get_dashboard_help() -> dict:
             "RPD (Rapid7)",
         ],
     }
+
+
+# =============================================================================
+# Graph Data Science (GDS) Tools - Competitive Intelligence
+# =============================================================================
+
+_gds_service = None
+
+
+def get_gds_service():
+    """Get GDS service singleton."""
+    global _gds_service
+    if _gds_service is None:
+        try:
+            from services.gds_service import GDSService
+            _gds_service = GDSService()
+        except Exception as e:
+            logger.warning(f"GDS service not available: {e}")
+    return _gds_service
+
+
+@tool
+def get_market_segments() -> dict:
+    """Get market segments (competitive clusters) for tracked cybersecurity companies.
+
+    Uses Louvain community detection on the competition graph to identify
+    groups of companies that compete closely with each other.
+
+    Returns market segments with the companies in each segment.
+    Use when asked about market segments, competitive clusters, or how companies are grouped.
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return {"error": "GDS service not available"}
+
+        result = gds.run_louvain_communities()
+        return {
+            "algorithm": "louvain_community_detection",
+            "description": "Companies grouped by competitive proximity",
+            "total_segments": result.get("total_segments", 0),
+            "segments": result.get("segments", [])
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@tool
+def get_market_leaders(limit: int = 10) -> dict:
+    """Get market leaders based on PageRank analysis of the competition network.
+
+    Higher PageRank = company is central to the competitive landscape.
+    These are companies that many others compete with directly or indirectly.
+
+    Args:
+        limit: Number of top companies to return (default 10)
+
+    Returns ranked list of market leaders with their PageRank scores.
+    Use when asked about market leaders, dominant players, or central companies.
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return {"error": "GDS service not available"}
+
+        results = gds.run_pagerank(limit=limit)
+        return {
+            "algorithm": "pagerank",
+            "description": "Companies ranked by centrality in competition network",
+            "leaders": results
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@tool
+def get_similar_companies(ticker: str, limit: int = 10) -> dict:
+    """Find companies most similar to a given company.
+
+    Analyzes shared competitors, shared concepts from documents, and patent portfolios
+    to find companies with similar market positioning.
+
+    Args:
+        ticker: Stock ticker symbol (e.g., CRWD, PANW)
+        limit: Number of similar companies to return (default 10)
+
+    Returns list of similar companies with similarity scores.
+    Use when asked "what companies are similar to X?" or "who competes with X?"
+    """
+    ticker = ticker.upper()
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return {"error": "GDS service not available"}
+
+        results = gds.find_similar_to_company(ticker=ticker, top_k=limit)
+        return {
+            "ticker": ticker,
+            "description": f"Companies most similar to {ticker}",
+            "similar_companies": results
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@tool
+def get_competitive_intelligence_summary() -> dict:
+    """Get a comprehensive competitive intelligence summary for all tracked companies.
+
+    Combines:
+    - Market leaders (PageRank top 5)
+    - Market segments (Louvain communities)
+    - Competitor counts (Degree centrality)
+
+    Use when asked for an overall competitive landscape analysis or market overview.
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return {"error": "GDS service not available"}
+
+        # Get top 5 leaders
+        leaders = gds.run_pagerank(limit=5)
+
+        # Get segments
+        segments = gds.run_louvain_communities()
+
+        # Get competitor counts
+        degree = gds.run_degree_centrality(limit=10)
+
+        return {
+            "market_leaders": {
+                "description": "Top 5 companies by network centrality",
+                "companies": leaders
+            },
+            "market_segments": {
+                "description": "Competitive clusters (companies that compete closely)",
+                "total_segments": segments.get("total_segments", 0),
+                "segments": segments.get("segments", [])[:5]  # Top 5 segments
+            },
+            "most_competitive": {
+                "description": "Companies with most direct competitors",
+                "companies": degree[:5]
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@tool
+def get_strategic_positions() -> dict:
+    """Get companies in strategic bridge positions (high betweenness centrality).
+
+    High betweenness = company connects different market segments.
+    These companies are potential acquisition targets or consolidation points.
+
+    Returns list of companies ranked by strategic positioning.
+    Use when asked about acquisition targets, strategic positions, or market bridges.
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return {"error": "GDS service not available"}
+
+        results = gds.run_betweenness_centrality(limit=10)
+        return {
+            "algorithm": "betweenness_centrality",
+            "description": "Companies that bridge different market segments",
+            "strategic_positions": results
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# =============================================================================
+# Regulatory Compliance Tools
+# =============================================================================
+
+_regulatory_service = None
+
+
+def get_regulatory_service():
+    """Get regulatory service singleton."""
+    global _regulatory_service
+    if _regulatory_service is None:
+        try:
+            from services.regulatory_service import regulatory_service
+            _regulatory_service = regulatory_service
+        except Exception as e:
+            logger.warning(f"Regulatory service not available: {e}")
+    return _regulatory_service
+
+
+@tool
+def get_regulatory_alerts(ticker: Optional[str] = None, status: Optional[str] = None) -> dict:
+    """Get regulatory alerts for tracked companies.
+
+    Use when asked about compliance, regulations, regulatory risk, or regulatory alerts.
+
+    Args:
+        ticker: Optional stock ticker to filter alerts for specific company (e.g., CRWD, PANW)
+        status: Optional status filter (UNACKNOWLEDGED, ACKNOWLEDGED, RESOLVED)
+
+    Returns list of regulatory alerts with regulation details and relevance scores.
+    """
+    try:
+        reg_svc = get_regulatory_service()
+        if not reg_svc:
+            return {"error": "Regulatory service not available"}
+
+        ticker = ticker.upper() if ticker else None
+        alerts = reg_svc.get_alerts(ticker=ticker, status=status, limit=20)
+
+        # Get summary stats
+        summary = reg_svc.get_dashboard_summary()
+
+        return {
+            "alerts": [
+                {
+                    "id": a["id"],
+                    "regulation_title": a.get("regulation_title"),
+                    "agency": a.get("agency"),
+                    "severity": a.get("regulation_severity"),
+                    "impact_level": a.get("impact_level"),
+                    "relevance_score": a.get("relevance_score"),
+                    "status": a.get("status"),
+                    "ticker": a.get("ticker"),
+                    "company_name": a.get("company_name"),
+                    "effective_date": str(a.get("effective_date", "")) if a.get("effective_date") else None,
+                    "source_url": a.get("source_url"),
+                }
+                for a in alerts
+            ],
+            "count": len(alerts),
+            "summary": {
+                "total_active": summary.get("total_active_alerts", 0),
+                "by_impact": summary.get("alerts_by_impact", {}),
+                "by_status": summary.get("alerts_by_status", {}),
+            },
+            "ticker": ticker,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@tool
+def get_regulation_impact(regulation_id: int, ticker: Optional[str] = None) -> dict:
+    """Get detailed impact analysis for a specific regulation.
+
+    Args:
+        regulation_id: ID of the regulation to analyze
+        ticker: Optional ticker to get impact for a specific company
+
+    Returns detailed regulation info with affected companies and impact scores.
+    Use when asked about the impact of a specific regulation.
+    """
+    try:
+        reg_svc = get_regulatory_service()
+        if not reg_svc:
+            return {"error": "Regulatory service not available"}
+
+        regulation = reg_svc.get_regulation(regulation_id)
+        if not regulation:
+            return {"error": f"Regulation {regulation_id} not found"}
+
+        # Get all alerts for this regulation
+        all_alerts = reg_svc.get_alerts(limit=1000)
+        regulation_alerts = [a for a in all_alerts if a.get("regulation_id") == regulation_id]
+
+        if ticker:
+            ticker = ticker.upper()
+            regulation_alerts = [a for a in regulation_alerts if a.get("ticker") == ticker]
+
+        return {
+            "regulation": {
+                "id": regulation.get("id"),
+                "title": regulation.get("title"),
+                "agency": regulation.get("agency"),
+                "summary": regulation.get("summary"),
+                "severity": regulation.get("severity"),
+                "effective_date": str(regulation.get("effective_date", "")) if regulation.get("effective_date") else None,
+                "source_url": regulation.get("source_url"),
+                "keywords": regulation.get("keywords"),
+            },
+            "affected_companies": [
+                {
+                    "ticker": a.get("ticker"),
+                    "company_name": a.get("company_name"),
+                    "relevance_score": a.get("relevance_score"),
+                    "impact_level": a.get("impact_level"),
+                    "status": a.get("status"),
+                    "matched_keywords": a.get("matched_keywords"),
+                }
+                for a in regulation_alerts
+            ],
+            "total_affected": len(regulation_alerts),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@tool
+def get_company_compliance_status(ticker: str) -> dict:
+    """Get compliance status summary for a specific company.
+
+    Args:
+        ticker: Stock ticker symbol (e.g., CRWD, PANW)
+
+    Returns regulatory compliance summary including:
+    - Active alerts by severity/impact
+    - Agencies with relevant regulations
+    - Key compliance concerns
+
+    Use when asked about a company's regulatory exposure or compliance status.
+    """
+    ticker = ticker.upper()
+    try:
+        reg_svc = get_regulatory_service()
+        if not reg_svc:
+            return {"error": "Regulatory service not available"}
+
+        # Get all alerts for this company
+        alerts = reg_svc.get_alerts(ticker=ticker, limit=100)
+
+        # Aggregate by status, impact, and agency
+        status_counts = {}
+        impact_counts = {}
+        agency_counts = {}
+        critical_alerts = []
+
+        for alert in alerts:
+            status = alert.get("status", "UNKNOWN")
+            impact = alert.get("impact_level", "UNKNOWN")
+            agency = alert.get("agency", "UNKNOWN")
+
+            status_counts[status] = status_counts.get(status, 0) + 1
+            impact_counts[impact] = impact_counts.get(impact, 0) + 1
+            agency_counts[agency] = agency_counts.get(agency, 0) + 1
+
+            # Collect critical/high impact alerts
+            if impact in ("CRITICAL", "HIGH"):
+                critical_alerts.append({
+                    "title": alert.get("regulation_title"),
+                    "agency": agency,
+                    "impact_level": impact,
+                    "effective_date": str(alert.get("effective_date", "")) if alert.get("effective_date") else None,
+                })
+
+        return {
+            "ticker": ticker,
+            "total_alerts": len(alerts),
+            "alerts_by_status": status_counts,
+            "alerts_by_impact": impact_counts,
+            "alerts_by_agency": agency_counts,
+            "critical_alerts": critical_alerts[:5],  # Top 5 critical/high
+            "compliance_risk": "HIGH" if impact_counts.get("CRITICAL", 0) > 0 else
+                               "MEDIUM" if impact_counts.get("HIGH", 0) > 0 else
+                               "LOW" if len(alerts) > 0 else "NONE",
+            "message": f"Found {len(alerts)} regulatory alerts for {ticker}" +
+                       (f", including {len(critical_alerts)} critical/high impact" if critical_alerts else ""),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # =============================================================================
@@ -1246,6 +1613,16 @@ def get_all_tools():
         # RAG tools
         search_documents,
         get_document_context,
+        # GDS tools - Competitive Intelligence
+        get_market_segments,
+        get_market_leaders,
+        get_similar_companies,
+        get_competitive_intelligence_summary,
+        get_strategic_positions,
+        # Regulatory compliance tools
+        get_regulatory_alerts,
+        get_regulation_impact,
+        get_company_compliance_status,
         # Help
         get_dashboard_help,
     ]

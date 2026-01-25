@@ -14,6 +14,7 @@ from services.growth_cache import GrowthCache
 from services.coresignal_service import CoreSignalService, CORESIGNAL_COMPANIES
 from services.lex_service import LexService
 from services.database_service import db_service
+from services.regulatory_service import regulatory_service
 from services.scraper import SecTranscriptScraper
 from services.cognito_auth_service import require_cognito_auth, optional_cognito_auth
 from models.time_series_forecaster import CyberRiskForecaster
@@ -3885,6 +3886,580 @@ def get_feature_coverage():
         return jsonify({"error": str(e)}), 500
 
 
+# ============================================================================
+# GDS ANALYTICS ENDPOINTS - Graph Data Science algorithms
+# ============================================================================
+
+_gds_service = None
+
+
+def get_gds_service():
+    """Get or create the GDS service singleton."""
+    global _gds_service
+    if _gds_service is None:
+        try:
+            from services.gds_service import GDSService
+            _gds_service = GDSService()
+        except Exception as e:
+            print(f"Failed to initialize GDS service: {e}")
+            return None
+    return _gds_service
+
+
+@app.route("/api/gds/version", methods=["GET"])
+def gds_version():
+    """Get the installed GDS version."""
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        version = gds.get_gds_version()
+        return jsonify({"version": version})
+
+    except Exception as e:
+        print(f"Error getting GDS version: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/summary", methods=["GET"])
+def gds_summary():
+    """Get summary of GDS analytics capabilities and current state."""
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        summary = gds.get_analytics_summary()
+        return jsonify(summary)
+
+    except Exception as e:
+        print(f"Error getting GDS summary: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/graphs", methods=["GET"])
+def gds_list_graphs():
+    """List all existing graph projections."""
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        graphs = gds.list_graphs()
+        return jsonify({"graphs": graphs})
+
+    except Exception as e:
+        print(f"Error listing graphs: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/graphs/competition", methods=["POST"])
+def gds_create_competition_graph():
+    """Create the competition graph projection for centrality analysis."""
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        result = gds.create_competition_graph()
+        return jsonify({"success": True, **result})
+
+    except Exception as e:
+        print(f"Error creating competition graph: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/centrality/pagerank", methods=["GET"])
+def gds_pagerank():
+    """
+    Run PageRank to find market leaders.
+
+    Query params:
+        limit: int (default 20) - Number of results to return
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        limit = int(request.args.get("limit", 20))
+        results = gds.run_pagerank(limit=limit)
+
+        return jsonify({
+            "algorithm": "pagerank",
+            "description": "Market leaders - companies central to competition network",
+            "results": results
+        })
+
+    except Exception as e:
+        print(f"Error running PageRank: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/centrality/betweenness", methods=["GET"])
+def gds_betweenness():
+    """
+    Run Betweenness Centrality to find strategic positions.
+
+    Query params:
+        limit: int (default 20) - Number of results to return
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        limit = int(request.args.get("limit", 20))
+        results = gds.run_betweenness_centrality(limit=limit)
+
+        return jsonify({
+            "algorithm": "betweenness_centrality",
+            "description": "Strategic bridges - acquisition targets, consolidation points",
+            "results": results
+        })
+
+    except Exception as e:
+        print(f"Error running betweenness: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/centrality/degree", methods=["GET"])
+def gds_degree():
+    """
+    Get degree centrality (competitor count) for companies.
+
+    Query params:
+        limit: int (default 20) - Number of results to return
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        limit = int(request.args.get("limit", 20))
+        results = gds.run_degree_centrality(limit=limit)
+
+        return jsonify({
+            "algorithm": "degree_centrality",
+            "description": "Competitive breadth - companies with most competitors",
+            "results": results
+        })
+
+    except Exception as e:
+        print(f"Error running degree centrality: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/community/louvain", methods=["GET"])
+def gds_louvain():
+    """
+    Run Louvain community detection to find market segments.
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        results = gds.run_louvain_communities()
+
+        return jsonify({
+            "algorithm": "louvain",
+            "description": "Market segments - clusters of closely competing companies",
+            **results
+        })
+
+    except Exception as e:
+        print(f"Error running Louvain: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/community/wcc", methods=["GET"])
+def gds_wcc():
+    """
+    Run Weakly Connected Components to find isolated groups.
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        results = gds.run_wcc()
+
+        return jsonify({
+            "algorithm": "wcc",
+            "description": "Connected components - isolated market niches",
+            **results
+        })
+
+    except Exception as e:
+        print(f"Error running WCC: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/similarity/patents", methods=["GET"])
+def gds_patent_similarity():
+    """
+    Run node similarity based on patent portfolios.
+
+    Query params:
+        top_k: int (default 10) - Top K similar pairs to find per node
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        top_k = int(request.args.get("top_k", 10))
+        results = gds.run_node_similarity(top_k=top_k)
+
+        return jsonify({
+            "algorithm": "node_similarity",
+            "description": "Patent portfolio similarity - companies with similar IP strategies",
+            "results": results
+        })
+
+    except Exception as e:
+        print(f"Error running patent similarity: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/similarity/company/<ticker>", methods=["GET"])
+def gds_similar_to_company(ticker):
+    """
+    Find companies most similar to a specific company.
+
+    Query params:
+        top_k: int (default 10) - Number of similar companies to return
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        top_k = int(request.args.get("top_k", 10))
+        results = gds.find_similar_to_company(ticker=ticker, top_k=top_k)
+
+        return jsonify({
+            "ticker": ticker.upper(),
+            "description": f"Companies most similar to {ticker.upper()}",
+            "results": results
+        })
+
+    except Exception as e:
+        print(f"Error finding similar companies: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/risk/vulnerabilities", methods=["GET"])
+def gds_vulnerability_analysis():
+    """
+    Analyze vulnerability distribution and potential spread patterns.
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        results = gds.analyze_vulnerability_spread()
+
+        return jsonify({
+            "analysis": "vulnerability_spread",
+            "description": "Companies with vulnerabilities and their network connections",
+            **results
+        })
+
+    except Exception as e:
+        print(f"Error analyzing vulnerabilities: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/gds/executive/network", methods=["GET"])
+def gds_executive_network():
+    """
+    Analyze executive network and key personnel.
+
+    Query params:
+        limit: int (default 20) - Number of results to return
+    """
+    try:
+        gds = get_gds_service()
+        if not gds:
+            return jsonify({"error": "GDS service not available"}), 503
+
+        limit = int(request.args.get("limit", 20))
+        results = gds.analyze_executive_network(limit=limit)
+
+        return jsonify({
+            "analysis": "executive_network",
+            "description": "Key executives and their company associations",
+            "results": results
+        })
+
+    except Exception as e:
+        print(f"Error analyzing executive network: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================================
+# REGULATORY COMPLIANCE ENDPOINTS
+# ============================================================================
+
+
+@app.route("/api/regulatory/dashboard/summary", methods=["GET"])
+def regulatory_dashboard_summary():
+    """
+    Get regulatory dashboard summary statistics.
+
+    Returns:
+        Summary metrics including alert counts by status, impact, and agency.
+    """
+    try:
+        summary = regulatory_service.get_dashboard_summary()
+        return jsonify(summary)
+    except Exception as e:
+        print(f"Error getting regulatory dashboard summary: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/alerts", methods=["GET"])
+def get_regulatory_alerts():
+    """
+    Get regulatory alerts with optional filters.
+
+    Query params:
+        ticker: str - Filter by company ticker
+        status: str - Filter by status (UNACKNOWLEDGED, ACKNOWLEDGED, RESOLVED)
+        impact_level: str - Filter by impact (CRITICAL, HIGH, MEDIUM, LOW)
+        limit: int - Maximum results (default 100)
+    """
+    try:
+        ticker = request.args.get("ticker")
+        status = request.args.get("status")
+        impact_level = request.args.get("impact_level")
+        limit = int(request.args.get("limit", 100))
+
+        alerts = regulatory_service.get_alerts(
+            ticker=ticker, status=status, impact_level=impact_level, limit=limit
+        )
+
+        return jsonify({"alerts": alerts, "count": len(alerts)})
+    except Exception as e:
+        print(f"Error getting regulatory alerts: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/alerts/<int:alert_id>", methods=["GET"])
+def get_regulatory_alert(alert_id: int):
+    """Get a specific regulatory alert by ID."""
+    try:
+        alerts = regulatory_service.get_alerts(limit=1000)
+        alert = next((a for a in alerts if a["id"] == alert_id), None)
+
+        if not alert:
+            return jsonify({"error": "Alert not found"}), 404
+
+        return jsonify(alert)
+    except Exception as e:
+        print(f"Error getting regulatory alert: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/alerts/<int:alert_id>/acknowledge", methods=["POST"])
+@require_cognito_auth
+def acknowledge_regulatory_alert(alert_id: int):
+    """
+    Acknowledge a regulatory alert.
+
+    Requires authentication. Uses the authenticated user's email.
+    """
+    try:
+        user_email = request.cognito_user.get("email", "unknown")
+        result = regulatory_service.acknowledge_alert(alert_id, user_email)
+
+        if not result:
+            return jsonify({"error": "Alert not found or update failed"}), 404
+
+        return jsonify({"message": "Alert acknowledged", "alert": result})
+    except Exception as e:
+        print(f"Error acknowledging alert: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/alerts/<int:alert_id>/status", methods=["PUT"])
+@require_cognito_auth
+def update_regulatory_alert_status(alert_id: int):
+    """
+    Update regulatory alert status.
+
+    Request body:
+        status: str - New status (UNACKNOWLEDGED, ACKNOWLEDGED, RESOLVED, IN_PROGRESS)
+    """
+    try:
+        data = request.get_json() or {}
+        status = data.get("status")
+
+        if not status:
+            return jsonify({"error": "Status is required"}), 400
+
+        result = regulatory_service.update_alert_status(alert_id, status)
+
+        if not result:
+            return jsonify({"error": "Alert not found or update failed"}), 404
+
+        return jsonify({"message": "Status updated", "alert": result})
+    except Exception as e:
+        print(f"Error updating alert status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/regulations", methods=["GET"])
+def get_regulations():
+    """
+    Get all regulations with optional filters.
+
+    Query params:
+        agency: str - Filter by agency (SEC, CISA, FTC, etc.)
+        severity: str - Filter by severity (CRITICAL, HIGH, MEDIUM, INFO)
+        limit: int - Maximum results (default 100)
+    """
+    try:
+        agency = request.args.get("agency")
+        severity = request.args.get("severity")
+        limit = int(request.args.get("limit", 100))
+
+        regulations = regulatory_service.get_regulations(
+            agency=agency, severity=severity, limit=limit
+        )
+
+        return jsonify({"regulations": regulations, "count": len(regulations)})
+    except Exception as e:
+        print(f"Error getting regulations: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/regulations/<int:regulation_id>", methods=["GET"])
+def get_regulation(regulation_id: int):
+    """Get a specific regulation by ID."""
+    try:
+        regulation = regulatory_service.get_regulation(regulation_id)
+
+        if not regulation:
+            return jsonify({"error": "Regulation not found"}), 404
+
+        # Get alerts for this regulation
+        alerts = regulatory_service.get_alerts(limit=1000)
+        regulation_alerts = [a for a in alerts if a["regulation_id"] == regulation_id]
+        regulation["affected_companies"] = regulation_alerts
+
+        return jsonify(regulation)
+    except Exception as e:
+        print(f"Error getting regulation: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/regulations", methods=["POST"])
+@require_cognito_auth
+def create_regulation():
+    """
+    Manually create a regulation entry.
+
+    Request body:
+        title: str (required) - Regulation title
+        agency: str (required) - Regulatory agency
+        summary: str - Regulation summary
+        effective_date: str - Effective date (YYYY-MM-DD)
+        source_url: str - Link to regulation
+        severity: str - CRITICAL, HIGH, MEDIUM, or INFO
+        keywords: list - Relevant keywords
+    """
+    try:
+        data = request.get_json() or {}
+
+        title = data.get("title")
+        agency = data.get("agency")
+
+        if not title or not agency:
+            return jsonify({"error": "Title and agency are required"}), 400
+
+        regulation = regulatory_service.create_manual_regulation(
+            title=title,
+            agency=agency,
+            summary=data.get("summary"),
+            effective_date=data.get("effective_date"),
+            source_url=data.get("source_url"),
+            severity=data.get("severity", "MEDIUM"),
+            keywords=data.get("keywords"),
+        )
+
+        if not regulation:
+            return jsonify({"error": "Failed to create regulation"}), 500
+
+        return jsonify({"message": "Regulation created", "regulation": regulation}), 201
+    except Exception as e:
+        print(f"Error creating regulation: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/company/<ticker>/alerts", methods=["GET"])
+def get_company_regulatory_alerts(ticker: str):
+    """
+    Get regulatory alerts for a specific company.
+
+    Path params:
+        ticker: Company stock ticker
+
+    Query params:
+        status: str - Filter by status
+        limit: int - Maximum results (default 50)
+    """
+    try:
+        status = request.args.get("status")
+        limit = int(request.args.get("limit", 50))
+
+        alerts = regulatory_service.get_alerts(
+            ticker=ticker.upper(), status=status, limit=limit
+        )
+
+        return jsonify({
+            "ticker": ticker.upper(),
+            "alerts": alerts,
+            "count": len(alerts)
+        })
+    except Exception as e:
+        print(f"Error getting company alerts: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/ingest", methods=["POST"])
+@require_cognito_auth
+def ingest_regulations():
+    """
+    Trigger regulatory ingestion from Federal Register API.
+
+    Request body:
+        start_date: str - Start date (YYYY-MM-DD), default 90 days ago
+        end_date: str - End date (YYYY-MM-DD), default today
+
+    Returns:
+        Ingestion statistics
+    """
+    try:
+        data = request.get_json() or {}
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+
+        result = regulatory_service.ingest_regulations(start_date, end_date)
+
+        return jsonify({
+            "message": "Ingestion complete",
+            **result
+        })
+    except Exception as e:
+        print(f"Error ingesting regulations: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("Starting Cyber Risk Dashboard API...")
     print("Endpoints:")
@@ -3946,4 +4521,31 @@ if __name__ == "__main__":
     print("   - POST /api/evaluation/ablation-study")
     print("   - GET  /api/evaluation/feature-importance")
     print("   - GET  /api/evaluation/feature-coverage")
+    print("")
+    print("GDS Analytics Endpoints:")
+    print("   - GET  /api/gds/version")
+    print("   - GET  /api/gds/summary")
+    print("   - GET  /api/gds/graphs")
+    print("   - POST /api/gds/graphs/competition")
+    print("   - GET  /api/gds/centrality/pagerank")
+    print("   - GET  /api/gds/centrality/betweenness")
+    print("   - GET  /api/gds/centrality/degree")
+    print("   - GET  /api/gds/community/louvain")
+    print("   - GET  /api/gds/community/wcc")
+    print("   - GET  /api/gds/similarity/patents")
+    print("   - GET  /api/gds/similarity/company/<ticker>")
+    print("   - GET  /api/gds/risk/vulnerabilities")
+    print("   - GET  /api/gds/executive/network")
+    print("")
+    print("Regulatory Compliance Endpoints:")
+    print("   - GET  /api/regulatory/dashboard/summary")
+    print("   - GET  /api/regulatory/alerts")
+    print("   - GET  /api/regulatory/alerts/<id>")
+    print("   - POST /api/regulatory/alerts/<id>/acknowledge")
+    print("   - PUT  /api/regulatory/alerts/<id>/status")
+    print("   - GET  /api/regulatory/regulations")
+    print("   - GET  /api/regulatory/regulations/<id>")
+    print("   - POST /api/regulatory/regulations")
+    print("   - GET  /api/regulatory/company/<ticker>/alerts")
+    print("   - POST /api/regulatory/ingest")
     app.run(host="0.0.0.0", port=5000, debug=True)

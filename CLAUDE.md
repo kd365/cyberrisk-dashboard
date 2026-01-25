@@ -508,10 +508,222 @@ cp terraform.tfstate.backup.20260119_225517 terraform.tfstate
 - Common Neighbors → Board/executive connections
 
 **Implementation Steps**:
-1. Enable GDS plugin on Neo4j instance
+1. ✅ Enable GDS plugin on Neo4j instance
 2. Create graph projections for each analysis type
 3. Add API endpoints to expose analytics
 4. Build dashboard visualizations
 
 ---
-*Last Updated: 2026-01-24*
+
+### 2026-01-25: GDS Plugin Installation Complete
+
+**Neo4j GDS 2.13.2** installed on Neo4j 5.26.19:
+
+**Installation**:
+1. Downloaded GDS JAR from GitHub releases (64MB)
+2. Transferred via Flask bastion to Neo4j private subnet
+3. Installed to `/var/lib/neo4j/plugins/`
+4. Updated `/etc/neo4j/neo4j.conf`:
+   ```
+   dbms.security.procedures.unrestricted=apoc.*,gds.*
+   dbms.security.procedures.allowlist=apoc.*,gds.*
+   ```
+5. Restarted Neo4j service
+
+**Verification**:
+```cypher
+RETURN gds.version() AS version  -- Returns "2.13.2"
+CALL gds.list() YIELD name       -- Lists all GDS procedures
+```
+
+**Available Algorithms**:
+- Centrality: PageRank, Betweenness, Degree, Closeness
+- Community: Louvain, Label Propagation, WCC, Triangle Count
+- Similarity: Node Similarity, Jaccard, Cosine
+- Path Finding: Dijkstra, A*, Delta-Stepping
+- Node Embedding: FastRP, GraphSAGE, Node2Vec
+
+**GDS API Endpoints** (deployed 2026-01-25):
+```
+GET  /api/gds/version              - GDS version info
+GET  /api/gds/summary              - Available analytics and graphs
+GET  /api/gds/graphs               - List graph projections
+
+Centrality Analysis:
+GET  /api/gds/centrality/pagerank      - Market leaders (PageRank)
+GET  /api/gds/centrality/betweenness   - Strategic bridges
+GET  /api/gds/centrality/degree        - Competitor counts
+
+Community Detection:
+GET  /api/gds/community/louvain        - Market segments
+GET  /api/gds/community/wcc            - Connected components
+
+Similarity Analysis:
+GET  /api/gds/similarity/patents       - Patent portfolio similarity
+GET  /api/gds/similarity/company/<ticker>  - Similar to company
+
+Risk & Executive:
+GET  /api/gds/risk/vulnerabilities     - Vulnerability distribution
+GET  /api/gds/executive/network        - Executive network analysis
+```
+
+**Sample PageRank Results**:
+| Rank | Company | Ticker | Score |
+|------|---------|--------|-------|
+| 1 | Okta | OKTA | 5.04 |
+| 2 | Tenable | TENB | 3.35 |
+| 3 | Rapid7 | RPD | 2.20 |
+| 4 | Akamai | AKAM | 1.94 |
+| 5 | F5 Networks | FFIV | 1.49 |
+
+**Market Segments** (Louvain):
+- Segment 1 (19 companies): A10, Check Point, Corero, CyberArk, FireEye, Juniper, Mitek, Cloudflare, ServiceNow, Qualys...
+- Segment 2 (7 companies): CrowdStrike, Cisco, F5, Fortinet, Palo Alto, Rapid7, Splunk
+- Segment 3 (2 companies): Okta, Tenable
+
+**Dashboard Visualizations** (deployed 2026-01-25):
+
+Added "Competitive Intelligence" tab to Knowledge Assistant page with:
+- **Market Leaders Panel**: Ranked bar display with PageRank scores, clickable to select company
+- **Market Segments Panel**: Louvain community clusters with company chips, color-coded by segment
+- **Similar Companies Panel**: Dynamic similarity analysis for selected company, showing shared competitors/concepts
+
+**LangChain Agent Tools** (5 new GDS tools):
+- `get_market_segments` - Louvain community detection results
+- `get_market_leaders` - PageRank centrality rankings
+- `get_similar_companies` - Find companies similar to a given ticker
+- `get_competitive_intelligence_summary` - Combined overview
+- `get_strategic_positions` - Betweenness centrality for acquisition targets
+
+Example queries the AI can now answer:
+- "What are the market segments for tracked companies?"
+- "Who are the market leaders in cybersecurity?"
+- "What companies are similar to CrowdStrike?"
+- "Give me a competitive intelligence overview"
+
+---
+
+### 2026-01-25: Graph Data Quality Cleanup
+
+**Problem**: Verint Systems had 2,248 spurious COMPETES_WITH relationships, skewing all GDS analytics.
+
+**Root Cause**: Bad SEC filing extraction on `2026-01-23T16:33:17` created garbage relationships including:
+- Parsing fragments ("2021)", "from Abbott", "$ 382 million of investments in")
+- Non-competitors (patent offices, investment banks, government agencies)
+- Duplicate entities (6x Microsoft nodes, 6x Google nodes)
+
+**Cleanup Performed via Admin API**:
+| Action | Nodes Deleted | Relationships Deleted |
+|--------|--------------|----------------------|
+| Verint bad batch | 0 | 2,248 |
+| Microsoft duplicates | 5 | 143 |
+| Google duplicates | 5 | 70 |
+| Amazon duplicates | 5 | 121 |
+| Lumen/StackPath/garbage | 4 | 9 |
+| **Total** | **19** | **2,591** |
+
+**Updated Graph Stats**:
+- Organizations: 2,713 (was 2,732)
+- Relationships: 665,748 (was 668,339)
+- COMPETES_WITH: 32 clean relationships (was ~4,500 polluted)
+
+**Updated PageRank Results** (balanced):
+| Rank | Company | Ticker | Score |
+|------|---------|--------|-------|
+| 1 | Rapid7 | RPD | 1.83 |
+| 2 | Okta | OKTA | 1.65 |
+| 3 | Akamai | AKAM | 1.40 |
+| 4 | F5 Networks | FFIV | 1.36 |
+| 5 | Tenable | TENB | 1.15 |
+
+**Segment Descriptions Enhancement** (pending deployment):
+- Added TF-IDF style scoring to `gds_service.py` to identify distinctive concepts per segment
+- Rewards concepts popular within cluster but rare globally
+- Auto-filters generic noise (revenue, company, quarter)
+- Code in repo, will deploy on next git push
+
+---
+
+### 2026-01-25: Regulatory Alert Dashboard Implementation
+
+**Feature**: Added comprehensive regulatory compliance monitoring to track SEC, CISA, FTC, NIST regulations impacting tracked cybersecurity companies.
+
+**Components Created**:
+
+**Backend** ([regulatory_service.py](backend/services/regulatory_service.py)):
+- Federal Register API integration for automated regulation fetching
+- TF-IDF style relevance scoring (sector match 40%, keyword overlap 40%, base relevance 20%)
+- Severity determination based on document type (final rule vs guidance)
+- Impact level calculation combining relevance score and regulation severity
+
+**Database** ([database_service.py](backend/services/database_service.py)):
+```sql
+-- New tables added
+CREATE TABLE regulations (
+    id SERIAL PRIMARY KEY,
+    external_id VARCHAR(100) UNIQUE,  -- Federal Register doc_number
+    title VARCHAR(500) NOT NULL,
+    agency VARCHAR(50) NOT NULL,       -- SEC, CISA, FTC, NIST, DOJ
+    summary TEXT,
+    effective_date DATE,
+    publication_date DATE,
+    source_url TEXT,
+    severity VARCHAR(20) DEFAULT 'MEDIUM',  -- CRITICAL, HIGH, MEDIUM, INFO
+    keywords JSONB,
+    sectors_affected JSONB
+);
+
+CREATE TABLE regulatory_alerts (
+    id SERIAL PRIMARY KEY,
+    regulation_id INT REFERENCES regulations(id) ON DELETE CASCADE,
+    company_id INT REFERENCES companies(id) ON DELETE CASCADE,
+    relevance_score FLOAT,             -- TF-IDF score (0-1)
+    impact_level VARCHAR(20),          -- CRITICAL, HIGH, MEDIUM, LOW
+    status VARCHAR(30) DEFAULT 'UNACKNOWLEDGED',
+    ai_impact_analysis TEXT,
+    matched_keywords JSONB,
+    UNIQUE(regulation_id, company_id)
+);
+```
+
+**API Endpoints** ([app.py](backend/app.py)):
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/regulatory/dashboard/summary` | GET | Dashboard metrics |
+| `/api/regulatory/alerts` | GET | List alerts (filter by ticker, status, impact) |
+| `/api/regulatory/alerts/<id>/acknowledge` | POST | Acknowledge alert (requires auth) |
+| `/api/regulatory/regulations` | GET | List all regulations |
+| `/api/regulatory/regulations` | POST | Manually add regulation |
+| `/api/regulatory/company/<ticker>/alerts` | GET | Company-specific alerts |
+| `/api/regulatory/ingest` | POST | Trigger Federal Register API fetch |
+
+**LangChain Tools** ([langchain_tools.py](backend/services/langchain_tools.py)):
+- `get_regulatory_alerts(ticker, status)` - Query alerts for companies
+- `get_regulation_impact(regulation_id, ticker)` - Detailed regulation impact
+- `get_company_compliance_status(ticker)` - Compliance summary with risk level
+
+**Frontend** ([ComplianceMonitor.jsx](frontend/src/components/ComplianceMonitor.jsx)):
+- **Alert Overview**: Summary cards (Critical, High, Total Active, Acknowledged) + agency breakdown
+- **Regulation Timeline**: Upcoming effective dates + recent regulations list
+- **Impact Analysis**: Heat Map showing regulation severity vs company exposure
+- **Compliance Status**: Company-specific compliance drill-down
+
+**Color Scheme**:
+- CRITICAL: `#dc2626` (red)
+- HIGH: `#f59e0b` (amber)
+- MEDIUM: `#3b82f6` (blue)
+- LOW/INFO: `#22c55e`/`#6b7280` (green/gray)
+
+**Agent Integration** ([prompts.py](backend/services/prompts.py)):
+Added regulatory expertise and tool usage instructions. Agent can answer:
+- "What regulatory alerts affect CrowdStrike?"
+- "Show compliance status for PANW"
+- "What SEC rules apply to our tracked companies?"
+- "Are there any critical regulatory alerts?"
+
+References SEC Cybersecurity Disclosure Rule (effective 2023-12-18, 8-K Item 1.05 for 4-day material incident disclosure).
+
+**Tracked Agencies**: SEC, CISA, FTC, NIST, DOJ, Commerce, OCC
+
+---
+*Last Updated: 2026-01-25*
