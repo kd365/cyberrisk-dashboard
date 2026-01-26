@@ -40,14 +40,14 @@ class RegulatoryService:
     # Agencies to track for cybersecurity regulations
     # Note: CISA publishes through homeland-security-department, not its own slug
     TRACKED_AGENCIES = [
-        "securities-and-exchange-commission",       # SEC - primary for disclosure rules
-        "federal-trade-commission",                 # FTC - privacy, consumer protection
-        "homeland-security-department",             # DHS/CISA - critical infrastructure
-        "department-of-commerce",                   # Commerce/NIST - standards
-        "federal-communications-commission",        # FCC - telecom/IoT security
-        "department-of-justice",                    # DOJ - enforcement
-        "office-of-the-comptroller-of-the-currency", # OCC - banking
-        "federal-reserve-system",                   # Fed - financial services
+        "securities-and-exchange-commission",  # SEC - primary for disclosure rules
+        "federal-trade-commission",  # FTC - privacy, consumer protection
+        "homeland-security-department",  # DHS/CISA - critical infrastructure
+        "department-of-commerce",  # Commerce/NIST - standards
+        "federal-communications-commission",  # FCC - telecom/IoT security
+        "department-of-justice",  # DOJ - enforcement
+        "office-of-the-comptroller-of-the-currency",  # OCC - banking
+        "federal-reserve-system",  # Fed - financial services
     ]
 
     # Agency slug to display name mapping
