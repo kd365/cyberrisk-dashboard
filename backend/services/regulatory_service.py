@@ -38,25 +38,28 @@ class RegulatoryService:
     MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
 
     # Agencies to track for cybersecurity regulations
+    # Note: CISA publishes through homeland-security-department, not its own slug
     TRACKED_AGENCIES = [
-        "securities-and-exchange-commission",  # SEC
-        "cybersecurity-and-infrastructure-security-agency",  # CISA
-        "federal-trade-commission",  # FTC
-        "national-institute-of-standards-and-technology",  # NIST
-        "department-of-justice",  # DOJ
-        "department-of-commerce",  # Commerce
-        "office-of-the-comptroller-of-the-currency",  # OCC (banking)
+        "securities-and-exchange-commission",       # SEC - primary for disclosure rules
+        "federal-trade-commission",                 # FTC - privacy, consumer protection
+        "homeland-security-department",             # DHS/CISA - critical infrastructure
+        "department-of-commerce",                   # Commerce/NIST - standards
+        "federal-communications-commission",        # FCC - telecom/IoT security
+        "department-of-justice",                    # DOJ - enforcement
+        "office-of-the-comptroller-of-the-currency", # OCC - banking
+        "federal-reserve-system",                   # Fed - financial services
     ]
 
     # Agency slug to display name mapping
     AGENCY_NAMES = {
         "securities-and-exchange-commission": "SEC",
-        "cybersecurity-and-infrastructure-security-agency": "CISA",
         "federal-trade-commission": "FTC",
-        "national-institute-of-standards-and-technology": "NIST",
+        "homeland-security-department": "DHS/CISA",
+        "department-of-commerce": "Commerce/NIST",
+        "federal-communications-commission": "FCC",
         "department-of-justice": "DOJ",
-        "department-of-commerce": "Commerce",
         "office-of-the-comptroller-of-the-currency": "OCC",
+        "federal-reserve-system": "Federal Reserve",
     }
 
     # Keywords for cybersecurity-related regulations
@@ -124,15 +127,16 @@ class RegulatoryService:
             List of article dicts from Federal Register
         """
         if not start_date:
-            start_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+            # Extended to 365 days to capture important historical regulations
+            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
         if not end_date:
             end_date = datetime.now().strftime("%Y-%m-%d")
 
         all_articles = []
 
-        # Search for each keyword to maximize coverage
+        # Search ALL keywords for maximum coverage (not just first 5)
         search_terms = (
-            [search_term] if search_term != "cybersecurity" else self.CYBER_KEYWORDS[:5]
+            [search_term] if search_term != "cybersecurity" else self.CYBER_KEYWORDS
         )
 
         for term in search_terms:
