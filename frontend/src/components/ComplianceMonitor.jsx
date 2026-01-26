@@ -576,6 +576,7 @@ function ComplianceMonitor({ ticker = null }) {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ingesting, setIngesting] = useState(false);
+  const [ingestionProgress, setIngestionProgress] = useState(null);
 
   const subTabs = [
     { id: 'overview', label: 'Alert Overview', icon: Icons.Alert },
@@ -618,6 +619,37 @@ function ComplianceMonitor({ ticker = null }) {
     fetchData();
   }, [fetchData]);
 
+  const pollIngestionStatus = useCallback(async () => {
+    try {
+      const response = await authenticatedFetch('/api/regulatory/ingest/status');
+      const status = await response.json();
+      setIngestionProgress(status);
+
+      if (status.status === 'completed') {
+        setIngesting(false);
+        let message = `Ingestion complete!\n`;
+        if (status.stats) {
+          message += `Created: ${status.stats.regulations_created || 0} regulations\n`;
+          message += `Skipped (LLM filtered): ${status.stats.regulations_skipped || 0}\n`;
+          message += `Alerts: ${status.stats.alerts_created || 0}`;
+        }
+        alert(message);
+        setIngestionProgress(null);
+        fetchData();
+        return true; // Stop polling
+      } else if (status.status === 'error') {
+        setIngesting(false);
+        alert(`Ingestion failed: ${status.error || 'Unknown error'}`);
+        setIngestionProgress(null);
+        return true; // Stop polling
+      }
+      return false; // Continue polling
+    } catch (error) {
+      console.error('Error polling ingestion status:', error);
+      return false; // Continue polling on error
+    }
+  }, [authenticatedFetch, fetchData]);
+
   const handleIngest = async () => {
     const clearExisting = window.confirm(
       'Clear existing regulatory data before ingesting?\n\n' +
@@ -625,11 +657,13 @@ function ComplianceMonitor({ ticker = null }) {
       'Click Cancel to add to existing data'
     );
 
-    if (!window.confirm('This will fetch regulations from Federal Register API. Continue?')) {
+    if (!window.confirm('This will fetch regulations from Federal Register API (runs in background). Continue?')) {
       return;
     }
 
     setIngesting(true);
+    setIngestionProgress({ status: 'starting', progress: 0, message: 'Starting ingestion...' });
+
     try {
       const response = await authenticatedFetch('/api/regulatory/ingest', {
         method: 'POST',
@@ -641,23 +675,29 @@ function ComplianceMonitor({ ticker = null }) {
 
       const result = await response.json();
 
-      if (response.ok) {
-        let message = `Ingestion complete!\n`;
-        if (result.cleared) {
-          message += `Cleared: ${result.cleared.regulations_cleared} regulations, ${result.cleared.alerts_cleared} alerts\n`;
-        }
-        message += `Created: ${result.regulations_created} regulations\n`;
-        message += `Skipped (LLM filtered): ${result.regulations_skipped || 0}\n`;
-        message += `Alerts: ${result.alerts_created}`;
-        alert(message);
-        fetchData();
+      if (response.status === 202) {
+        // Ingestion started - begin polling
+        const pollInterval = setInterval(async () => {
+          const shouldStop = await pollIngestionStatus();
+          if (shouldStop) {
+            clearInterval(pollInterval);
+          }
+        }, 2000); // Poll every 2 seconds
+      } else if (response.status === 409) {
+        // Already running
+        alert('Ingestion is already in progress. Please wait for it to complete.');
+        setIngesting(false);
+        setIngestionProgress(null);
       } else {
-        alert(`Ingestion failed: ${result.error || 'Unknown error'}`);
+        alert(`Failed to start ingestion: ${result.error || result.message || 'Unknown error'}`);
+        setIngesting(false);
+        setIngestionProgress(null);
       }
     } catch (error) {
       alert(`Ingestion error: ${error.message}`);
+      setIngesting(false);
+      setIngestionProgress(null);
     }
-    setIngesting(false);
   };
 
   return (
@@ -675,6 +715,16 @@ function ComplianceMonitor({ ticker = null }) {
           </div>
         ))}
         <div style={{ flex: 1 }} />
+        {ingesting && ingestionProgress && (
+          <div style={styles.progressContainer}>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${ingestionProgress.progress || 0}%` }} />
+            </div>
+            <span style={styles.progressText}>
+              {ingestionProgress.progress || 0}% - {ingestionProgress.message || 'Processing...'}
+            </span>
+          </div>
+        )}
         <button
           onClick={handleIngest}
           disabled={ingesting}
@@ -949,6 +999,32 @@ const styles = {
     padding: '8px',
     border: '1px solid #e2e8f0',
     fontSize: '12px'
+  },
+  progressContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginRight: '12px'
+  },
+  progressBar: {
+    width: '150px',
+    height: '8px',
+    background: '#e2e8f0',
+    borderRadius: '4px',
+    overflow: 'hidden'
+  },
+  progressFill: {
+    height: '100%',
+    background: '#3b82f6',
+    transition: 'width 300ms ease'
+  },
+  progressText: {
+    fontSize: '12px',
+    color: '#64748b',
+    maxWidth: '300px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   }
 };
 

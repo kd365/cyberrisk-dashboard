@@ -12,6 +12,7 @@ Syncs regulations to Neo4j knowledge graph for graph-based analysis.
 import os
 import logging
 import requests
+import threading
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 
@@ -97,6 +98,18 @@ class RegulatoryService:
         # Lazy-loaded Neo4j service
         self._neo4j = None
 
+        # Async ingestion state tracking
+        # In production with multiple workers, use Redis/DB instead
+        self._ingestion_status = {
+            "status": "idle",  # idle, running, completed, error
+            "progress": 0,
+            "message": "",
+            "stats": {},
+            "error": None,
+            "start_time": None,
+        }
+        self._ingestion_lock = threading.Lock()
+
     @property
     def neo4j(self):
         """Lazy load Neo4j service."""
@@ -108,6 +121,196 @@ class RegulatoryService:
             except Exception as e:
                 logger.warning(f"Neo4j service not available: {e}")
         return self._neo4j
+
+    def get_ingestion_status(self) -> Dict[str, Any]:
+        """
+        Returns the current status of the background ingestion job.
+
+        Returns:
+            Dict with status, progress, message, stats, and error fields
+        """
+        with self._ingestion_lock:
+            return dict(self._ingestion_status)
+
+    def start_ingestion_async(
+        self, start_date: str = None, end_date: str = None, clear_existing: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Starts the ingestion process in a background thread.
+
+        Args:
+            start_date: Start date for fetching regulations (YYYY-MM-DD)
+            end_date: End date for fetching regulations (YYYY-MM-DD)
+            clear_existing: If True, clear existing regulations before ingesting
+
+        Returns:
+            Dict with status indicating if ingestion was started
+        """
+        with self._ingestion_lock:
+            if self._ingestion_status["status"] == "running":
+                return {
+                    "success": False,
+                    "message": "Ingestion already in progress",
+                    "status": self._ingestion_status,
+                }
+
+            # Reset status for new ingestion
+            self._ingestion_status = {
+                "status": "running",
+                "progress": 0,
+                "message": "Starting ingestion...",
+                "stats": {},
+                "error": None,
+                "start_time": datetime.now().isoformat(),
+            }
+
+        # Start background thread
+        thread = threading.Thread(
+            target=self._ingestion_worker,
+            args=(start_date, end_date, clear_existing),
+            daemon=True,
+        )
+        thread.start()
+
+        return {
+            "success": True,
+            "message": "Ingestion started in background",
+            "status": self._ingestion_status,
+        }
+
+    def _ingestion_worker(
+        self, start_date: str = None, end_date: str = None, clear_existing: bool = False
+    ):
+        """
+        Background worker that performs the actual ingestion.
+
+        Args:
+            start_date: Start date for fetching regulations
+            end_date: End date for fetching regulations
+            clear_existing: If True, clear existing regulations first
+        """
+        try:
+            # Clear existing if requested
+            if clear_existing:
+                with self._ingestion_lock:
+                    self._ingestion_status["message"] = "Clearing existing regulations..."
+                    self._ingestion_status["progress"] = 5
+                self.db.clear_regulations()
+
+            # Fetch articles
+            with self._ingestion_lock:
+                self._ingestion_status["message"] = "Fetching articles from Federal Register..."
+                self._ingestion_status["progress"] = 10
+
+            articles = self.fetch_federal_register_articles(start_date, end_date)
+
+            with self._ingestion_lock:
+                self._ingestion_status["message"] = f"Processing {len(articles)} articles..."
+                self._ingestion_status["progress"] = 20
+
+            # Get companies
+            companies = self.db.get_all_companies()
+            if not companies:
+                with self._ingestion_lock:
+                    self._ingestion_status["status"] = "error"
+                    self._ingestion_status["error"] = "No companies found in database"
+                    self._ingestion_status["message"] = "Failed: No companies found"
+                return
+
+            # Process articles
+            regulations_created = 0
+            regulations_skipped = 0
+            alerts_created = 0
+            graph_synced = 0
+
+            total_articles = len(articles)
+            for idx, article in enumerate(articles):
+                # Update progress (20-90% range for processing)
+                progress = 20 + int((idx / max(total_articles, 1)) * 70)
+                with self._ingestion_lock:
+                    self._ingestion_status["progress"] = progress
+                    self._ingestion_status["message"] = f"Processing article {idx + 1}/{total_articles}: {article.get('title', '')[:50]}..."
+
+                # LLM validation
+                llm_validation = self._validate_with_llm(article)
+                if not llm_validation["is_relevant"]:
+                    regulations_skipped += 1
+                    continue
+
+                # Extract agency name
+                agencies = article.get("agencies", [])
+                agency_slug = agencies[0].get("slug", "") if agencies else "unknown"
+                agency_name = self.AGENCY_NAMES.get(agency_slug, agency_slug.upper())
+
+                severity = self._determine_severity(article)
+                keywords = self._extract_keywords(article)
+
+                # Create regulation
+                regulation = self.db.create_regulation(
+                    title=article.get("title", "Untitled"),
+                    agency=agency_name,
+                    external_id=article.get("document_number"),
+                    summary=article.get("abstract"),
+                    effective_date=article.get("effective_on"),
+                    publication_date=article.get("publication_date"),
+                    source_url=article.get("html_url"),
+                    severity=severity,
+                    keywords=keywords,
+                    sectors_affected=["Cybersecurity", "Technology"],
+                )
+
+                if regulation:
+                    regulations_created += 1
+                    impacted_companies = []
+
+                    # Generate alerts
+                    for company in companies:
+                        relevance = self._calculate_relevance_score(article, company)
+                        if relevance["score"] >= 0.3:
+                            impact_level = self._determine_impact_level(relevance["score"], severity)
+                            alert = self.db.create_regulatory_alert(
+                                regulation_id=regulation["id"],
+                                company_id=company["id"],
+                                relevance_score=relevance["score"],
+                                impact_level=impact_level,
+                                matched_keywords=relevance["matched_keywords"],
+                            )
+                            if alert:
+                                alerts_created += 1
+                                impacted_companies.append({
+                                    "ticker": company.get("ticker"),
+                                    "relevance_score": relevance["score"],
+                                    "impact_level": impact_level,
+                                })
+
+                    # Sync to Neo4j
+                    if impacted_companies:
+                        sync_result = self._sync_to_knowledge_graph(regulation, impacted_companies)
+                        if sync_result.get("nodes_created", 0) > 0:
+                            graph_synced += 1
+
+            # Complete
+            with self._ingestion_lock:
+                self._ingestion_status["status"] = "completed"
+                self._ingestion_status["progress"] = 100
+                self._ingestion_status["message"] = "Ingestion completed successfully"
+                self._ingestion_status["stats"] = {
+                    "regulations_created": regulations_created,
+                    "regulations_skipped": regulations_skipped,
+                    "alerts_created": alerts_created,
+                    "articles_processed": total_articles,
+                    "companies_checked": len(companies),
+                    "graph_nodes_synced": graph_synced,
+                }
+
+            logger.info(f"Async ingestion completed: {regulations_created} regulations, {alerts_created} alerts")
+
+        except Exception as e:
+            logger.error(f"Async ingestion failed: {e}")
+            with self._ingestion_lock:
+                self._ingestion_status["status"] = "error"
+                self._ingestion_status["error"] = str(e)
+                self._ingestion_status["message"] = f"Failed: {str(e)}"
 
     def fetch_federal_register_articles(
         self,
@@ -127,17 +330,16 @@ class RegulatoryService:
             List of article dicts from Federal Register
         """
         if not start_date:
-            # Use 180 days to balance coverage vs timeout risk
-            start_date = (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d")
+            # Use 365 days for comprehensive coverage (async handles timeout)
+            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
         if not end_date:
             end_date = datetime.now().strftime("%Y-%m-%d")
 
         all_articles = []
 
-        # Search top 8 keywords for good coverage without timeout
-        # Full list can cause timeout due to many API calls + LLM validation
+        # Search ALL keywords for comprehensive coverage (async handles timeout)
         search_terms = (
-            [search_term] if search_term != "cybersecurity" else self.CYBER_KEYWORDS[:8]
+            [search_term] if search_term != "cybersecurity" else self.CYBER_KEYWORDS
         )
 
         for term in search_terms:

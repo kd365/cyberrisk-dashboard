@@ -4452,15 +4452,18 @@ def get_company_regulatory_alerts(ticker: str):
 @require_cognito_auth
 def ingest_regulations():
     """
-    Trigger regulatory ingestion from Federal Register API.
+    Trigger regulatory ingestion from Federal Register API (async).
+
+    Starts ingestion in a background thread and returns immediately.
+    Poll /api/regulatory/ingest/status for progress.
 
     Request body:
-        start_date: str - Start date (YYYY-MM-DD), default 90 days ago
+        start_date: str - Start date (YYYY-MM-DD), default 365 days ago
         end_date: str - End date (YYYY-MM-DD), default today
         clear_existing: bool - If true, clears all existing data before ingesting
 
     Returns:
-        Ingestion statistics
+        Status indicating if ingestion was started
     """
     try:
         data = request.get_json() or {}
@@ -4468,34 +4471,43 @@ def ingest_regulations():
         end_date = data.get("end_date")
         clear_existing = data.get("clear_existing", False)
 
-        cleared_stats = None
-        if clear_existing:
-            # Clear existing regulatory data before ingesting
-            conn = db_service._get_connection()
-            if conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM regulatory_alerts")
-                alerts_deleted = cursor.rowcount
-                cursor.execute("DELETE FROM regulations")
-                regulations_deleted = cursor.rowcount
-                conn.commit()
-                cursor.close()
-                cleared_stats = {
-                    "alerts_cleared": alerts_deleted,
-                    "regulations_cleared": regulations_deleted,
-                }
-                print(
-                    f"Cleared {regulations_deleted} regulations and {alerts_deleted} alerts"
-                )
+        # Start async ingestion
+        result = regulatory_service.start_ingestion_async(
+            start_date=start_date,
+            end_date=end_date,
+            clear_existing=clear_existing,
+        )
 
-        result = regulatory_service.ingest_regulations(start_date, end_date)
+        if result["success"]:
+            return jsonify({
+                "message": "Ingestion started in background. Poll /api/regulatory/ingest/status for progress.",
+                "status": result["status"],
+            }), 202  # 202 Accepted
+        else:
+            return jsonify({
+                "message": result["message"],
+                "status": result["status"],
+            }), 409  # 409 Conflict (already running)
 
-        if cleared_stats:
-            result["cleared"] = cleared_stats
-
-        return jsonify({"message": "Ingestion complete", **result})
     except Exception as e:
-        print(f"Error ingesting regulations: {e}")
+        print(f"Error starting regulatory ingestion: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regulatory/ingest/status", methods=["GET"])
+@require_cognito_auth
+def get_ingestion_status():
+    """
+    Get the current status of the regulatory ingestion process.
+
+    Returns:
+        Dict with status, progress (0-100), message, stats, and error fields
+    """
+    try:
+        status = regulatory_service.get_ingestion_status()
+        return jsonify(status)
+    except Exception as e:
+        print(f"Error getting ingestion status: {e}")
         return jsonify({"error": str(e)}), 500
 
 
