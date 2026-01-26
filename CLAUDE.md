@@ -754,5 +754,24 @@ References SEC Cybersecurity Disclosure Rule (effective 2023-12-18, 8-K Item 1.0
 - `graph_nodes_synced` - count synced to Neo4j
 - `cleared` - stats if clear_existing was used
 
+4. **UI Enhancements** ([ComplianceMonitor.jsx](frontend/src/components/ComplianceMonitor.jsx)):
+   - Added **Acknowledge button** (green checkmark) to each alert card
+   - Acknowledged alerts show badge instead of button
+   - Auto-refreshes data after acknowledgment
+   - Added **Impact Rating & Relevance Score legend** explaining:
+     - Impact colors: CRITICAL (red), HIGH (amber), MEDIUM (blue), LOW (green)
+     - Relevance calculation: Sector (40%) + Keywords (40%) + Base (20%)
+     - Score thresholds: 70%+ → CRITICAL/HIGH, 50-70% → HIGH, 30-50% → MEDIUM
+
+**Known Issues**:
+- Impact Analysis heat map needs redesign (all companies show ~60% due to uniform scoring)
+
+5. **Federal Register Ingestion Fixes** (2026-01-25):
+   - **TRACKED_AGENCIES**: Added `homeland-security-department` (for CISA), `federal-communications-commission`, `federal-reserve-system`
+   - **Removed non-existent slug**: `cybersecurity-and-infrastructure-security-agency` returns 0 results (CISA publishes via DHS)
+   - **Search ALL 17 keywords**: Changed `CYBER_KEYWORDS[:5]` → `CYBER_KEYWORDS`
+   - **Extended date window**: 90 days → 365 days to capture historical regulations like SEC 2023 Disclosure Rule
+   - To test: Clear existing data and re-ingest via the Regulatory Alerts tab
+
 ---
 *Last Updated: 2026-01-25*
