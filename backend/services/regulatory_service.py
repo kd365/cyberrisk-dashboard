@@ -64,24 +64,51 @@ class RegulatoryService:
     }
 
     # Keywords for cybersecurity-related regulations
+    # Updated 2026-01: Added AI governance, operational resilience, SBOM terms
+    # Refined to reduce false positives from overly broad terms
     CYBER_KEYWORDS = [
+        # --- Core Terms ---
         "cybersecurity",
-        "cyber security",
-        "data breach",
-        "data protection",
-        "privacy",
-        "disclosure",
-        "incident reporting",
-        "ransomware",
         "information security",
-        "critical infrastructure",
-        "encryption",
-        "authentication",
-        "vulnerability",
         "network security",
         "cloud security",
+        # --- Incident & Response ---
+        "data breach",
+        "incident reporting",
+        "ransomware",
+        "vulnerability",
+        # --- Modern Architecture ---
         "zero trust",
         "supply chain security",
+        "software bill of materials",  # SBOM specific
+        "sbom",  # Acronym often used in headers
+        # --- AI & Emerging Tech (Critical for 2026) ---
+        "artificial intelligence security",
+        "model risk management",  # Huge in Fintech/Banking
+        "cryptography",  # More specific than broad "encryption"
+        # --- Governance & Data ---
+        "data privacy",  # More specific than just "privacy"
+        "critical infrastructure",
+        "cyber resilience",  # Trend in banking/DORA regs
+        "cyber incident disclosure",  # More specific than "disclosure"
+    ]
+
+    # Negative filter: Skip articles containing these terms BEFORE LLM validation
+    # Saves Bedrock costs by filtering obvious non-cyber regulations
+    NON_CYBER_KEYWORDS = [
+        "motor vehicle",
+        "dealer",
+        "livestock",
+        "agriculture",
+        "clinical trial",
+        "medicare",
+        "environmental impact",
+        "fisheries",
+        "food safety",
+        "drug approval",
+        "construction",
+        "housing",
+        "immigration",
     ]
 
     def __init__(self):
@@ -224,6 +251,7 @@ class RegulatoryService:
             graph_synced = 0
 
             total_articles = len(articles)
+            negative_filtered = 0
             for idx, article in enumerate(articles):
                 # Update progress (20-90% range for processing)
                 progress = 20 + int((idx / max(total_articles, 1)) * 70)
@@ -231,7 +259,15 @@ class RegulatoryService:
                     self._ingestion_status["progress"] = progress
                     self._ingestion_status["message"] = f"Processing article {idx + 1}/{total_articles}: {article.get('title', '')[:50]}..."
 
-                # LLM validation
+                # Fast fail: Negative keyword filter (saves LLM costs)
+                title = (article.get("title") or "").lower()
+                abstract = (article.get("abstract") or "").lower()
+                text = f"{title} {abstract}"
+                if any(term in text for term in self.NON_CYBER_KEYWORDS):
+                    negative_filtered += 1
+                    continue
+
+                # LLM validation (only for articles that pass negative filter)
                 llm_validation = self._validate_with_llm(article)
                 if not llm_validation["is_relevant"]:
                     regulations_skipped += 1
@@ -297,13 +333,14 @@ class RegulatoryService:
                 self._ingestion_status["stats"] = {
                     "regulations_created": regulations_created,
                     "regulations_skipped": regulations_skipped,
+                    "negative_filtered": negative_filtered,
                     "alerts_created": alerts_created,
                     "articles_processed": total_articles,
                     "companies_checked": len(companies),
                     "graph_nodes_synced": graph_synced,
                 }
 
-            logger.info(f"Async ingestion completed: {regulations_created} regulations, {alerts_created} alerts")
+            logger.info(f"Async ingestion completed: {regulations_created} regulations, {alerts_created} alerts, {negative_filtered} negative-filtered")
 
         except Exception as e:
             logger.error(f"Async ingestion failed: {e}")
@@ -416,6 +453,7 @@ class RegulatoryService:
 
         regulations_created = 0
         regulations_skipped = 0
+        negative_filtered = 0
         alerts_created = 0
         graph_synced = 0
 
@@ -430,6 +468,15 @@ class RegulatoryService:
             }
 
         for article in articles:
+            # Fast fail: Negative keyword filter (saves LLM costs)
+            title = (article.get("title") or "").lower()
+            abstract = (article.get("abstract") or "").lower()
+            text = f"{title} {abstract}"
+            if any(term in text for term in self.NON_CYBER_KEYWORDS):
+                print(f"  Skipping (Negative Filter): {title[:50]}...")
+                negative_filtered += 1
+                continue
+
             # LLM validation: Check if regulation is truly relevant to enterprise SaaS security
             llm_validation = self._validate_with_llm(article)
             if not llm_validation["is_relevant"]:
@@ -510,6 +557,7 @@ class RegulatoryService:
         result = {
             "regulations_created": regulations_created,
             "regulations_skipped": regulations_skipped,
+            "negative_filtered": negative_filtered,
             "alerts_created": alerts_created,
             "articles_processed": len(articles),
             "companies_checked": len(companies),
@@ -518,7 +566,8 @@ class RegulatoryService:
 
         print(f"\n=== Ingestion Complete ===")
         print(f"  Regulations created: {regulations_created}")
-        print(f"  Regulations skipped (LLM filtered): {regulations_skipped}")
+        print(f"  Negative filtered (fast fail): {negative_filtered}")
+        print(f"  LLM filtered: {regulations_skipped}")
         print(f"  Alerts created: {alerts_created}")
         print(f"  Graph nodes synced: {graph_synced}")
 

@@ -630,7 +630,8 @@ function ComplianceMonitor({ ticker = null }) {
         let message = `Ingestion complete!\n`;
         if (status.stats) {
           message += `Created: ${status.stats.regulations_created || 0} regulations\n`;
-          message += `Skipped (LLM filtered): ${status.stats.regulations_skipped || 0}\n`;
+          message += `Negative filtered: ${status.stats.negative_filtered || 0}\n`;
+          message += `LLM filtered: ${status.stats.regulations_skipped || 0}\n`;
           message += `Alerts: ${status.stats.alerts_created || 0}`;
         }
         alert(message);
