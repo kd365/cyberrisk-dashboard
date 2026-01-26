@@ -4479,15 +4479,25 @@ def ingest_regulations():
         )
 
         if result["success"]:
-            return jsonify({
-                "message": "Ingestion started in background. Poll /api/regulatory/ingest/status for progress.",
-                "status": result["status"],
-            }), 202  # 202 Accepted
+            return (
+                jsonify(
+                    {
+                        "message": "Ingestion started in background. Poll /api/regulatory/ingest/status for progress.",
+                        "status": result["status"],
+                    }
+                ),
+                202,
+            )  # 202 Accepted
         else:
-            return jsonify({
-                "message": result["message"],
-                "status": result["status"],
-            }), 409  # 409 Conflict (already running)
+            return (
+                jsonify(
+                    {
+                        "message": result["message"],
+                        "status": result["status"],
+                    }
+                ),
+                409,
+            )  # 409 Conflict (already running)
 
     except Exception as e:
         print(f"Error starting regulatory ingestion: {e}")

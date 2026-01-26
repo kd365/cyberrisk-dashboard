@@ -220,19 +220,25 @@ class RegulatoryService:
             # Clear existing if requested
             if clear_existing:
                 with self._ingestion_lock:
-                    self._ingestion_status["message"] = "Clearing existing regulations..."
+                    self._ingestion_status["message"] = (
+                        "Clearing existing regulations..."
+                    )
                     self._ingestion_status["progress"] = 5
                 self.db.clear_regulations()
 
             # Fetch articles
             with self._ingestion_lock:
-                self._ingestion_status["message"] = "Fetching articles from Federal Register..."
+                self._ingestion_status["message"] = (
+                    "Fetching articles from Federal Register..."
+                )
                 self._ingestion_status["progress"] = 10
 
             articles = self.fetch_federal_register_articles(start_date, end_date)
 
             with self._ingestion_lock:
-                self._ingestion_status["message"] = f"Processing {len(articles)} articles..."
+                self._ingestion_status["message"] = (
+                    f"Processing {len(articles)} articles..."
+                )
                 self._ingestion_status["progress"] = 20
 
             # Get companies
@@ -257,7 +263,9 @@ class RegulatoryService:
                 progress = 20 + int((idx / max(total_articles, 1)) * 70)
                 with self._ingestion_lock:
                     self._ingestion_status["progress"] = progress
-                    self._ingestion_status["message"] = f"Processing article {idx + 1}/{total_articles}: {article.get('title', '')[:50]}..."
+                    self._ingestion_status["message"] = (
+                        f"Processing article {idx + 1}/{total_articles}: {article.get('title', '')[:50]}..."
+                    )
 
                 # Fast fail: Negative keyword filter (saves LLM costs)
                 title = (article.get("title") or "").lower()
@@ -303,7 +311,9 @@ class RegulatoryService:
                     for company in companies:
                         relevance = self._calculate_relevance_score(article, company)
                         if relevance["score"] >= 0.3:
-                            impact_level = self._determine_impact_level(relevance["score"], severity)
+                            impact_level = self._determine_impact_level(
+                                relevance["score"], severity
+                            )
                             alert = self.db.create_regulatory_alert(
                                 regulation_id=regulation["id"],
                                 company_id=company["id"],
@@ -313,15 +323,19 @@ class RegulatoryService:
                             )
                             if alert:
                                 alerts_created += 1
-                                impacted_companies.append({
-                                    "ticker": company.get("ticker"),
-                                    "relevance_score": relevance["score"],
-                                    "impact_level": impact_level,
-                                })
+                                impacted_companies.append(
+                                    {
+                                        "ticker": company.get("ticker"),
+                                        "relevance_score": relevance["score"],
+                                        "impact_level": impact_level,
+                                    }
+                                )
 
                     # Sync to Neo4j
                     if impacted_companies:
-                        sync_result = self._sync_to_knowledge_graph(regulation, impacted_companies)
+                        sync_result = self._sync_to_knowledge_graph(
+                            regulation, impacted_companies
+                        )
                         if sync_result.get("nodes_created", 0) > 0:
                             graph_synced += 1
 
@@ -340,7 +354,9 @@ class RegulatoryService:
                     "graph_nodes_synced": graph_synced,
                 }
 
-            logger.info(f"Async ingestion completed: {regulations_created} regulations, {alerts_created} alerts, {negative_filtered} negative-filtered")
+            logger.info(
+                f"Async ingestion completed: {regulations_created} regulations, {alerts_created} alerts, {negative_filtered} negative-filtered"
+            )
 
         except Exception as e:
             logger.error(f"Async ingestion failed: {e}")

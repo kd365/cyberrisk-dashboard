@@ -11,6 +11,7 @@ from scraper import SecTranscriptScraper
 from s3_service import S3ArtifactService
 import pandas as pd
 
+
 def main():
     print("=" * 70)
     print("🔄 PRIORITIZED TRANSCRIPT SCRAPER")
@@ -23,25 +24,23 @@ def main():
     # Ordered by market cap and prominence
     priority_tickers = [
         # Tier 1: Mega-cap leaders
-        'CRWD',   # CrowdStrike - $80B+ market cap, leader in endpoint security
-        'PANW',   # Palo Alto Networks - $100B+ market cap, firewall/security platform leader
-        'FTNT',   # Fortinet - $50B+ market cap, network security leader
-        'ZS',     # Zscaler - $30B+ market cap, cloud security leader
-
+        "CRWD",  # CrowdStrike - $80B+ market cap, leader in endpoint security
+        "PANW",  # Palo Alto Networks - $100B+ market cap, firewall/security platform leader
+        "FTNT",  # Fortinet - $50B+ market cap, network security leader
+        "ZS",  # Zscaler - $30B+ market cap, cloud security leader
         # Tier 2: Large-cap established players
-        'CSCO',   # Cisco - Networking giant with security division
-        'CHKP',   # Check Point - $15B+ market cap, firewall pioneer
-        'CYBR',   # CyberArk - $10B+ market cap, privileged access management
-        'OKTA',   # Okta - $10B+ market cap, identity management leader
-        'NET',    # Cloudflare - $30B+ market cap, web security/CDN
-        'S',      # SentinelOne - $6B+ market cap, endpoint security
-
+        "CSCO",  # Cisco - Networking giant with security division
+        "CHKP",  # Check Point - $15B+ market cap, firewall pioneer
+        "CYBR",  # CyberArk - $10B+ market cap, privileged access management
+        "OKTA",  # Okta - $10B+ market cap, identity management leader
+        "NET",  # Cloudflare - $30B+ market cap, web security/CDN
+        "S",  # SentinelOne - $6B+ market cap, endpoint security
         # Tier 3: Mid-cap specialized players
-        'TENB',   # Tenable - $5B+ market cap, vulnerability management
-        'QLYS',   # Qualys - $4B+ market cap, cloud security/compliance
-        'VRNS',   # Varonis - Data security specialist
-        'SAIL',   # SailPoint - Identity governance
-        'RPD',    # Rapid7 - Security analytics
+        "TENB",  # Tenable - $5B+ market cap, vulnerability management
+        "QLYS",  # Qualys - $4B+ market cap, cloud security/compliance
+        "VRNS",  # Varonis - Data security specialist
+        "SAIL",  # SailPoint - Identity governance
+        "RPD",  # Rapid7 - Security analytics
     ]
 
     print(f"\n📋 Prioritized list: {len(priority_tickers)} top companies")
@@ -52,8 +51,12 @@ def main():
 
     # Calculate how many companies we can do per day
     companies_per_day = 25 // 8  # 25 requests / 8 quarters = 3 companies per day
-    print(f"\n💡 With free tier (25 requests/day): ~{companies_per_day} companies per day")
-    print(f"💡 Total time to complete: ~{len(priority_tickers) / companies_per_day:.0f} days")
+    print(
+        f"\n💡 With free tier (25 requests/day): ~{companies_per_day} companies per day"
+    )
+    print(
+        f"💡 Total time to complete: ~{len(priority_tickers) / companies_per_day:.0f} days"
+    )
 
     all_artifacts = []
     request_count = 0
@@ -106,9 +109,12 @@ def main():
     print("\n" + "=" * 70)
     print(f"✅ SCRAPING COMPLETE")
     print(f"📄 SEC filings collected: {len([a for a in all_artifacts if 'form' in a])}")
-    print(f"📞 Transcripts collected: {len([a for a in all_artifacts if a.get('type') == 'transcript'])}")
+    print(
+        f"📞 Transcripts collected: {len([a for a in all_artifacts if a.get('type') == 'transcript'])}"
+    )
     print(f"🔢 Total API requests used: {request_count}/{daily_limit}")
     print("=" * 70)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
