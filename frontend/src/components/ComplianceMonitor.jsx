@@ -79,7 +79,6 @@ function AlertOverview({ summary, alerts, onRefresh, loading, onAcknowledge }) {
 
   // Count unique regulations that have alerts
   const uniqueRegulations = summary?.total_regulations || 0;
-  const criticalRegs = Object.values(summary?.regulations_by_agency || {}).reduce((a, b) => a + b, 0);
 
   return (
     <div style={{ padding: '20px' }}>
