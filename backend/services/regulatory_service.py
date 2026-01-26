@@ -127,16 +127,17 @@ class RegulatoryService:
             List of article dicts from Federal Register
         """
         if not start_date:
-            # Extended to 365 days to capture important historical regulations
-            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+            # Use 180 days to balance coverage vs timeout risk
+            start_date = (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d")
         if not end_date:
             end_date = datetime.now().strftime("%Y-%m-%d")
 
         all_articles = []
 
-        # Search ALL keywords for maximum coverage (not just first 5)
+        # Search top 8 keywords for good coverage without timeout
+        # Full list can cause timeout due to many API calls + LLM validation
         search_terms = (
-            [search_term] if search_term != "cybersecurity" else self.CYBER_KEYWORDS
+            [search_term] if search_term != "cybersecurity" else self.CYBER_KEYWORDS[:8]
         )
 
         for term in search_terms:
