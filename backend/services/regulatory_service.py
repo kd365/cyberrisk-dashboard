@@ -111,6 +111,97 @@ class RegulatoryService:
         "immigration",
     ]
 
+    # =========================================================================
+    # Company Business Focus - For targeted relevance scoring
+    # =========================================================================
+    # Maps tickers to their primary business focus for smarter alert filtering
+    # This prevents irrelevant alerts (e.g., FCC telecom regs for endpoint security)
+    COMPANY_BUSINESS_FOCUS = {
+        # Endpoint Security
+        "CRWD": ["endpoint", "edr", "xdr", "threat_intelligence"],
+        "S": ["endpoint", "edr", "xdr", "ai_security"],
+        # Network Security / Firewall
+        "PANW": ["network", "firewall", "sase", "cloud_security"],
+        "FTNT": ["network", "firewall", "ot_security"],
+        "CHKP": ["network", "firewall", "cloud_security"],
+        # Cloud Security
+        "ZS": ["cloud_security", "sase", "zero_trust"],
+        "NET": ["cloud_security", "cdn", "ddos", "web_security"],
+        "QLYS": ["cloud_security", "vulnerability_management", "compliance"],
+        # Identity / Access Management
+        "OKTA": ["identity", "iam", "sso", "mfa"],
+        "CYBR": ["identity", "pam", "secrets_management"],
+        "SAIL": ["identity", "governance", "compliance"],
+        # Data Security
+        "VRNS": ["data_security", "dlp", "insider_threat"],
+        # Security Operations / Analytics
+        "TENB": ["vulnerability_management", "exposure_management"],
+        "RPD": ["siem", "soar", "vulnerability_management"],
+        # Networking (with security)
+        "CSCO": ["network", "firewall", "iot_security", "telecom"],
+        # Default for unlisted companies
+        "_default": ["general_cyber"],
+    }
+
+    # =========================================================================
+    # Agency-Business Relevance - Which agencies matter for which business types
+    # =========================================================================
+    # Score multipliers: 1.0 = highly relevant, 0.5 = somewhat relevant, 0.2 = rarely relevant
+    AGENCY_BUSINESS_RELEVANCE = {
+        "SEC": {
+            # SEC disclosure rules apply to ALL public companies
+            "_default": 1.0,
+        },
+        "FTC": {
+            # FTC privacy rules apply broadly but especially to identity/data
+            "identity": 1.0,
+            "data_security": 1.0,
+            "cloud_security": 0.8,
+            "_default": 0.7,
+        },
+        "DHS/CISA": {
+            # CISA critical infrastructure - relevant to most cyber companies
+            "network": 1.0,
+            "ot_security": 1.0,
+            "cloud_security": 0.9,
+            "endpoint": 0.8,
+            "_default": 0.7,
+        },
+        "FCC": {
+            # FCC telecom regulations - mostly relevant to network/telecom
+            "telecom": 1.0,
+            "network": 0.6,
+            "iot_security": 0.5,
+            "_default": 0.2,  # Low relevance for pure software companies
+        },
+        "Commerce/NIST": {
+            # NIST standards apply broadly
+            "compliance": 1.0,
+            "_default": 0.8,
+        },
+        "DOJ": {
+            # DOJ enforcement - applies to all
+            "_default": 0.6,
+        },
+        "OCC": {
+            # OCC banking regulations - financial services focus
+            "identity": 0.8,
+            "compliance": 0.8,
+            "_default": 0.4,
+        },
+        "Federal Reserve": {
+            # Fed regulations - financial services focus
+            "identity": 0.8,
+            "compliance": 0.8,
+            "_default": 0.4,
+        },
+        "TREASURY-DEPARTMENT": {
+            # Treasury - financial services
+            "identity": 0.7,
+            "_default": 0.4,
+        },
+    }
+
     def __init__(self):
         """Initialize the regulatory service with Bedrock and Neo4j."""
         self.db = db_service
@@ -310,7 +401,7 @@ class RegulatoryService:
                     # Generate alerts
                     for company in companies:
                         relevance = self._calculate_relevance_score(article, company)
-                        if relevance["score"] >= 0.3:
+                        if relevance["score"] >= 0.5:
                             impact_level = self._determine_impact_level(
                                 relevance["score"], severity
                             )
@@ -538,7 +629,7 @@ class RegulatoryService:
                 for company in companies:
                     relevance = self._calculate_relevance_score(article, company)
 
-                    if relevance["score"] >= 0.3:  # Threshold for creating an alert
+                    if relevance["score"] >= 0.5:  # Threshold for creating an alert
                         impact_level = self._determine_impact_level(
                             relevance["score"], severity
                         )
@@ -880,12 +971,13 @@ REASON: One sentence explanation"""
         self, article: Dict, company: Dict
     ) -> Dict[str, Any]:
         """
-        Calculate TF-IDF style relevance score between regulation and company
+        Calculate relevance score between regulation and company using:
+        1. Agency-business relevance (does this agency's regs apply to this company?)
+        2. Keyword match (does the regulation mention topics relevant to company?)
+        3. Direct company mention (is the company named in the regulation?)
 
-        Scoring breakdown:
-        - Sector match (40%): Company sector vs regulation sectors_affected
-        - Keyword overlap (40%): Company description vs regulation keywords
-        - Base cybersecurity relevance (20%): All cyber companies have some relevance
+        Updated 2026-01-26: Uses business focus mapping to filter irrelevant alerts
+        (e.g., FCC telecom regs should NOT alert endpoint security companies)
 
         Args:
             article: Federal Register article dict
@@ -899,49 +991,109 @@ REASON: One sentence explanation"""
         reg_text = f"{title} {abstract}"
 
         company_name = (company.get("company_name") or "").lower()
-        company_sector = (company.get("sector") or "").lower()
+        ticker = company.get("ticker", "").upper()
         company_desc = (company.get("description") or "").lower()
-        company_text = f"{company_name} {company_sector} {company_desc}"
+        company_text = f"{company_name} {company_desc}"
 
-        # Sector match score (40%)
-        sector_score = 0.0
-        if "cybersecurity" in company_sector or "security" in company_sector:
-            sector_score = 0.4
-        elif "technology" in company_sector:
-            sector_score = 0.2
+        # Get company's business focus areas
+        business_focus = self.COMPANY_BUSINESS_FOCUS.get(
+            ticker, self.COMPANY_BUSINESS_FOCUS["_default"]
+        )
 
-        # Keyword overlap score (40%)
+        # Get agency from article
+        agencies = article.get("agencies", [])
+        agency_slug = agencies[0].get("slug", "") if agencies else "unknown"
+        agency_name = self.AGENCY_NAMES.get(agency_slug, agency_slug.upper())
+
+        # =====================================================================
+        # 1. Agency-Business Relevance Score (0-0.4)
+        # Does this agency typically issue regulations relevant to this company?
+        # =====================================================================
+        agency_relevance = self.AGENCY_BUSINESS_RELEVANCE.get(agency_name, {})
+        agency_score = 0.0
+
+        # Find best matching business focus
+        for focus in business_focus:
+            focus_score = agency_relevance.get(
+                focus, agency_relevance.get("_default", 0.5)
+            )
+            agency_score = max(agency_score, focus_score)
+
+        # Scale to 0-0.4 range
+        agency_score = agency_score * 0.4
+
+        # =====================================================================
+        # 2. Keyword Match Score (0-0.4)
+        # Do keywords in the regulation match the company's focus areas?
+        # =====================================================================
         matched_keywords = []
         keyword_score = 0.0
 
-        # Check which cyber keywords appear in both regulation and company
+        # Check cyber keywords in regulation text
         for keyword in self.CYBER_KEYWORDS:
-            if keyword.lower() in reg_text and keyword.lower() in company_text:
-                matched_keywords.append(keyword)
+            if keyword.lower() in reg_text:
+                # Check if keyword relates to company's business focus
+                keyword_relates = False
+                keyword_lower = keyword.lower()
 
+                # Map keywords to business focus areas
+                keyword_focus_map = {
+                    "endpoint": ["endpoint", "edr", "xdr", "malware", "ransomware"],
+                    "network": ["network", "firewall", "zero trust", "sase"],
+                    "cloud_security": ["cloud", "cspm", "container"],
+                    "identity": ["identity", "authentication", "access", "iam", "pam"],
+                    "data_security": ["data privacy", "dlp", "encryption"],
+                    "vulnerability_management": ["vulnerability", "exposure"],
+                    "compliance": ["compliance", "disclosure", "reporting"],
+                }
+
+                for focus in business_focus:
+                    focus_keywords = keyword_focus_map.get(focus, [])
+                    if any(fk in keyword_lower for fk in focus_keywords):
+                        keyword_relates = True
+                        break
+
+                # If keyword matches or company has general focus, count it
+                if keyword_relates or "general_cyber" in business_focus:
+                    if keyword.lower() in company_text or keyword_relates:
+                        matched_keywords.append(keyword)
+
+        # Score based on relevant keyword matches (diminishing returns)
         if matched_keywords:
-            # More matches = higher score, with diminishing returns
-            keyword_score = min(0.4, 0.1 * len(matched_keywords))
+            keyword_score = min(0.4, 0.15 * len(matched_keywords))
 
-        # Check for company name mentioned in regulation (strong signal)
-        if company_name in reg_text or company.get("ticker", "").lower() in reg_text:
-            keyword_score = 0.4
-            matched_keywords.append(company.get("ticker", company_name))
+        # =====================================================================
+        # 3. Direct Company Mention (0.5 bonus - strong signal)
+        # =====================================================================
+        direct_mention = False
+        if company_name in reg_text or ticker.lower() in reg_text:
+            keyword_score = 0.5
+            matched_keywords.append(f"DIRECT_MENTION:{ticker}")
+            direct_mention = True
 
-        # Base cybersecurity relevance (20%)
-        # All cybersecurity companies have baseline relevance to cyber regulations
-        base_score = 0.2 if "cybersecurity" in company_sector.lower() else 0.1
+        # =====================================================================
+        # 4. Base Score (0.1) - minimal baseline for cybersecurity companies
+        # =====================================================================
+        base_score = 0.1
 
-        total_score = sector_score + keyword_score + base_score
+        # Calculate total score
+        total_score = agency_score + keyword_score + base_score
+
+        # If agency relevance is very low (<0.1), cap total score
+        # This prevents FCC telecom regs from alerting endpoint security companies
+        if agency_score < 0.1 and not direct_mention:
+            total_score = min(total_score, 0.4)
 
         return {
             "score": min(1.0, total_score),
             "matched_keywords": matched_keywords,
             "breakdown": {
-                "sector": sector_score,
-                "keywords": keyword_score,
+                "agency_relevance": round(agency_score, 3),
+                "keywords": round(keyword_score, 3),
                 "base": base_score,
             },
+            "business_focus": business_focus,
+            "agency": agency_name,
         }
 
     def _determine_impact_level(self, relevance_score: float, severity: str) -> str:

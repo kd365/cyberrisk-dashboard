@@ -1,5 +1,5 @@
 # =============================================================================
-# LangChain Agent Service - Claude 3.5 Sonnet Powered Chat
+# LangChain Agent Service - Hybrid Claude Routing (Haiku + Sonnet)
 # =============================================================================
 #
 # Uses LangGraph with AWS Bedrock to provide agentic chat functionality.
@@ -11,11 +11,14 @@
 # - Cleaner tool definitions via @tool decorator
 # - Better error handling and retries
 #
-# Model: Claude 3.5 Sonnet (anthropic.claude-3-5-sonnet-20241022-v2:0)
+# Hybrid Routing (2026-01-26):
+# - Claude 3.5 Haiku for simple queries (list, lookup, status) → 3-5x faster
+# - Claude 3.5 Sonnet for complex queries (analysis, comparison, strategy)
 #
 # =============================================================================
 
 import os
+import re
 import logging
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -32,21 +35,55 @@ logger = logging.getLogger(__name__)
 
 class LangChainAgentService:
     """
-    LangChain-based agent service using Claude 3.5 Sonnet.
+    LangChain-based agent service with hybrid Haiku/Sonnet routing.
 
-    Provides tool-calling chat with automatic iteration handling.
+    Routes simple queries to fast Haiku, complex analysis to Sonnet.
     """
 
-    # Claude 3.5 Sonnet model ID on Bedrock
-    MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    # Model IDs on Bedrock
+    SONNET_MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    HAIKU_MODEL_ID = "anthropic.claude-3-5-haiku-20241022-v1:0"
+
+    # Query patterns that indicate simple queries (use Haiku)
+    SIMPLE_QUERY_PATTERNS = [
+        r"^(list|show|what are|get)\s+(the\s+)?(companies|tickers|tracked)",
+        r"^(what|show|get)\s+(is|are)\s+(the\s+)?(stock\s+)?price",
+        r"^(what|show|get)\s+companies",
+        r"^(how many|count)",
+        r"^(what|show)\s+alerts",
+        r"^help",
+        r"^hi|hello|hey",
+        r"^(show|list|get)\s+(me\s+)?(the\s+)?sentiment",
+        r"^(show|list|get)\s+(me\s+)?(the\s+)?forecast",
+        r"^(what|show|get)\s+(is|are)\s+\w{2,5}('s)?\s+(price|stock)",
+    ]
+
+    # Query patterns that indicate complex queries (use Sonnet)
+    COMPLEX_QUERY_PATTERNS = [
+        r"(analyze|analysis|compare|comparison|evaluate|assess)",
+        r"(strategy|strategic|implications|impact)",
+        r"(why|how come|explain|reasoning)",
+        r"(recommend|suggest|advise|should i)",
+        r"(risk|opportunity|threat|advantage)",
+        r"(summary|summarize|overview).*(multiple|all|several)",
+        r"(trend|pattern|insight)",
+        r"(predict|forecast|outlook).*(market|industry|sector)",
+    ]
 
     def __init__(self):
-        """Initialize the LangChain agent service."""
+        """Initialize the LangChain agent service with hybrid routing."""
         self.region = os.environ.get("AWS_REGION", "us-west-2")
 
-        # Initialize Claude 3.5 Sonnet via Bedrock
-        self.llm = ChatBedrock(
-            model_id=self.MODEL_ID,
+        # Initialize Haiku (fast, for simple queries)
+        self.llm_haiku = ChatBedrock(
+            model_id=self.HAIKU_MODEL_ID,
+            region_name=self.region,
+            model_kwargs={"max_tokens": 4096, "temperature": 0.5, "top_p": 0.9},
+        )
+
+        # Initialize Sonnet (powerful, for complex analysis)
+        self.llm_sonnet = ChatBedrock(
+            model_id=self.SONNET_MODEL_ID,
             region_name=self.region,
             model_kwargs={"max_tokens": 4096, "temperature": 0.7, "top_p": 0.9},
         )
@@ -57,16 +94,59 @@ class LangChainAgentService:
         # Get system prompt (dynamically loads companies from RDS)
         self.system_prompt = get_system_prompt()
 
-        # Create the agent using LangGraph's create_react_agent
-        # This returns a compiled graph that handles tool calling automatically
-        self.agent = create_react_agent(
-            model=self.llm,
+        # Create two agents for hybrid routing
+        self.agent_haiku = create_react_agent(
+            model=self.llm_haiku,
             tools=self.tools,
             prompt=self.system_prompt,
         )
 
+        self.agent_sonnet = create_react_agent(
+            model=self.llm_sonnet,
+            tools=self.tools,
+            prompt=self.system_prompt,
+        )
+
+        # Keep backward compatibility
+        self.llm = self.llm_sonnet
+        self.agent = self.agent_sonnet
+
         # Memory service (lazy loaded)
         self._memory_service = None
+
+    def _classify_query_complexity(self, message: str) -> str:
+        """
+        Classify query as 'simple' or 'complex' for model routing.
+
+        Args:
+            message: User's query
+
+        Returns:
+            'simple' for Haiku, 'complex' for Sonnet
+        """
+        message_lower = message.lower().strip()
+
+        # Check for complex patterns first (they take priority)
+        for pattern in self.COMPLEX_QUERY_PATTERNS:
+            if re.search(pattern, message_lower):
+                logger.info(f"Query classified as COMPLEX (matched: {pattern})")
+                return "complex"
+
+        # Check for simple patterns
+        for pattern in self.SIMPLE_QUERY_PATTERNS:
+            if re.search(pattern, message_lower):
+                logger.info(f"Query classified as SIMPLE (matched: {pattern})")
+                return "simple"
+
+        # Default to complex for longer queries, simple for short
+        word_count = len(message.split())
+        if word_count > 15:
+            logger.info(f"Query classified as COMPLEX (word count: {word_count})")
+            return "complex"
+
+        # Default to Haiku for unclassified short queries
+        logger.info("Query classified as SIMPLE (default)")
+        return "simple"
 
     @property
     def memory_service(self):
@@ -90,6 +170,8 @@ class LangChainAgentService:
         """
         Process a chat message and return response.
 
+        Uses hybrid routing: Haiku for simple queries, Sonnet for complex analysis.
+
         Args:
             message: User's message
             session_id: Conversation session ID
@@ -102,6 +184,15 @@ class LangChainAgentService:
         try:
             # Determine user_id for semantic memory (prefer email, fallback to session)
             user_id = user_email or session_id
+
+            # Classify query complexity for hybrid routing
+            complexity = self._classify_query_complexity(message)
+            selected_agent = (
+                self.agent_haiku if complexity == "simple" else self.agent_sonnet
+            )
+            model_name = (
+                "claude-3.5-haiku" if complexity == "simple" else "claude-3.5-sonnet"
+            )
 
             # Get conversation history from PostgreSQL
             chat_history = self._get_chat_history(session_id)
@@ -126,9 +217,9 @@ class LangChainAgentService:
             # Add current user message
             messages.append(HumanMessage(content=message))
 
-            # Invoke the LangGraph agent
+            # Invoke the selected agent (Haiku or Sonnet)
             # Higher recursion_limit allows complex multi-tool queries
-            result = self.agent.invoke(
+            result = selected_agent.invoke(
                 {"messages": messages},
                 config={"recursion_limit": 25},
             )
@@ -162,7 +253,8 @@ class LangChainAgentService:
                 "response": response_text,
                 "session_id": session_id,
                 "tools_used": tools_used,
-                "model": "claude-3.5-sonnet",
+                "model": model_name,
+                "query_complexity": complexity,
                 "timestamp": datetime.now().isoformat(),
                 "semantic_memory_used": bool(semantic_context),
             }

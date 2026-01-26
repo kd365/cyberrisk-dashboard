@@ -77,15 +77,26 @@ const IMPACT_COLORS = {
 function AlertOverview({ summary, alerts, onRefresh, loading, onAcknowledge }) {
   const pendingAlerts = alerts?.filter(a => a.status === 'UNACKNOWLEDGED') || [];
 
+  // Count unique regulations that have alerts
+  const uniqueRegulations = summary?.total_regulations || 0;
+  const criticalRegs = Object.values(summary?.regulations_by_agency || {}).reduce((a, b) => a + b, 0);
+
   return (
     <div style={{ padding: '20px' }}>
-      {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+      {/* Primary Metric: Regulations (not alerts) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+        <div style={{ ...styles.summaryCard, borderLeft: '4px solid #3b82f6' }}>
+          <div style={{ fontSize: '36px', fontWeight: '700', color: '#3b82f6' }}>
+            {uniqueRegulations}
+          </div>
+          <div style={{ color: '#1e293b', marginTop: '4px', fontWeight: '600' }}>Active Regulations</div>
+          <div style={{ color: '#64748b', fontSize: '12px', marginTop: '2px' }}>From tracked agencies</div>
+        </div>
         <div style={styles.summaryCard}>
           <div style={{ fontSize: '32px', fontWeight: '700', color: '#dc2626' }}>
             {summary?.alerts_by_impact?.CRITICAL || 0}
           </div>
-          <div style={{ color: '#64748b', marginTop: '4px' }}>Critical Alerts</div>
+          <div style={{ color: '#64748b', marginTop: '4px' }}>Critical Impact</div>
         </div>
         <div style={styles.summaryCard}>
           <div style={{ fontSize: '32px', fontWeight: '700', color: '#f59e0b' }}>
@@ -94,17 +105,29 @@ function AlertOverview({ summary, alerts, onRefresh, loading, onAcknowledge }) {
           <div style={{ color: '#64748b', marginTop: '4px' }}>High Impact</div>
         </div>
         <div style={styles.summaryCard}>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6' }}>
-            {summary?.total_active_alerts || 0}
-          </div>
-          <div style={{ color: '#64748b', marginTop: '4px' }}>Total Active</div>
-        </div>
-        <div style={styles.summaryCard}>
           <div style={{ fontSize: '32px', fontWeight: '700', color: '#22c55e' }}>
             {summary?.alerts_by_status?.ACKNOWLEDGED || 0}
           </div>
           <div style={{ color: '#64748b', marginTop: '4px' }}>Acknowledged</div>
         </div>
+      </div>
+
+      {/* Note explaining alerts vs regulations */}
+      <div style={{
+        marginBottom: '16px',
+        padding: '8px 12px',
+        background: '#f0f9ff',
+        borderRadius: '6px',
+        fontSize: '12px',
+        color: '#0369a1',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <Icons.Alert />
+        <span>
+          <strong>{summary?.total_active_alerts || 0} company-specific alerts</strong> generated from {uniqueRegulations} regulations × tracked companies (only shown when relevance score ≥50%)
+        </span>
       </div>
 
       {/* Agency Breakdown */}
@@ -150,14 +173,14 @@ function AlertOverview({ summary, alerts, onRefresh, loading, onAcknowledge }) {
           <div>
             <div style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Relevance Score (%)</div>
             <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6' }}>
-              <div><strong>Calculation:</strong> Sector (40%) + Keywords (40%) + Base (20%)</div>
+              <div><strong>Calculation:</strong> Agency Relevance (40%) + Keywords (40%) + Base (10%)</div>
               <div style={{ marginTop: '4px', paddingLeft: '8px', borderLeft: '2px solid #e2e8f0' }}>
-                • <strong>Sector:</strong> Cybersecurity=40%, Tech=20%<br/>
-                • <strong>Keywords:</strong> 10% per match (max 40%)<br/>
-                • <strong>Base:</strong> Cyber companies=20%
+                • <strong>Agency:</strong> SEC=high for all, FCC=low for software<br/>
+                • <strong>Keywords:</strong> 15% per business-relevant match<br/>
+                • <strong>Threshold:</strong> ≥50% required to generate alert
               </div>
               <div style={{ marginTop: '6px' }}>
-                <strong>70%+</strong> → CRITICAL/HIGH | <strong>50-70%</strong> → HIGH | <strong>30-50%</strong> → MEDIUM
+                <strong>70%+</strong> → CRITICAL | <strong>60-70%</strong> → HIGH | <strong>50-60%</strong> → MEDIUM
               </div>
             </div>
           </div>
