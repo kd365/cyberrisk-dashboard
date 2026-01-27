@@ -370,109 +370,176 @@ function RegulationTimeline({ regulations, summary }) {
 }
 
 // ============================================================================
-// Impact Analysis (Heat Map) Tab
+// Impact Analysis - Company Risk Exposure
 // ============================================================================
 
 function ImpactAnalysis({ alerts, companies }) {
-  // Group alerts by company and regulation
-  const heatMapData = {};
-  const regulationSet = new Set();
+  // Aggregate by company - show meaningful metrics
+  const companyStats = {};
 
   (alerts || []).forEach(alert => {
-    if (!heatMapData[alert.ticker]) {
-      heatMapData[alert.ticker] = {};
+    const ticker = alert.ticker;
+    if (!companyStats[ticker]) {
+      companyStats[ticker] = {
+        ticker,
+        companyName: alert.company_name,
+        totalAlerts: 0,
+        criticalCount: 0,
+        highCount: 0,
+        mediumCount: 0,
+        lowCount: 0,
+        avgRelevance: 0,
+        maxRelevance: 0,
+        agencies: new Set(),
+        relevanceSum: 0
+      };
     }
-    const regKey = `${alert.agency}: ${alert.regulation_title?.substring(0, 30)}...`;
-    heatMapData[alert.ticker][regKey] = {
-      score: alert.relevance_score,
-      impact: alert.impact_level
-    };
-    regulationSet.add(regKey);
+    const stats = companyStats[ticker];
+    stats.totalAlerts++;
+    stats.relevanceSum += alert.relevance_score || 0;
+    stats.maxRelevance = Math.max(stats.maxRelevance, alert.relevance_score || 0);
+    stats.agencies.add(alert.agency);
+
+    if (alert.impact_level === 'CRITICAL') stats.criticalCount++;
+    else if (alert.impact_level === 'HIGH') stats.highCount++;
+    else if (alert.impact_level === 'MEDIUM') stats.mediumCount++;
+    else stats.lowCount++;
   });
 
-  const regulations = Array.from(regulationSet);
-  const tickers = Object.keys(heatMapData);
+  // Calculate averages and convert to array
+  const companyData = Object.values(companyStats)
+    .map(stats => ({
+      ...stats,
+      avgRelevance: stats.totalAlerts > 0 ? stats.relevanceSum / stats.totalAlerts : 0,
+      agencyCount: stats.agencies.size,
+      agencies: Array.from(stats.agencies)
+    }))
+    .sort((a, b) => (b.criticalCount + b.highCount) - (a.criticalCount + a.highCount));
 
-  const getHeatColor = (score, impact) => {
-    if (!score) return '#f1f5f9';
-    if (impact === 'CRITICAL' || score >= 0.7) return '#fecaca';
-    if (impact === 'HIGH' || score >= 0.5) return '#fed7aa';
-    if (score >= 0.3) return '#bfdbfe';
-    return '#d1fae5';
+  const getRiskLevel = (stats) => {
+    if (stats.criticalCount > 0) return { level: 'CRITICAL', color: '#dc2626' };
+    if (stats.highCount > 0) return { level: 'HIGH', color: '#f59e0b' };
+    if (stats.mediumCount > 0) return { level: 'MEDIUM', color: '#3b82f6' };
+    return { level: 'LOW', color: '#22c55e' };
   };
 
   return (
     <div style={{ padding: '20px' }}>
       <h3 style={{ margin: '0 0 8px 0', color: '#1e293b', fontSize: '16px' }}>
-        Regulatory Impact Heat Map
+        Company Regulatory Exposure
       </h3>
       <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '16px' }}>
-        Color intensity indicates relevance score. Red = High impact, Yellow = Medium, Blue = Low, Green = Minimal.
+        Aggregated view of regulatory impact by company. Sorted by critical + high impact alerts.
       </p>
 
-      {tickers.length === 0 || regulations.length === 0 ? (
+      {companyData.length === 0 ? (
         <div style={styles.emptyState}>
           <Icons.Chart />
           <p>No regulatory impact data available. Ingest regulations to generate impact analysis.</p>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={styles.heatMapTable}>
-            <thead>
-              <tr>
-                <th style={styles.heatMapHeader}>Company</th>
-                {regulations.map(reg => (
-                  <th key={reg} style={{ ...styles.heatMapHeader, maxWidth: '120px', writingMode: 'vertical-rl', transform: 'rotate(180deg)', height: '150px', fontSize: '11px' }}>
-                    {reg}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tickers.map(ticker => (
-                <tr key={ticker}>
-                  <td style={styles.heatMapCell}><strong>{ticker}</strong></td>
-                  {regulations.map(reg => {
-                    const data = heatMapData[ticker]?.[reg];
-                    return (
-                      <td
-                        key={reg}
-                        style={{
-                          ...styles.heatMapCell,
-                          backgroundColor: getHeatColor(data?.score, data?.impact),
-                          textAlign: 'center',
-                          cursor: data ? 'pointer' : 'default'
-                        }}
-                        title={data ? `${ticker}: ${(data.score * 100).toFixed(0)}% relevance (${data.impact})` : 'No impact'}
-                      >
-                        {data ? (data.score * 100).toFixed(0) + '%' : '-'}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+          {companyData.slice(0, 20).map(stats => {
+            const risk = getRiskLevel(stats);
+            return (
+              <div key={stats.ticker} style={{
+                background: '#fff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '16px',
+                borderLeft: `4px solid ${risk.color}`
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>{stats.ticker}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>{stats.companyName}</div>
+                  </div>
+                  <div style={{
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    backgroundColor: `${risk.color}15`,
+                    color: risk.color
+                  }}>
+                    {risk.level} RISK
+                  </div>
+                </div>
+
+                {/* Impact breakdown bar */}
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+                    Impact Distribution ({stats.totalAlerts} alerts)
+                  </div>
+                  <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', background: '#f1f5f9' }}>
+                    {stats.criticalCount > 0 && (
+                      <div style={{ width: `${(stats.criticalCount / stats.totalAlerts) * 100}%`, background: '#dc2626' }} title={`Critical: ${stats.criticalCount}`} />
+                    )}
+                    {stats.highCount > 0 && (
+                      <div style={{ width: `${(stats.highCount / stats.totalAlerts) * 100}%`, background: '#f59e0b' }} title={`High: ${stats.highCount}`} />
+                    )}
+                    {stats.mediumCount > 0 && (
+                      <div style={{ width: `${(stats.mediumCount / stats.totalAlerts) * 100}%`, background: '#3b82f6' }} title={`Medium: ${stats.mediumCount}`} />
+                    )}
+                    {stats.lowCount > 0 && (
+                      <div style={{ width: `${(stats.lowCount / stats.totalAlerts) * 100}%`, background: '#22c55e' }} title={`Low: ${stats.lowCount}`} />
+                    )}
+                  </div>
+                </div>
+
+                {/* Stats row */}
+                <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Avg Relevance: </span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{(stats.avgRelevance * 100).toFixed(0)}%</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Agencies: </span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{stats.agencyCount}</span>
+                  </div>
+                </div>
+
+                {/* Agency tags */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
+                  {stats.agencies.slice(0, 4).map(agency => (
+                    <span key={agency} style={{
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      background: '#f1f5f9',
+                      borderRadius: '4px',
+                      color: '#475569'
+                    }}>
+                      {agency}
+                    </span>
+                  ))}
+                  {stats.agencies.length > 4 && (
+                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>+{stats.agencies.length - 4} more</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: '16px', marginTop: '16px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '16px', marginTop: '20px', flexWrap: 'wrap', padding: '12px', background: '#f8fafc', borderRadius: '6px' }}>
+        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Impact Legend:</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#fecaca', borderRadius: '2px' }} />
-          <span style={{ fontSize: '12px', color: '#64748b' }}>Critical/High (70%+)</span>
+          <div style={{ width: '12px', height: '12px', backgroundColor: '#dc2626', borderRadius: '2px' }} />
+          <span style={{ fontSize: '12px', color: '#64748b' }}>Critical</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#fed7aa', borderRadius: '2px' }} />
-          <span style={{ fontSize: '12px', color: '#64748b' }}>High (50-70%)</span>
+          <div style={{ width: '12px', height: '12px', backgroundColor: '#f59e0b', borderRadius: '2px' }} />
+          <span style={{ fontSize: '12px', color: '#64748b' }}>High</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#bfdbfe', borderRadius: '2px' }} />
-          <span style={{ fontSize: '12px', color: '#64748b' }}>Medium (30-50%)</span>
+          <div style={{ width: '12px', height: '12px', backgroundColor: '#3b82f6', borderRadius: '2px' }} />
+          <span style={{ fontSize: '12px', color: '#64748b' }}>Medium</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <div style={{ width: '16px', height: '16px', backgroundColor: '#d1fae5', borderRadius: '2px' }} />
-          <span style={{ fontSize: '12px', color: '#64748b' }}>Low (&lt;30%)</span>
+          <div style={{ width: '12px', height: '12px', backgroundColor: '#22c55e', borderRadius: '2px' }} />
+          <span style={{ fontSize: '12px', color: '#64748b' }}>Low</span>
         </div>
       </div>
     </div>

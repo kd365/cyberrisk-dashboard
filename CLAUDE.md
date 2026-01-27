@@ -8,6 +8,58 @@
 
 A comprehensive cybersecurity risk analytics platform analyzing SEC filings, earnings transcripts, and financial data for 30+ cybersecurity companies. Features AI-powered sentiment analysis, knowledge graph exploration, price forecasting, and a conversational chatbot assistant.
 
+---
+
+## Primary Architecture Files
+
+### Backend Core (Flask API)
+| File | Purpose |
+|------|---------|
+| [app.py](backend/app.py) | Main Flask application, all API endpoints |
+| [langchain_agent.py](backend/services/langchain_agent.py) | **LangGraph agent** with hybrid Haiku/Sonnet routing |
+| [langchain_tools.py](backend/services/langchain_tools.py) | 25 tools for agent (sentiment, forecast, graph queries, regulatory) |
+| [prompts.py](backend/services/prompts.py) | System prompt with anti-hallucination rules |
+
+### Data Services
+| File | Purpose |
+|------|---------|
+| [database_service.py](backend/services/database_service.py) | PostgreSQL CRUD (companies, artifacts, regulations) |
+| [neo4j_service.py](backend/services/neo4j_service.py) | Neo4j graph database operations |
+| [gds_service.py](backend/services/gds_service.py) | Graph Data Science analytics (PageRank, Louvain) |
+| [memory_service.py](backend/services/memory_service.py) | Mem0 semantic memory + pgvector |
+
+### Feature Services
+| File | Purpose |
+|------|---------|
+| [regulatory_service.py](backend/services/regulatory_service.py) | Federal Register API, relevance scoring, alerts |
+| [comprehend_service.py](backend/services/comprehend_service.py) | AWS Comprehend NLP sentiment analysis |
+| [scraper.py](backend/services/scraper.py) | SEC EDGAR + Alpha Vantage data collection |
+| [graph_builder_service.py](backend/services/graph_builder_service.py) | LLM entity extraction → Neo4j |
+
+### Frontend (React)
+| File | Purpose |
+|------|---------|
+| [Dashboard.jsx](frontend/src/components/Dashboard.jsx) | Main navigation, tab routing |
+| [GraphRAGAssistant.jsx](frontend/src/components/GraphRAGAssistant.jsx) | AI chat interface + competitive intelligence |
+| [ComplianceMonitor.jsx](frontend/src/components/ComplianceMonitor.jsx) | Regulatory alerts dashboard |
+| [AuthProvider.jsx](frontend/src/components/AuthProvider.jsx) | Cognito authentication |
+
+### Infrastructure
+| File | Purpose |
+|------|---------|
+| [terraform/](terraform/) | AWS infrastructure as code |
+| [.github/workflows/](/.github/workflows/) | CI/CD pipelines |
+| [scripts/hibernate.sh](scripts/hibernate.sh) | Cost management - stop resources |
+| [scripts/wakeup.sh](scripts/wakeup.sh) | Cost management - restart resources |
+
+### Archived Files
+Development artifacts, test results, and one-time scripts have been moved to `archive/`:
+- `archive/test-results/` - Agent test logs
+- `archive/raw-data/` - JSON data dumps, ad-hoc scripts
+- `archive/one-time-scripts/` - Migration scripts
+
+---
+
 ## CRITICAL: AWS Profile Requirement
 
 **ALWAYS use the `cyber-risk` AWS profile when working in this directory.**
@@ -773,5 +825,72 @@ References SEC Cybersecurity Disclosure Rule (effective 2023-12-18, 8-K Item 1.0
    - **Extended date window**: 90 days → 365 days to capture historical regulations like SEC 2023 Disclosure Rule
    - To test: Clear existing data and re-ingest via the Regulatory Alerts tab
 
+6. **Async Ingestion with Polling** (2026-01-26):
+   - **Problem**: CloudFront/ALB 30-60s timeout caused HTML error page when ingestion took too long
+   - **Solution**: Background threading with polling
+   - **Backend changes** ([regulatory_service.py](backend/services/regulatory_service.py)):
+     - Added `start_ingestion_async()` - spawns background thread, returns immediately
+     - Added `get_ingestion_status()` - returns progress (0-100%), status, message
+     - Added `_ingestion_worker()` - actual ingestion logic with progress updates
+   - **API changes** ([app.py](backend/app.py)):
+     - `POST /api/regulatory/ingest` now returns `202 Accepted` and runs async
+     - Added `GET /api/regulatory/ingest/status` for polling
+   - **Frontend changes** ([ComplianceMonitor.jsx](frontend/src/components/ComplianceMonitor.jsx)):
+     - Added progress bar showing percentage and current article being processed
+     - Polls `/api/regulatory/ingest/status` every 2 seconds
+     - Shows completion alert with stats when done
+
+7. **Keyword Modernization & Cost Optimization** (2026-01-26):
+   - **Updated CYBER_KEYWORDS** (22 terms) for 2026 regulatory landscape:
+     - Added AI governance: `artificial intelligence security`, `model risk management`
+     - Added SBOM: `software bill of materials`, `sbom`
+     - Added resilience: `cyber resilience` (DORA trend)
+     - Made terms specific: `data privacy` (vs `privacy`), `cryptography` (vs `encryption`)
+     - Removed trap keywords: `privacy`, `disclosure`, `authentication` (too broad)
+   - **Added NON_CYBER_KEYWORDS** negative filter (13 terms):
+     - Fast-fail filter runs BEFORE Bedrock LLM validation
+     - Filters: `motor vehicle`, `dealer`, `livestock`, `agriculture`, `medicare`, etc.
+     - Reduces Bedrock API costs by skipping obvious non-cyber regulations
+   - **Stats now show 3 filter stages**:
+     - `negative_filtered` - Skipped by keyword filter (fast/free)
+     - `regulations_skipped` - Skipped by LLM validation (slow/costs $)
+     - `regulations_created` - Final count
+
 ---
-*Last Updated: 2026-01-25*
+
+### 2026-01-26: Hybrid Model Routing + Smarter Relevance Scoring
+
+**Problem 1 - Latency**: Agent used Claude 3.5 Sonnet for all queries, causing high latency on simple lookups.
+
+**Problem 2 - Irrelevant Alerts**: CrowdStrike (endpoint security) was getting alerts for FCC telecom regulations because relevance scoring was too generic (all cyber companies scored ~60%).
+
+**Fix 1 - Hybrid Routing** ([langchain_agent.py](backend/services/langchain_agent.py)):
+- Added query complexity classification with regex patterns
+- Simple queries → Claude 3.5 Haiku (3-5x faster)
+- Complex queries → Claude 3.5 Sonnet (deeper analysis)
+- Response includes `model` and `query_complexity` fields
+
+```python
+SIMPLE_QUERY_PATTERNS = [
+    r"^(list|show|what are|get)\s+(the\s+)?(companies|tickers|tracked)",
+    r"^(how many|count)", r"^help", r"^hi|hello|hey",
+]
+COMPLEX_QUERY_PATTERNS = [
+    r"(analyze|analysis|compare|comparison|evaluate|assess)",
+    r"(strategy|strategic|implications|impact)",
+    r"(recommend|suggest|advise|should i)",
+]
+```
+
+**Fix 2 - Business-Aware Relevance** ([regulatory_service.py](backend/services/regulatory_service.py)):
+- Added `COMPANY_BUSINESS_FOCUS` mapping (ticker → business areas)
+- Added `AGENCY_BUSINESS_RELEVANCE` (agency → business relevance scores)
+- FCC now scores 0.2 for pure software companies (was ~0.6)
+- Raised relevance threshold from 0.3 to 0.5
+
+**Fix 3 - Dashboard Prioritization** ([ComplianceMonitor.jsx](frontend/src/components/ComplianceMonitor.jsx)):
+- Primary metric changed to "Active Regulations" (35) instead of alert count (1050)
+- Added explanation: "Alerts = regulations × companies"
+
+---
+*Last Updated: 2026-01-26*
