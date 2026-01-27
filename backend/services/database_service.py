@@ -705,6 +705,34 @@ class DatabaseService:
             print(f"⚠️  Error getting regulations: {e}")
             return []
 
+    def clear_regulations(self) -> bool:
+        """
+        Clear all regulations and alerts for fresh ingestion
+
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = self._get_connection()
+        if not conn:
+            return False
+
+        try:
+            cursor = conn.cursor()
+            # Delete alerts first (foreign key constraint)
+            cursor.execute("DELETE FROM regulatory_alerts")
+            alerts_deleted = cursor.rowcount
+            # Then delete regulations
+            cursor.execute("DELETE FROM regulations")
+            regs_deleted = cursor.rowcount
+            conn.commit()
+            cursor.close()
+            print(f"✅ Cleared {regs_deleted} regulations and {alerts_deleted} alerts")
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️  Error clearing regulations: {e}")
+            return False
+
     # =========================================================================
     # REGULATORY ALERT CRUD OPERATIONS
     # =========================================================================
