@@ -250,7 +250,7 @@ def synthesize_response(state: AgentState, synthesis_llm) -> AgentState:
     the LLM entirely and return a canned response. This prevents any
     possibility of hallucination for no-data cases.
     """
-    tool_output = state.get("tool_output", {})
+    tool_output = state.get("tool_output") or {}  # Handle None explicitly
     query = state["query"]
     tool_output_str = json.dumps(tool_output, default=str) if tool_output else ""
 
