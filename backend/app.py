@@ -1869,6 +1869,103 @@ def chat():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/chat/stream", methods=["POST"])
+def chat_stream():
+    """
+    Streaming chat endpoint with Server-Sent Events (SSE).
+
+    Streams status updates as the agent processes the query:
+    - Routing query...
+    - Searching documents...
+    - Generating response...
+    - Final response
+
+    This provides real-time feedback to users during processing.
+
+    Request body (same as /api/chat):
+        {
+            "message": "user's message",
+            "session_id": "optional session ID",
+            "user_email": "optional email for tracking"
+        }
+
+    Response: text/event-stream with SSE events
+        data: {"type": "status", "message": "...", "step": 1}
+        data: {"type": "status", "message": "...", "step": 2}
+        data: {"type": "response", "data": {...final response...}}
+    """
+    from flask import Response, stream_with_context
+
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        message = data.get("message", "").strip()
+        if not message:
+            return jsonify({"error": "Message is required"}), 400
+
+        session_id = data.get("session_id")
+        user_email = data.get("user_email")
+
+        # Get auth token if present
+        auth_header = request.headers.get("Authorization", "")
+        auth_token = None
+        if auth_header.startswith("Bearer "):
+            auth_token = auth_header.split(" ", 1)[1]
+
+        # Get LLM service
+        llm_service = get_llm_chat()
+        if not llm_service:
+            return (
+                jsonify(
+                    {
+                        "error": "LLM service not available",
+                        "message": "The AI assistant is currently unavailable.",
+                    }
+                ),
+                503,
+            )
+
+        # Generate session ID if not provided
+        if not session_id:
+            import uuid
+            session_id = str(uuid.uuid4())
+
+        def generate():
+            """Generator for SSE stream."""
+            try:
+                for event in llm_service.chat_stream(
+                    message=message,
+                    session_id=session_id,
+                    user_email=user_email,
+                    auth_token=auth_token,
+                ):
+                    yield f"data: {event}\n\n"
+            except Exception as e:
+                import json as json_module
+                error_event = json_module.dumps({
+                    "type": "error",
+                    "message": str(e)
+                })
+                yield f"data: {error_event}\n\n"
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+                "Connection": "keep-alive"
+            }
+        )
+
+    except Exception as e:
+        print(f"Error in chat_stream: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/chat/history/<session_id>", methods=["GET"])
 def get_chat_history(session_id):
     """

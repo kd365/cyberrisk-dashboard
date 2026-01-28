@@ -5,13 +5,83 @@
 # Wraps existing tool implementations as LangChain-compatible tools
 # using the @tool decorator for use with Claude 3.5 Sonnet agent.
 #
+# ARCHITECTURE NOTE (2026-01-28): Tools use hard-coded empty result handling
+# to prevent hallucination. When no data is found, tools return a structured
+# NO_DATA response that the synthesis layer MUST respect.
+#
 # =============================================================================
 
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
 from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Anti-Hallucination: Structured Empty Result Handling
+# =============================================================================
+
+
+def no_data_response(
+    data_type: str,
+    entity: str = None,
+    reason: str = None
+) -> Dict[str, Any]:
+    """
+    Return a structured no-data response that forces the agent to acknowledge
+    missing data rather than hallucinate.
+
+    This is a HARD CONSTRAINT - the synthesis layer must respect this flag
+    and inform the user that data is unavailable.
+
+    The synthesizer checks for:
+    - NO_DATA=True or status="no_data" → Report data unavailable
+    - SYSTEM_NOTIFICATION in message → Short-circuit LLM, return canned response
+
+    Args:
+        data_type: What kind of data was requested (e.g., "sentiment", "forecast")
+        entity: The entity queried (e.g., ticker symbol)
+        reason: Optional reason why data is unavailable
+
+    Returns:
+        Structured dict with NO_DATA flag that agent must respect
+    """
+    response = {
+        "status": "no_data",
+        "NO_DATA": True,
+        "data_type": data_type,
+        "message": f"SYSTEM_NOTIFICATION: NO_DATA_FOUND for {data_type}" + (f" ({entity})" if entity else "") + ". Do not guess.",
+    }
+    if entity:
+        response["entity"] = entity
+    if reason:
+        response["reason"] = reason
+    return response
+
+
+def error_response(error: str, operation: str = None) -> Dict[str, Any]:
+    """
+    Return a structured error response for tool failures.
+
+    The synthesizer checks for:
+    - ERROR=True or status="error" → Report retrieval failure
+    - Never try to fill in with hallucinated data
+
+    Args:
+        error: Error message
+        operation: What operation failed
+
+    Returns:
+        Structured dict with ERROR flag
+    """
+    return {
+        "status": "error",
+        "ERROR": True,
+        "error": str(error),
+        "operation": operation,
+        "message": f"SYSTEM_NOTIFICATION: TOOL_ERROR. Failed to retrieve data" + (f" ({operation})" if operation else "") + ". Do not guess.",
+    }
 
 # Lazy-loaded service references
 _db_service = None
@@ -70,6 +140,10 @@ def list_companies() -> dict:
     try:
         db = get_db_service()
         companies = db.get_all_companies()
+
+        if not companies:
+            return no_data_response("company list", reason="No companies in database")
+
         return {
             "companies": [
                 {
@@ -82,7 +156,7 @@ def list_companies() -> dict:
             "count": len(companies),
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(str(e), "list_companies")
 
 
 @tool
@@ -99,7 +173,7 @@ def get_company_info(ticker: str) -> dict:
         db = get_db_service()
         company = db.get_company(ticker)
         if not company:
-            return {"error": f"Company {ticker} not found"}
+            return no_data_response("company information", ticker, "Company not tracked in database")
 
         from services.forecast_cache import get_stock_data
 
@@ -114,7 +188,7 @@ def get_company_info(ticker: str) -> dict:
             "price_change_pct": stock_data.get("change_pct") if stock_data else None,
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(str(e), f"get_company_info({ticker})")
 
 
 @tool
@@ -206,12 +280,12 @@ def get_sentiment(ticker: str) -> dict:
             artifacts = s3_service.get_artifacts_table()
 
             if not artifacts:
-                return {"error": f"No artifacts available for analysis"}
+                return no_data_response("sentiment analysis", ticker, "No artifacts available for analysis")
 
             # Filter for this ticker
             ticker_artifacts = [a for a in artifacts if a.get("ticker") == ticker]
             if not ticker_artifacts:
-                return {"error": f"No documents found for {ticker}"}
+                return no_data_response("sentiment analysis", ticker, "No documents found for this company")
 
             # Run Comprehend analysis
             comprehend = ComprehendService()
@@ -220,7 +294,7 @@ def get_sentiment(ticker: str) -> dict:
             )
 
             if not result:
-                return {"error": f"Sentiment analysis failed for {ticker}"}
+                return no_data_response("sentiment analysis", ticker, "Analysis returned no results")
 
             # Cache the result
             cache = get_sentiment_cache()
@@ -236,10 +310,10 @@ def get_sentiment(ticker: str) -> dict:
             }
 
         except Exception as analysis_error:
-            return {"error": f"Analysis failed: {str(analysis_error)}"}
+            return error_response(str(analysis_error), f"sentiment_analysis({ticker})")
 
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(str(e), f"get_sentiment({ticker})")
 
 
 @tool
@@ -312,10 +386,11 @@ def get_forecast(ticker: str, days: int = 30) -> dict:
                 "computed_at": forecast.get("cached_at"),
             }
 
-        return {"error": f"Could not generate forecast for {ticker}"}
+        # Both models failed - return structured no-data response
+        return no_data_response("price forecast", ticker, "Forecasting models unavailable")
 
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(str(e), f"get_forecast({ticker})")
 
 
 @tool
@@ -1084,22 +1159,19 @@ def search_documents(query: str, ticker: Optional[str] = None, limit: int = 5) -
     """
     rag = get_rag_service()
     if not rag:
-        return {
-            "error": "RAG service not available",
-            "message": "Document search is not connected",
-        }
+        return error_response("RAG service not available", "search_documents")
 
     try:
         ticker = ticker.upper() if ticker else None
         results = rag.search(query, ticker=ticker, limit=limit)
 
+        # HARD CONSTRAINT: Return structured no-data response for empty results
         if not results:
-            return {
-                "query": query,
-                "ticker": ticker,
-                "results": [],
-                "message": "No matching documents found. Try a different query or check if documents have been indexed.",
-            }
+            return no_data_response(
+                "document search results",
+                ticker,
+                f"No documents matching '{query}' found in indexed filings"
+            )
 
         return {
             "query": query,
@@ -1118,7 +1190,7 @@ def search_documents(query: str, ticker: Optional[str] = None, limit: int = 5) -
             "count": len(results),
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(str(e), f"search_documents('{query}')")
 
 
 @tool
@@ -1429,13 +1501,17 @@ def get_regulatory_alerts(
     try:
         reg_svc = get_regulatory_service()
         if not reg_svc:
-            return {"error": "Regulatory service not available"}
+            return error_response("Regulatory service not available", "get_regulatory_alerts")
 
         ticker = ticker.upper() if ticker else None
         alerts = reg_svc.get_alerts(ticker=ticker, status=status, limit=20)
 
         # Get summary stats
         summary = reg_svc.get_dashboard_summary()
+
+        # Return no-data response if no alerts found for specific ticker
+        if ticker and not alerts:
+            return no_data_response("regulatory alerts", ticker, "No regulatory alerts found for this company")
 
         return {
             "alerts": [
@@ -1467,7 +1543,7 @@ def get_regulatory_alerts(
             "ticker": ticker,
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(str(e), "get_regulatory_alerts")
 
 
 @tool

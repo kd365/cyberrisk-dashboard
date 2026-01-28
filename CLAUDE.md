@@ -893,4 +893,89 @@ COMPLEX_QUERY_PATTERNS = [
 - Added explanation: "Alerts = regulations × companies"
 
 ---
-*Last Updated: 2026-01-26*
+
+### 2026-01-28: Anti-Hallucination Architecture (Structural Enforcement)
+
+**Problem**: The old approach used "prompt-based guards" - yelling at the LLM with "CRITICAL", "ABSOLUTELY NO HALLUCINATION", "NEVER" instructions. This was unreliable.
+
+**Solution**: Move anti-hallucination from prompts to **architecture**. The harness now enforces data grounding structurally.
+
+**New Architecture** ([langchain_agent.py](backend/services/langchain_agent.py)):
+
+```
+User Query → Router → Tool Execution → Grounded Synthesizer → Response
+                                              ↓
+                                    Hallucination Grader (optional loop)
+```
+
+**Component 1: Router Node** (Haiku, temp=0)
+- Classifies queries: `financial`, `regulatory`, `graph`, `document_search`, `general`
+- Extracts entities (tickers, regulation IDs)
+- **FORCES tool calls** for entity-specific queries
+- Has NO knowledge - cannot hallucinate during routing
+
+```python
+class RouteQuery(BaseModel):
+    destination: Literal["financial", "regulatory", "graph", "document_search", "general"]
+    ticker: Optional[str]
+    requires_tool: bool
+```
+
+**Component 2: Tool Empty Result Handling** ([langchain_tools.py](backend/services/langchain_tools.py))
+- Tools return structured `NO_DATA` or `ERROR` responses instead of empty results
+- Responses include `SYSTEM_NOTIFICATION` string that triggers short-circuit
+- Agent cannot "fill in the gaps" with hallucinated data
+
+```python
+def no_data_response(data_type: str, entity: str = None) -> Dict:
+    return {
+        "status": "no_data",
+        "NO_DATA": True,
+        "data_type": data_type,
+        "entity": entity,
+        "message": f"SYSTEM_NOTIFICATION: NO_DATA_FOUND for {data_type} ({entity}). Do not guess."
+    }
+```
+
+**Component 3: Grounded Synthesizer** (Sonnet, temp=0)
+- "Reporter" prompt that can ONLY use tool output
+- **SHORT-CIRCUIT**: If `SYSTEM_NOTIFICATION` detected, skip LLM entirely
+- Returns canned response for no-data cases (zero hallucination risk)
+- For valid data: generates response with restricted context
+
+```python
+def synthesize_response(state, llm):
+    tool_output_str = json.dumps(tool_output)
+
+    # SHORT-CIRCUIT: Skip LLM entirely for no-data cases
+    if "SYSTEM_NOTIFICATION: NO_DATA_FOUND" in tool_output_str:
+        return "I checked the CyberRisk Dashboard, but I don't have that data available."
+
+    # Only reach LLM with valid data
+    return llm.invoke(SYNTHESIS_PROMPT.format(tool_output=tool_output))
+```
+
+**Component 4: Hallucination Grader** (Haiku, temp=0)
+- Validates that response contains ONLY facts from tool output
+- Returns `is_grounded: bool` and `problematic_claims: list`
+- If hallucination detected, regenerates response
+
+**Prompt Simplification** ([prompts.py](backend/services/prompts.py)):
+- Removed ~60% of prompt text (all the "CRITICAL", "NEVER" guards)
+- Prompts now describe roles, not rules
+- Architecture enforces what prompts used to beg for
+
+**Files Changed**:
+| File | Changes |
+|------|---------|
+| `langchain_agent.py` | Complete rewrite with Router → Tools → Synthesizer flow |
+| `langchain_tools.py` | Added `no_data_response()`, `error_response()` helpers |
+| `prompts.py` | Simplified prompts, added role-specific prompts |
+
+**Response Metadata** now includes:
+- `route`: Which category the query was routed to
+- `ticker`: Extracted ticker (if any)
+- `has_data`: Whether tools returned actual data
+
+---
+*Last Updated: 2026-01-28*

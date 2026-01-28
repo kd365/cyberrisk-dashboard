@@ -62,6 +62,28 @@ const Icons = {
       <line x1="3" y1="15" x2="21" y2="15" />
       <line x1="9" y1="3" x2="9" y2="21" />
     </svg>
+  ),
+  Chart: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  ),
+  Network: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="5" r="3" />
+      <circle cx="5" cy="19" r="3" />
+      <circle cx="19" cy="19" r="3" />
+      <line x1="12" y1="8" x2="5" y2="16" />
+      <line x1="12" y1="8" x2="19" y2="16" />
+    </svg>
+  ),
+  Spinner: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+    </svg>
   )
 };
 
@@ -94,6 +116,7 @@ function GraphRAGAssistant({ ticker = 'CRWD', authToken = null, userEmail = null
 
   const subTabs = [
     { id: 'chat', label: 'GraphRAG Chat', icon: Icons.Chat },
+    { id: 'intelligence', label: 'Competitive Intelligence', icon: Icons.Chart },
     { id: 'cypher', label: 'Cypher Console', icon: Icons.Terminal }
   ];
 
@@ -228,6 +251,9 @@ function GraphRAGAssistant({ ticker = 'CRWD', authToken = null, userEmail = null
         {activeSubTab === 'chat' && (
           <ChatInterface ticker={ticker} authToken={authToken} userEmail={userEmail} />
         )}
+        {activeSubTab === 'intelligence' && (
+          <CompetitiveIntelligence ticker={ticker} />
+        )}
         {activeSubTab === 'cypher' && (
           <CypherConsole />
         )}
@@ -258,6 +284,8 @@ What would you like to know about ${ticker} or other tracked companies?`
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [statusMessage, setStatusMessage] = useState(null);
+  const [statusStep, setStatusStep] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -274,12 +302,15 @@ What would you like to know about ${ticker} or other tracked companies?`
     const userMessage = input.trim();
     setInput('');
     setLoading(true);
+    setStatusMessage(null);
+    setStatusStep(null);
 
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
 
     try {
-      const response = await fetch('/api/chat', {
+      // Use streaming endpoint for real-time status updates
+      const response = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -292,18 +323,59 @@ What would you like to know about ${ticker} or other tracked companies?`
         })
       });
 
-      const data = await response.json();
-
-      if (data.session_id) {
-        setSessionId(data.session_id);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
 
-      // Add assistant response
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.response || data.error || 'Sorry, I encountered an error.',
-        tools_used: data.tools_used
-      }]);
+      // Read SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.slice(6));
+
+              if (eventData.type === 'status') {
+                // Update status display
+                setStatusMessage(eventData.message);
+                setStatusStep(eventData.step);
+              } else if (eventData.type === 'response') {
+                // Final response received
+                const data = eventData.data;
+                if (data.session_id) {
+                  setSessionId(data.session_id);
+                }
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: data.response || 'Sorry, I encountered an error.',
+                  tools_used: data.tools_used
+                }]);
+                setStatusMessage(null);
+                setStatusStep(null);
+              } else if (eventData.type === 'error') {
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: eventData.message || 'Sorry, I encountered an error.'
+                }]);
+                setStatusMessage(null);
+                setStatusStep(null);
+              }
+            } catch (parseError) {
+              console.warn('Failed to parse SSE event:', line);
+            }
+          }
+        }
+      }
 
     } catch (error) {
       console.error('Chat error:', error);
@@ -311,8 +383,12 @@ What would you like to know about ${ticker} or other tracked companies?`
         role: 'assistant',
         content: 'Sorry, I encountered an error connecting to the server. Please try again.'
       }]);
+      setStatusMessage(null);
+      setStatusStep(null);
     } finally {
       setLoading(false);
+      setStatusMessage(null);
+      setStatusStep(null);
     }
   };
 
@@ -435,7 +511,7 @@ What would you like to know about ${ticker} or other tracked companies?`
     typing: {
       display: 'flex',
       gap: '4px',
-      padding: '12px 16px'
+      padding: '0'
     },
     typingDot: {
       width: '8px',
@@ -443,7 +519,33 @@ What would you like to know about ${ticker} or other tracked companies?`
       borderRadius: '50%',
       background: '#94a3b8',
       animation: 'pulse 1.4s infinite ease-in-out'
-    }
+    },
+    statusContainer: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+      minWidth: '200px'
+    },
+    statusText: {
+      fontSize: '13px',
+      color: '#475569',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    progressBar: {
+      height: '4px',
+      background: '#e2e8f0',
+      borderRadius: '2px',
+      overflow: 'hidden'
+    },
+    progressFill: (step, total) => ({
+      height: '100%',
+      width: `${(step / total) * 100}%`,
+      background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+      borderRadius: '2px',
+      transition: 'width 300ms ease'
+    })
   };
 
   return (
@@ -474,10 +576,26 @@ What would you like to know about ${ticker} or other tracked companies?`
             <div style={styles.avatar(false)}>
               <Icons.Bot />
             </div>
-            <div style={{ ...styles.bubble(false), ...styles.typing }}>
-              <div style={{ ...styles.typingDot, animationDelay: '0s' }} />
-              <div style={{ ...styles.typingDot, animationDelay: '0.2s' }} />
-              <div style={{ ...styles.typingDot, animationDelay: '0.4s' }} />
+            <div style={styles.bubble(false)}>
+              {statusMessage ? (
+                <div style={styles.statusContainer}>
+                  <div style={styles.statusText}>
+                    <Icons.Spinner />
+                    {statusMessage}
+                  </div>
+                  {statusStep && (
+                    <div style={styles.progressBar}>
+                      <div style={styles.progressFill(statusStep, 4)} />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={styles.typing}>
+                  <div style={{ ...styles.typingDot, animationDelay: '0s' }} />
+                  <div style={{ ...styles.typingDot, animationDelay: '0.2s' }} />
+                  <div style={{ ...styles.typingDot, animationDelay: '0.4s' }} />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -516,7 +634,403 @@ What would you like to know about ${ticker} or other tracked companies?`
           0%, 80%, 100% { transform: scale(0); }
           40% { transform: scale(1); }
         }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
       `}</style>
+    </div>
+  );
+}
+
+// ============================================================================
+// Competitive Intelligence (GDS Analytics)
+// ============================================================================
+
+function CompetitiveIntelligence({ ticker }) {
+  const [marketLeaders, setMarketLeaders] = useState(null);
+  const [marketSegments, setMarketSegments] = useState(null);
+  const [similarCompanies, setSimilarCompanies] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedTicker, setSelectedTicker] = useState(ticker || 'CRWD');
+
+  useEffect(() => {
+    loadGDSData();
+  }, []);
+
+  useEffect(() => {
+    if (selectedTicker) {
+      loadSimilarCompanies(selectedTicker);
+    }
+  }, [selectedTicker]);
+
+  const loadGDSData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [leadersRes, segmentsRes] = await Promise.all([
+        fetch('/api/gds/centrality/pagerank?limit=15'),
+        fetch('/api/gds/community/louvain')
+      ]);
+
+      const leadersData = await leadersRes.json();
+      const segmentsData = await segmentsRes.json();
+
+      if (leadersData.error) throw new Error(leadersData.error);
+      if (segmentsData.error) throw new Error(segmentsData.error);
+
+      setMarketLeaders(leadersData);
+      setMarketSegments(segmentsData);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSimilarCompanies = async (tickerSymbol) => {
+    try {
+      const res = await fetch(`/api/gds/similarity/company/${tickerSymbol}?top_k=8`);
+      const data = await res.json();
+      if (!data.error) {
+        setSimilarCompanies(data);
+      }
+    } catch (err) {
+      console.error('Error loading similar companies:', err);
+    }
+  };
+
+  const styles = {
+    container: {
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      overflow: 'auto',
+      padding: '16px',
+      gap: '20px'
+    },
+    grid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+      gap: '20px'
+    },
+    card: {
+      background: '#fff',
+      borderRadius: '12px',
+      border: '1px solid #e2e8f0',
+      overflow: 'hidden'
+    },
+    cardHeader: {
+      padding: '16px',
+      borderBottom: '1px solid #e2e8f0',
+      background: '#f8fafc'
+    },
+    cardTitle: {
+      margin: 0,
+      fontSize: '16px',
+      fontWeight: '600',
+      color: '#1e293b',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    cardSubtitle: {
+      margin: '4px 0 0 0',
+      fontSize: '13px',
+      color: '#64748b'
+    },
+    cardBody: {
+      padding: '16px',
+      maxHeight: '350px',
+      overflow: 'auto'
+    },
+    leaderRow: (index) => ({
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      padding: '10px 12px',
+      borderRadius: '8px',
+      background: index === 0 ? '#fef9c3' : index < 3 ? '#f0fdf4' : '#f8fafc',
+      marginBottom: '8px',
+      cursor: 'pointer',
+      transition: 'background 150ms ease'
+    }),
+    rank: (index) => ({
+      width: '28px',
+      height: '28px',
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: '700',
+      fontSize: '13px',
+      background: index === 0 ? '#eab308' : index < 3 ? '#22c55e' : '#94a3b8',
+      color: '#fff'
+    }),
+    companyName: {
+      flex: 1,
+      fontWeight: '500',
+      color: '#1e293b'
+    },
+    ticker: {
+      fontSize: '12px',
+      color: '#64748b',
+      background: '#e2e8f0',
+      padding: '2px 8px',
+      borderRadius: '4px'
+    },
+    score: {
+      fontSize: '14px',
+      fontWeight: '600',
+      color: '#0f766e'
+    },
+    segmentCard: {
+      padding: '12px',
+      borderRadius: '8px',
+      background: '#f8fafc',
+      marginBottom: '12px',
+      border: '1px solid #e2e8f0'
+    },
+    segmentHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: '8px'
+    },
+    segmentTitle: {
+      fontWeight: '600',
+      color: '#1e293b',
+      fontSize: '14px'
+    },
+    segmentCount: {
+      fontSize: '12px',
+      color: '#64748b',
+      background: '#e2e8f0',
+      padding: '2px 8px',
+      borderRadius: '12px'
+    },
+    companyChip: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '4px 10px',
+      borderRadius: '16px',
+      background: '#dbeafe',
+      color: '#1e40af',
+      fontSize: '12px',
+      fontWeight: '500',
+      margin: '2px'
+    },
+    similarRow: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      padding: '10px 12px',
+      borderRadius: '8px',
+      background: '#f8fafc',
+      marginBottom: '8px'
+    },
+    similarBar: {
+      height: '6px',
+      borderRadius: '3px',
+      background: '#e2e8f0',
+      flex: 1,
+      overflow: 'hidden'
+    },
+    similarFill: (score, max) => ({
+      height: '100%',
+      width: `${Math.min(100, (score / max) * 100)}%`,
+      background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+      borderRadius: '3px'
+    }),
+    selector: {
+      padding: '8px 12px',
+      borderRadius: '8px',
+      border: '1px solid #e2e8f0',
+      fontSize: '14px',
+      background: '#fff',
+      cursor: 'pointer'
+    },
+    loading: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '40px',
+      color: '#64748b'
+    },
+    error: {
+      padding: '20px',
+      background: '#fef2f2',
+      color: '#991b1b',
+      borderRadius: '8px',
+      textAlign: 'center'
+    },
+    refreshBtn: {
+      padding: '8px 16px',
+      borderRadius: '6px',
+      border: 'none',
+      background: '#3b82f6',
+      color: '#fff',
+      cursor: 'pointer',
+      fontSize: '13px',
+      fontWeight: '500'
+    }
+  };
+
+  if (loading && !marketLeaders) {
+    return (
+      <div style={styles.loading}>
+        <span>Loading competitive intelligence...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.error}>
+          <p><strong>Error loading GDS analytics:</strong></p>
+          <p>{error}</p>
+          <button style={styles.refreshBtn} onClick={loadGDSData}>Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  const segmentColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
+
+  return (
+    <div style={styles.container}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '20px', color: '#1e293b' }}>Competitive Intelligence</h2>
+          <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '14px' }}>
+            Graph-based analytics powered by Neo4j GDS
+          </p>
+        </div>
+        <button style={styles.refreshBtn} onClick={loadGDSData}>
+          Refresh Data
+        </button>
+      </div>
+
+      {/* Grid */}
+      <div style={styles.grid}>
+        {/* Market Leaders */}
+        <div style={styles.card}>
+          <div style={styles.cardHeader}>
+            <h3 style={styles.cardTitle}>
+              <Icons.Chart />
+              Market Leaders
+            </h3>
+            <p style={styles.cardSubtitle}>
+              Ranked by PageRank centrality in competition network
+            </p>
+          </div>
+          <div style={styles.cardBody}>
+            {marketLeaders?.results?.map((leader, index) => (
+              <div
+                key={leader.ticker}
+                style={styles.leaderRow(index)}
+                onClick={() => setSelectedTicker(leader.ticker)}
+              >
+                <div style={styles.rank(index)}>{index + 1}</div>
+                <span style={styles.companyName}>{leader.company}</span>
+                <span style={styles.ticker}>{leader.ticker}</span>
+                <span style={styles.score}>{leader.pagerank_score?.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Market Segments */}
+        <div style={styles.card}>
+          <div style={styles.cardHeader}>
+            <h3 style={styles.cardTitle}>
+              <Icons.Network />
+              Market Segments
+            </h3>
+            <p style={styles.cardSubtitle}>
+              Competitive clusters detected by Louvain community algorithm
+            </p>
+          </div>
+          <div style={styles.cardBody}>
+            {marketSegments?.segments?.map((segment, idx) => (
+              <div key={segment.segment_id} style={styles.segmentCard}>
+                <div style={styles.segmentHeader}>
+                  <span style={{ ...styles.segmentTitle, color: segmentColors[idx % segmentColors.length] }}>
+                    Segment {idx + 1}
+                  </span>
+                  <span style={styles.segmentCount}>{segment.company_count} companies</span>
+                </div>
+                <div>
+                  {segment.companies?.slice(0, 8).map(c => (
+                    <span
+                      key={c.ticker}
+                      style={{
+                        ...styles.companyChip,
+                        cursor: 'pointer',
+                        background: selectedTicker === c.ticker ? '#1e40af' : '#dbeafe',
+                        color: selectedTicker === c.ticker ? '#fff' : '#1e40af'
+                      }}
+                      onClick={() => setSelectedTicker(c.ticker)}
+                    >
+                      {c.ticker}
+                    </span>
+                  ))}
+                  {segment.companies?.length > 8 && (
+                    <span style={{ ...styles.companyChip, background: '#f1f5f9', color: '#64748b' }}>
+                      +{segment.companies.length - 8} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Similar Companies */}
+        <div style={{ ...styles.card, gridColumn: 'span 2' }}>
+          <div style={styles.cardHeader}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={styles.cardTitle}>
+                  Similar Companies to {selectedTicker}
+                </h3>
+                <p style={styles.cardSubtitle}>
+                  Based on shared competitors and document concepts
+                </p>
+              </div>
+              <select
+                style={styles.selector}
+                value={selectedTicker}
+                onChange={(e) => setSelectedTicker(e.target.value)}
+              >
+                {marketLeaders?.results?.map(l => (
+                  <option key={l.ticker} value={l.ticker}>{l.ticker} - {l.company}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div style={{ ...styles.cardBody, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+            {similarCompanies?.results?.map((sim) => {
+              const maxScore = similarCompanies.results[0]?.similarity_score || 1;
+              return (
+                <div key={sim.ticker} style={styles.similarRow}>
+                  <span style={{ width: '60px', fontWeight: '600', color: '#1e293b' }}>{sim.ticker}</span>
+                  <div style={styles.similarBar}>
+                    <div style={styles.similarFill(sim.similarity_score, maxScore)} />
+                  </div>
+                  <span style={{ fontSize: '12px', color: '#64748b', width: '100px', textAlign: 'right' }}>
+                    {sim.shared_competitors} competitors, {sim.shared_concepts} concepts
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
