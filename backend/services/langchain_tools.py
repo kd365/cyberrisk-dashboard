@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def no_data_response(
-    data_type: str,
-    entity: str = None,
-    reason: str = None
+    data_type: str, entity: str = None, reason: str = None
 ) -> Dict[str, Any]:
     """
     Return a structured no-data response that forces the agent to acknowledge
@@ -51,7 +49,9 @@ def no_data_response(
         "status": "no_data",
         "NO_DATA": True,
         "data_type": data_type,
-        "message": f"SYSTEM_NOTIFICATION: NO_DATA_FOUND for {data_type}" + (f" ({entity})" if entity else "") + ". Do not guess.",
+        "message": f"SYSTEM_NOTIFICATION: NO_DATA_FOUND for {data_type}"
+        + (f" ({entity})" if entity else "")
+        + ". Do not guess.",
     }
     if entity:
         response["entity"] = entity
@@ -80,8 +80,11 @@ def error_response(error: str, operation: str = None) -> Dict[str, Any]:
         "ERROR": True,
         "error": str(error),
         "operation": operation,
-        "message": f"SYSTEM_NOTIFICATION: TOOL_ERROR. Failed to retrieve data" + (f" ({operation})" if operation else "") + ". Do not guess.",
+        "message": f"SYSTEM_NOTIFICATION: TOOL_ERROR. Failed to retrieve data"
+        + (f" ({operation})" if operation else "")
+        + ". Do not guess.",
     }
+
 
 # Lazy-loaded service references
 _db_service = None
@@ -173,7 +176,9 @@ def get_company_info(ticker: str) -> dict:
         db = get_db_service()
         company = db.get_company(ticker)
         if not company:
-            return no_data_response("company information", ticker, "Company not tracked in database")
+            return no_data_response(
+                "company information", ticker, "Company not tracked in database"
+            )
 
         from services.forecast_cache import get_stock_data
 
@@ -280,12 +285,16 @@ def get_sentiment(ticker: str) -> dict:
             artifacts = s3_service.get_artifacts_table()
 
             if not artifacts:
-                return no_data_response("sentiment analysis", ticker, "No artifacts available for analysis")
+                return no_data_response(
+                    "sentiment analysis", ticker, "No artifacts available for analysis"
+                )
 
             # Filter for this ticker
             ticker_artifacts = [a for a in artifacts if a.get("ticker") == ticker]
             if not ticker_artifacts:
-                return no_data_response("sentiment analysis", ticker, "No documents found for this company")
+                return no_data_response(
+                    "sentiment analysis", ticker, "No documents found for this company"
+                )
 
             # Run Comprehend analysis
             comprehend = ComprehendService()
@@ -294,7 +303,9 @@ def get_sentiment(ticker: str) -> dict:
             )
 
             if not result:
-                return no_data_response("sentiment analysis", ticker, "Analysis returned no results")
+                return no_data_response(
+                    "sentiment analysis", ticker, "Analysis returned no results"
+                )
 
             # Cache the result
             cache = get_sentiment_cache()
@@ -387,7 +398,9 @@ def get_forecast(ticker: str, days: int = 30) -> dict:
             }
 
         # Both models failed - return structured no-data response
-        return no_data_response("price forecast", ticker, "Forecasting models unavailable")
+        return no_data_response(
+            "price forecast", ticker, "Forecasting models unavailable"
+        )
 
     except Exception as e:
         return error_response(str(e), f"get_forecast({ticker})")
@@ -1170,7 +1183,7 @@ def search_documents(query: str, ticker: Optional[str] = None, limit: int = 5) -
             return no_data_response(
                 "document search results",
                 ticker,
-                f"No documents matching '{query}' found in indexed filings"
+                f"No documents matching '{query}' found in indexed filings",
             )
 
         return {
@@ -1501,7 +1514,9 @@ def get_regulatory_alerts(
     try:
         reg_svc = get_regulatory_service()
         if not reg_svc:
-            return error_response("Regulatory service not available", "get_regulatory_alerts")
+            return error_response(
+                "Regulatory service not available", "get_regulatory_alerts"
+            )
 
         ticker = ticker.upper() if ticker else None
         alerts = reg_svc.get_alerts(ticker=ticker, status=status, limit=20)
@@ -1511,7 +1526,11 @@ def get_regulatory_alerts(
 
         # Return no-data response if no alerts found for specific ticker
         if ticker and not alerts:
-            return no_data_response("regulatory alerts", ticker, "No regulatory alerts found for this company")
+            return no_data_response(
+                "regulatory alerts",
+                ticker,
+                "No regulatory alerts found for this company",
+            )
 
         return {
             "alerts": [

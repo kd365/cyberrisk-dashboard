@@ -56,6 +56,7 @@ logger = logging.getLogger(__name__)
 
 class AgentState(TypedDict):
     """State for the anti-hallucination agent graph."""
+
     messages: Annotated[List[BaseMessage], add]
     query: str
     route: str  # "financial", "regulatory", "graph", "general"
@@ -76,24 +77,23 @@ class RouteQuery(BaseModel):
     This classifier has NO KNOWLEDGE - it can only categorize and extract entities.
     It cannot answer questions, only route them.
     """
-    destination: Literal["financial", "regulatory", "graph", "document_search", "general"] = Field(
-        description="The category of data needed to answer this query"
-    )
+
+    destination: Literal[
+        "financial", "regulatory", "graph", "document_search", "general"
+    ] = Field(description="The category of data needed to answer this query")
     ticker: Optional[str] = Field(
         None,
-        description="Stock ticker symbol if mentioned (e.g., CRWD, PANW). Extract ONLY if explicitly present."
+        description="Stock ticker symbol if mentioned (e.g., CRWD, PANW). Extract ONLY if explicitly present.",
     )
     requires_tool: bool = Field(
         True,
-        description="True if this query requires fetching data. False only for greetings/help."
+        description="True if this query requires fetching data. False only for greetings/help.",
     )
-    reasoning: str = Field(
-        description="Brief explanation of routing decision"
-    )
+    reasoning: str = Field(description="Brief explanation of routing decision")
 
 
 # Patterns for routing (used as fallback if structured output fails)
-TICKER_PATTERN = re.compile(r'\b([A-Z]{2,5})\b')
+TICKER_PATTERN = re.compile(r"\b([A-Z]{2,5})\b")
 FINANCIAL_PATTERNS = [
     r"(price|stock|forecast|sentiment|growth|revenue|earnings|market)",
     r"(compare|analysis|performance|valuation|invest)",
@@ -195,7 +195,7 @@ def route_query(state: AgentState, router_llm) -> AgentState:
 
         messages = [
             SystemMessage(content=get_router_prompt()),
-            HumanMessage(content=f"Classify this query: {query}")
+            HumanMessage(content=f"Classify this query: {query}"),
         ]
 
         result = structured_llm.invoke(messages)
@@ -262,15 +262,16 @@ def synthesize_response(state: AgentState, synthesis_llm) -> AgentState:
         return {
             **state,
             "has_data": False,
-            "final_response": f"I checked the CyberRisk Dashboard, but I don't have {data_type} available" +
-                            (f" for {entity}" if entity else "") + "."
+            "final_response": f"I checked the CyberRisk Dashboard, but I don't have {data_type} available"
+            + (f" for {entity}" if entity else "")
+            + ".",
         }
 
     if "SYSTEM_NOTIFICATION: TOOL_ERROR" in tool_output_str:
         return {
             **state,
             "has_data": False,
-            "final_response": "I wasn't able to retrieve that information due to a system error. Please try again."
+            "final_response": "I wasn't able to retrieve that information due to a system error. Please try again.",
         }
 
     # Legacy flag checks (backward compatibility)
@@ -278,15 +279,16 @@ def synthesize_response(state: AgentState, synthesis_llm) -> AgentState:
         return {
             **state,
             "has_data": False,
-            "final_response": f"I don't have {tool_output.get('data_type', 'that data')} available" +
-                            (f" for {tool_output.get('entity')}" if tool_output.get('entity') else "") + "."
+            "final_response": f"I don't have {tool_output.get('data_type', 'that data')} available"
+            + (f" for {tool_output.get('entity')}" if tool_output.get("entity") else "")
+            + ".",
         }
 
     if tool_output.get("ERROR") or tool_output.get("status") == "error":
         return {
             **state,
             "has_data": False,
-            "final_response": f"I wasn't able to retrieve that information."
+            "final_response": f"I wasn't able to retrieve that information.",
         }
 
     # For raw text responses from ReAct agent
@@ -295,24 +297,19 @@ def synthesize_response(state: AgentState, synthesis_llm) -> AgentState:
         return {
             **state,
             "has_data": True,
-            "final_response": tool_output["response_text"]
+            "final_response": tool_output["response_text"],
         }
 
     # Generate grounded response from structured tool output
     prompt = ChatPromptTemplate.from_template(get_synthesis_prompt())
 
     messages = prompt.format_messages(
-        tool_output=json.dumps(tool_output, indent=2, default=str),
-        query=query
+        tool_output=json.dumps(tool_output, indent=2, default=str), query=query
     )
 
     response = synthesis_llm.invoke(messages)
 
-    return {
-        **state,
-        "has_data": True,
-        "final_response": response.content
-    }
+    return {**state, "has_data": True, "final_response": response.content}
 
 
 def handle_general_query(state: AgentState, general_llm) -> AgentState:
@@ -321,16 +318,12 @@ def handle_general_query(state: AgentState, general_llm) -> AgentState:
 
     messages = [
         SystemMessage(content=get_general_prompt()),
-        HumanMessage(content=query)
+        HumanMessage(content=query),
     ]
 
     response = general_llm.invoke(messages)
 
-    return {
-        **state,
-        "has_data": True,
-        "final_response": response.content
-    }
+    return {**state, "has_data": True, "final_response": response.content}
 
 
 # =============================================================================
@@ -340,12 +333,13 @@ def handle_general_query(state: AgentState, general_llm) -> AgentState:
 
 class HallucinationCheck(BaseModel):
     """Result of hallucination check."""
+
     is_grounded: bool = Field(
         description="True if the response only contains facts from the tool output"
     )
     problematic_claims: List[str] = Field(
         default_factory=list,
-        description="List of claims in the response not supported by tool output"
+        description="List of claims in the response not supported by tool output",
     )
 
 
@@ -369,21 +363,25 @@ def grade_hallucination(state: AgentState, grader_llm) -> str:
         structured_llm = grader_llm.with_structured_output(HallucinationCheck)
 
         messages = [
-            SystemMessage(content="""You are a fact-checker. Determine if the RESPONSE contains ONLY facts present in the DATA.
+            SystemMessage(
+                content="""You are a fact-checker. Determine if the RESPONSE contains ONLY facts present in the DATA.
 
 Mark is_grounded=False if the RESPONSE contains:
 - Numbers, dates, or names not in DATA
 - Claims about events not mentioned in DATA
 - Speculation or analysis beyond what DATA supports
 
-Be strict - if in doubt, mark as not grounded."""),
-            HumanMessage(content=f"""DATA:
+Be strict - if in doubt, mark as not grounded."""
+            ),
+            HumanMessage(
+                content=f"""DATA:
 {json.dumps(tool_output, indent=2, default=str)}
 
 RESPONSE:
 {response}
 
-Is this response grounded in the data?""")
+Is this response grounded in the data?"""
+            ),
         ]
 
         result = structured_llm.invoke(messages)
@@ -487,6 +485,7 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
         if self._memory_service is None:
             try:
                 from services.memory_service import get_memory_service
+
                 self._memory_service = get_memory_service()
             except Exception as e:
                 logger.warning(f"Memory service not available: {e}")
@@ -516,8 +515,12 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
         """Call financial data tools."""
         try:
             # Use ReAct agent to determine and call appropriate tools
-            messages = [HumanMessage(content=f"Get financial data for query: {query}" +
-                                    (f" (ticker: {ticker})" if ticker else ""))]
+            messages = [
+                HumanMessage(
+                    content=f"Get financial data for query: {query}"
+                    + (f" (ticker: {ticker})" if ticker else "")
+                )
+            ]
 
             result = self.tool_agent.invoke(
                 {"messages": messages},
@@ -534,8 +537,12 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
     def _call_regulatory_tools(self, query: str, ticker: str = None) -> Dict:
         """Call regulatory data tools."""
         try:
-            messages = [HumanMessage(content=f"Get regulatory data for query: {query}" +
-                                    (f" (ticker: {ticker})" if ticker else ""))]
+            messages = [
+                HumanMessage(
+                    content=f"Get regulatory data for query: {query}"
+                    + (f" (ticker: {ticker})" if ticker else "")
+                )
+            ]
 
             result = self.tool_agent.invoke(
                 {"messages": messages},
@@ -551,8 +558,12 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
     def _call_graph_tools(self, query: str, ticker: str = None) -> Dict:
         """Call knowledge graph tools."""
         try:
-            messages = [HumanMessage(content=f"Query knowledge graph for: {query}" +
-                                    (f" (ticker: {ticker})" if ticker else ""))]
+            messages = [
+                HumanMessage(
+                    content=f"Query knowledge graph for: {query}"
+                    + (f" (ticker: {ticker})" if ticker else "")
+                )
+            ]
 
             result = self.tool_agent.invoke(
                 {"messages": messages},
@@ -568,8 +579,12 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
     def _call_document_tools(self, query: str, ticker: str = None) -> Dict:
         """Call document search tools."""
         try:
-            messages = [HumanMessage(content=f"Search documents for: {query}" +
-                                    (f" (ticker: {ticker})" if ticker else ""))]
+            messages = [
+                HumanMessage(
+                    content=f"Search documents for: {query}"
+                    + (f" (ticker: {ticker})" if ticker else "")
+                )
+            ]
 
             result = self.tool_agent.invoke(
                 {"messages": messages},
@@ -613,7 +628,11 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
                 # The AI message content might contain the relevant data
                 return {"response_text": msg.content, "raw": True}
 
-        return {"NO_DATA": True, "data_type": "requested information", "reason": "No tool output"}
+        return {
+            "NO_DATA": True,
+            "data_type": "requested information",
+            "reason": "No tool output",
+        }
 
     def chat_stream(
         self,
@@ -638,12 +657,14 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
             user_id = user_email or session_id
 
             # Step 1: Route the query
-            yield json_module.dumps({
-                "type": "status",
-                "message": "Analyzing query...",
-                "step": 1,
-                "total_steps": 4
-            })
+            yield json_module.dumps(
+                {
+                    "type": "status",
+                    "message": "Analyzing query...",
+                    "step": 1,
+                    "total_steps": 4,
+                }
+            )
 
             initial_state: AgentState = {
                 "messages": [],
@@ -656,7 +677,9 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
             }
 
             routed_state = route_query(initial_state, self.router_llm)
-            logger.info(f"Query routed to: {routed_state['route']} (ticker: {routed_state.get('ticker')})")
+            logger.info(
+                f"Query routed to: {routed_state['route']} (ticker: {routed_state.get('ticker')})"
+            )
 
             # Step 2: Handle based on route
             route = routed_state["route"]
@@ -667,17 +690,19 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
                 "regulatory": f"Searching regulatory alerts{' for ' + ticker if ticker else ''}...",
                 "graph": f"Querying knowledge graph{' for ' + ticker if ticker else ''}...",
                 "document_search": f"Searching documents{' for ' + ticker if ticker else ''}...",
-                "general": "Processing request..."
+                "general": "Processing request...",
             }
 
-            yield json_module.dumps({
-                "type": "status",
-                "message": route_messages.get(route, "Processing..."),
-                "step": 2,
-                "total_steps": 4,
-                "route": route,
-                "ticker": ticker
-            })
+            yield json_module.dumps(
+                {
+                    "type": "status",
+                    "message": route_messages.get(route, "Processing..."),
+                    "step": 2,
+                    "total_steps": 4,
+                    "route": route,
+                    "ticker": ticker,
+                }
+            )
 
             if route == "general":
                 final_state = handle_general_query(routed_state, self.general_llm)
@@ -687,22 +712,26 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
                 tool_state = self._route_to_tools(routed_state)
 
                 # Step 3: Synthesize response
-                yield json_module.dumps({
-                    "type": "status",
-                    "message": "Generating response...",
-                    "step": 3,
-                    "total_steps": 4
-                })
+                yield json_module.dumps(
+                    {
+                        "type": "status",
+                        "message": "Generating response...",
+                        "step": 3,
+                        "total_steps": 4,
+                    }
+                )
 
                 final_state = synthesize_response(tool_state, self.synthesis_llm)
 
                 # Step 4: Validate (hallucination check)
-                yield json_module.dumps({
-                    "type": "status",
-                    "message": "Validating response...",
-                    "step": 4,
-                    "total_steps": 4
-                })
+                yield json_module.dumps(
+                    {
+                        "type": "status",
+                        "message": "Validating response...",
+                        "step": 4,
+                        "total_steps": 4,
+                    }
+                )
 
                 grade = grade_hallucination(final_state, self.grader_llm)
                 if grade == "regenerate":
@@ -711,33 +740,39 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
 
                 tools_used = [route]
 
-            response_text = final_state.get("final_response", "I wasn't able to process that request.")
+            response_text = final_state.get(
+                "final_response", "I wasn't able to process that request."
+            )
 
             # Save to memory
             self._save_to_memory(session_id, message, response_text)
             self._save_to_semantic_memory(user_id, message, response_text)
 
             # Final response
-            yield json_module.dumps({
-                "type": "response",
-                "data": {
-                    "response": response_text,
-                    "session_id": session_id,
-                    "tools_used": tools_used,
-                    "route": route,
-                    "ticker": ticker,
-                    "has_data": final_state.get("has_data", False),
-                    "timestamp": datetime.now().isoformat(),
+            yield json_module.dumps(
+                {
+                    "type": "response",
+                    "data": {
+                        "response": response_text,
+                        "session_id": session_id,
+                        "tools_used": tools_used,
+                        "route": route,
+                        "ticker": ticker,
+                        "has_data": final_state.get("has_data", False),
+                        "timestamp": datetime.now().isoformat(),
+                    },
                 }
-            })
+            )
 
         except Exception as e:
             logger.error(f"Agent streaming error: {e}")
-            yield json_module.dumps({
-                "type": "error",
-                "message": "I apologize, but I encountered an error processing your request.",
-                "error": str(e)
-            })
+            yield json_module.dumps(
+                {
+                    "type": "error",
+                    "message": "I apologize, but I encountered an error processing your request.",
+                    "error": str(e),
+                }
+            )
 
     def chat(
         self,
@@ -770,7 +805,9 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
             }
 
             routed_state = route_query(initial_state, self.router_llm)
-            logger.info(f"Query routed to: {routed_state['route']} (ticker: {routed_state.get('ticker')})")
+            logger.info(
+                f"Query routed to: {routed_state['route']} (ticker: {routed_state.get('ticker')})"
+            )
 
             # Step 2: Handle based on route
             if routed_state["route"] == "general":
@@ -787,13 +824,17 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
                 # Step 4: Optional hallucination check
                 grade = grade_hallucination(final_state, self.grader_llm)
                 if grade == "regenerate":
-                    logger.warning("Hallucination detected, regenerating with stricter prompt")
+                    logger.warning(
+                        "Hallucination detected, regenerating with stricter prompt"
+                    )
                     # Regenerate with explicit grounding
                     final_state = synthesize_response(tool_state, self.synthesis_llm)
 
                 tools_used = [routed_state["route"]]
 
-            response_text = final_state.get("final_response", "I wasn't able to process that request.")
+            response_text = final_state.get(
+                "final_response", "I wasn't able to process that request."
+            )
 
             # Save to memory
             self._save_to_memory(session_id, message, response_text)
@@ -822,7 +863,9 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
         """Get conversation history as LangChain messages."""
         try:
             if self.memory_service:
-                raw_history = self.memory_service.get_context_for_llm(session_id, max_messages=5)
+                raw_history = self.memory_service.get_context_for_llm(
+                    session_id, max_messages=5
+                )
                 messages = []
                 for msg in raw_history:
                     if msg["role"] == "user":

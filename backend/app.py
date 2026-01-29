@@ -1930,6 +1930,7 @@ def chat_stream():
         # Generate session ID if not provided
         if not session_id:
             import uuid
+
             session_id = str(uuid.uuid4())
 
         def generate():
@@ -1944,10 +1945,8 @@ def chat_stream():
                     yield f"data: {event}\n\n"
             except Exception as e:
                 import json as json_module
-                error_event = json_module.dumps({
-                    "type": "error",
-                    "message": str(e)
-                })
+
+                error_event = json_module.dumps({"type": "error", "message": str(e)})
                 yield f"data: {error_event}\n\n"
 
         return Response(
@@ -1956,8 +1955,8 @@ def chat_stream():
             headers={
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",  # Disable nginx buffering
-                "Connection": "keep-alive"
-            }
+                "Connection": "keep-alive",
+            },
         )
 
     except Exception as e:

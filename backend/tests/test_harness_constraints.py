@@ -18,15 +18,15 @@ from unittest.mock import MagicMock, patch
 import json
 
 # Mock heavy dependencies before importing our modules
-sys.modules['langchain_aws'] = MagicMock()
-sys.modules['langchain_core'] = MagicMock()
-sys.modules['langchain_core.messages'] = MagicMock()
-sys.modules['langchain_core.prompts'] = MagicMock()
-sys.modules['langchain_core.tools'] = MagicMock()
-sys.modules['langgraph'] = MagicMock()
-sys.modules['langgraph.graph'] = MagicMock()
-sys.modules['langgraph.prebuilt'] = MagicMock()
-sys.modules['pydantic'] = MagicMock()
+sys.modules["langchain_aws"] = MagicMock()
+sys.modules["langchain_core"] = MagicMock()
+sys.modules["langchain_core.messages"] = MagicMock()
+sys.modules["langchain_core.prompts"] = MagicMock()
+sys.modules["langchain_core.tools"] = MagicMock()
+sys.modules["langgraph"] = MagicMock()
+sys.modules["langgraph.graph"] = MagicMock()
+sys.modules["langgraph.prebuilt"] = MagicMock()
+sys.modules["pydantic"] = MagicMock()
 
 # Now we can test the core logic without AWS dependencies
 # We'll inline the key functions and types to test them in isolation
@@ -43,6 +43,7 @@ from operator import add
 
 class AgentState(TypedDict):
     """State for the anti-hallucination agent graph."""
+
     messages: List
     query: str
     route: str
@@ -53,7 +54,7 @@ class AgentState(TypedDict):
 
 
 # Patterns for routing (copied from langchain_agent.py)
-TICKER_PATTERN = re.compile(r'\b([A-Z]{2,5})\b')
+TICKER_PATTERN = re.compile(r"\b([A-Z]{2,5})\b")
 FINANCIAL_PATTERNS = [
     r"(price|stock|forecast|sentiment|growth|revenue|earnings|market)",
     r"(compare|analysis|performance|valuation|invest)",
@@ -72,7 +73,9 @@ DOCUMENT_PATTERNS = [
 ]
 
 
-def no_data_response(data_type: str, entity: str = None, reason: str = None) -> Dict[str, Any]:
+def no_data_response(
+    data_type: str, entity: str = None, reason: str = None
+) -> Dict[str, Any]:
     """
     Return a structured no-data response that forces the agent to acknowledge
     missing data rather than hallucinate.
@@ -81,7 +84,9 @@ def no_data_response(data_type: str, entity: str = None, reason: str = None) -> 
         "status": "no_data",
         "NO_DATA": True,
         "data_type": data_type,
-        "message": f"SYSTEM_NOTIFICATION: NO_DATA_FOUND for {data_type}" + (f" ({entity})" if entity else "") + ". Do not guess.",
+        "message": f"SYSTEM_NOTIFICATION: NO_DATA_FOUND for {data_type}"
+        + (f" ({entity})" if entity else "")
+        + ". Do not guess.",
     }
     if entity:
         response["entity"] = entity
@@ -97,7 +102,9 @@ def error_response(error: str, operation: str = None) -> Dict[str, Any]:
         "ERROR": True,
         "error": str(error),
         "operation": operation,
-        "message": f"SYSTEM_NOTIFICATION: TOOL_ERROR. Failed to retrieve data" + (f" ({operation})" if operation else "") + ". Do not guess.",
+        "message": f"SYSTEM_NOTIFICATION: TOOL_ERROR. Failed to retrieve data"
+        + (f" ({operation})" if operation else "")
+        + ". Do not guess.",
     }
 
 
@@ -166,15 +173,16 @@ def synthesize_response(state: AgentState, synthesis_llm) -> AgentState:
         return {
             **state,
             "has_data": False,
-            "final_response": f"I checked the CyberRisk Dashboard, but I don't have {data_type} available" +
-                            (f" for {entity}" if entity else "") + "."
+            "final_response": f"I checked the CyberRisk Dashboard, but I don't have {data_type} available"
+            + (f" for {entity}" if entity else "")
+            + ".",
         }
 
     if "SYSTEM_NOTIFICATION: TOOL_ERROR" in tool_output_str:
         return {
             **state,
             "has_data": False,
-            "final_response": "I wasn't able to retrieve that information due to a system error. Please try again."
+            "final_response": "I wasn't able to retrieve that information due to a system error. Please try again.",
         }
 
     # Legacy flag checks (backward compatibility)
@@ -182,15 +190,16 @@ def synthesize_response(state: AgentState, synthesis_llm) -> AgentState:
         return {
             **state,
             "has_data": False,
-            "final_response": f"I don't have {tool_output.get('data_type', 'that data')} available" +
-                            (f" for {tool_output.get('entity')}" if tool_output.get('entity') else "") + "."
+            "final_response": f"I don't have {tool_output.get('data_type', 'that data')} available"
+            + (f" for {tool_output.get('entity')}" if tool_output.get("entity") else "")
+            + ".",
         }
 
     if tool_output.get("ERROR") or tool_output.get("status") == "error":
         return {
             **state,
             "has_data": False,
-            "final_response": f"I wasn't able to retrieve that information."
+            "final_response": f"I wasn't able to retrieve that information.",
         }
 
     # For raw text responses from ReAct agent
@@ -198,7 +207,7 @@ def synthesize_response(state: AgentState, synthesis_llm) -> AgentState:
         return {
             **state,
             "has_data": True,
-            "final_response": tool_output["response_text"]
+            "final_response": tool_output["response_text"],
         }
 
     # Generate grounded response from structured tool output
@@ -217,11 +226,7 @@ USER_QUERY:
     messages = [FakeMessage(prompt_text)]
     response = synthesis_llm.invoke(messages)
 
-    return {
-        **state,
-        "has_data": True,
-        "final_response": response.content
-    }
+    return {**state, "has_data": True, "final_response": response.content}
 
 
 # =============================================================================
@@ -289,7 +294,10 @@ def test_synthesizer_triggers_kill_switch_on_error():
 
     # Should get error response
     assert result["has_data"] is False
-    assert "wasn't able" in result["final_response"].lower() or "error" in result["final_response"].lower()
+    assert (
+        "wasn't able" in result["final_response"].lower()
+        or "error" in result["final_response"].lower()
+    )
 
 
 # =============================================================================
@@ -651,7 +659,9 @@ def test_raw_response_passthrough():
 
     # Should pass through the raw response
     assert result["has_data"] is True
-    assert result["final_response"] == "This is the pre-synthesized response from ReAct."
+    assert (
+        result["final_response"] == "This is the pre-synthesized response from ReAct."
+    )
 
 
 # =============================================================================
