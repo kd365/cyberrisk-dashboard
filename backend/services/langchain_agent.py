@@ -37,7 +37,7 @@ from datetime import datetime
 from operator import add
 
 from langchain_aws import ChatBedrock
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import create_react_agent, ToolNode
@@ -604,8 +604,20 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
 
         tool_outputs = []
         for msg in messages:
-            # Check for tool results
-            if hasattr(msg, "content") and isinstance(msg.content, str):
+            # Check for ToolMessage objects (primary source in LangGraph)
+            if isinstance(msg, ToolMessage):
+                try:
+                    # ToolMessage content is the tool's return value
+                    parsed = json.loads(msg.content)
+                    if isinstance(parsed, dict):
+                        tool_outputs.append(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    # If not JSON, treat as raw content
+                    if msg.content:
+                        tool_outputs.append({"response_text": msg.content, "raw": True})
+
+            # Check for tool results in regular messages
+            elif hasattr(msg, "content") and isinstance(msg.content, str):
                 try:
                     # Try to parse JSON tool output
                     parsed = json.loads(msg.content)
