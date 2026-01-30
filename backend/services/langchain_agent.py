@@ -37,7 +37,13 @@ from datetime import datetime
 from operator import add
 
 from langchain_aws import ChatBedrock
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage, ToolMessage
+from langchain_core.messages import (
+    HumanMessage,
+    AIMessage,
+    SystemMessage,
+    BaseMessage,
+    ToolMessage,
+)
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import create_react_agent, ToolNode
@@ -527,17 +533,31 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
             # Direct tool selection based on query patterns
             if not ticker and any(
                 p in query_lower
-                for p in ["which companies", "list companies", "tracked companies", "what companies"]
+                for p in [
+                    "which companies",
+                    "list companies",
+                    "tracked companies",
+                    "what companies",
+                ]
             ):
                 return list_companies()
 
             if ticker:
                 # Specific data requests for a ticker
-                if any(p in query_lower for p in ["sentiment", "feeling", "tone", "analysis"]):
+                if any(
+                    p in query_lower
+                    for p in ["sentiment", "feeling", "tone", "analysis"]
+                ):
                     return get_sentiment(ticker)
-                elif any(p in query_lower for p in ["forecast", "predict", "price target", "future"]):
+                elif any(
+                    p in query_lower
+                    for p in ["forecast", "predict", "price target", "future"]
+                ):
                     return get_forecast(ticker)
-                elif any(p in query_lower for p in ["growth", "hiring", "employees", "headcount"]):
+                elif any(
+                    p in query_lower
+                    for p in ["growth", "hiring", "employees", "headcount"]
+                ):
                     return get_growth_metrics(ticker)
                 else:
                     # Default: company info
@@ -549,6 +569,7 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
         except Exception as e:
             logger.error(f"Financial tool error: {e}")
             from services.langchain_tools import error_response
+
             return error_response(str(e), "financial_tools")
 
     def _call_regulatory_tools(self, query: str, ticker: str = None) -> Dict:
@@ -569,11 +590,14 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
                     return get_regulatory_alerts(status="UNACKNOWLEDGED", limit=10)
             else:
                 # Default: get alerts
-                return get_regulatory_alerts(ticker=ticker, status="UNACKNOWLEDGED", limit=10)
+                return get_regulatory_alerts(
+                    ticker=ticker, status="UNACKNOWLEDGED", limit=10
+                )
 
         except Exception as e:
             logger.error(f"Regulatory tool error: {e}")
             from services.langchain_tools import error_response
+
             return error_response(str(e), "regulatory_tools")
 
     def _call_graph_tools(self, query: str, ticker: str = None) -> Dict:
@@ -593,9 +617,15 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
                 return get_market_segments()
             elif any(p in query_lower for p in ["leader", "top", "ranking"]):
                 return get_market_leaders()
-            elif any(p in query_lower for p in ["similar", "like", "comparable"]) and ticker:
+            elif (
+                any(p in query_lower for p in ["similar", "like", "comparable"])
+                and ticker
+            ):
                 return get_similar_companies(ticker)
-            elif any(p in query_lower for p in ["competitive", "competition", "overview", "intelligence"]):
+            elif any(
+                p in query_lower
+                for p in ["competitive", "competition", "overview", "intelligence"]
+            ):
                 return get_competitive_intelligence_summary()
             else:
                 # Default: competitive intelligence summary
@@ -604,6 +634,7 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
         except Exception as e:
             logger.error(f"Graph tool error: {e}")
             from services.langchain_tools import error_response
+
             return error_response(str(e), "graph_tools")
 
     def _call_document_tools(self, query: str, ticker: str = None) -> Dict:
@@ -617,6 +648,7 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
         except Exception as e:
             logger.error(f"Document tool error: {e}")
             from services.langchain_tools import error_response
+
             return error_response(str(e), "document_tools")
 
     def _extract_tool_output(self, result: Dict) -> Dict:
