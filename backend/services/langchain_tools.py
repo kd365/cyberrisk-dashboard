@@ -1229,12 +1229,11 @@ def get_document_context(query: str, ticker: Optional[str] = None) -> dict:
         context = rag.get_context_for_query(query, ticker=ticker)
 
         if not context or context == "No relevant context found.":
-            return {
-                "query": query,
-                "ticker": ticker,
-                "context": None,
-                "message": "No relevant context found in indexed documents.",
-            }
+            return no_data_response(
+                "document context",
+                ticker,
+                f"No documents matching '{query}' found in indexed filings",
+            )
 
         return {
             "query": query,
@@ -1243,7 +1242,7 @@ def get_document_context(query: str, ticker: Optional[str] = None) -> dict:
             "message": "Use this context to answer the user's question accurately.",
         }
     except Exception as e:
-        return {"error": str(e)}
+        return error_response(str(e), f"get_document_context('{query}')")
 
 
 # =============================================================================
