@@ -512,90 +512,112 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
         return {**state, "tool_output": None}
 
     def _call_financial_tools(self, query: str, ticker: str = None) -> Dict:
-        """Call financial data tools."""
+        """Call financial data tools directly based on query analysis."""
         try:
-            # Use ReAct agent to determine and call appropriate tools
-            messages = [
-                HumanMessage(
-                    content=f"Get financial data for query: {query}"
-                    + (f" (ticker: {ticker})" if ticker else "")
-                )
-            ]
-
-            result = self.tool_agent.invoke(
-                {"messages": messages},
-                config={"recursion_limit": 10},
+            from services.langchain_tools import (
+                list_companies,
+                get_company_info,
+                get_sentiment,
+                get_forecast,
+                get_growth_metrics,
             )
 
-            # Extract tool output from result
-            return self._extract_tool_output(result)
+            query_lower = query.lower()
+
+            # Direct tool selection based on query patterns
+            if not ticker and any(
+                p in query_lower
+                for p in ["which companies", "list companies", "tracked companies", "what companies"]
+            ):
+                return list_companies()
+
+            if ticker:
+                # Specific data requests for a ticker
+                if any(p in query_lower for p in ["sentiment", "feeling", "tone", "analysis"]):
+                    return get_sentiment(ticker)
+                elif any(p in query_lower for p in ["forecast", "predict", "price target", "future"]):
+                    return get_forecast(ticker)
+                elif any(p in query_lower for p in ["growth", "hiring", "employees", "headcount"]):
+                    return get_growth_metrics(ticker)
+                else:
+                    # Default: company info
+                    return get_company_info(ticker)
+
+            # Fallback: list companies if no specific request
+            return list_companies()
 
         except Exception as e:
             logger.error(f"Financial tool error: {e}")
-            return {"ERROR": True, "error": str(e), "operation": "financial_tools"}
+            from services.langchain_tools import error_response
+            return error_response(str(e), "financial_tools")
 
     def _call_regulatory_tools(self, query: str, ticker: str = None) -> Dict:
-        """Call regulatory data tools."""
+        """Call regulatory data tools directly."""
         try:
-            messages = [
-                HumanMessage(
-                    content=f"Get regulatory data for query: {query}"
-                    + (f" (ticker: {ticker})" if ticker else "")
-                )
-            ]
-
-            result = self.tool_agent.invoke(
-                {"messages": messages},
-                config={"recursion_limit": 10},
+            from services.langchain_tools import (
+                get_regulatory_alerts,
+                get_company_compliance_status,
             )
 
-            return self._extract_tool_output(result)
+            query_lower = query.lower()
+
+            # Check for compliance status vs alerts
+            if any(p in query_lower for p in ["compliance", "status"]):
+                if ticker:
+                    return get_company_compliance_status(ticker)
+                else:
+                    return get_regulatory_alerts(status="UNACKNOWLEDGED", limit=10)
+            else:
+                # Default: get alerts
+                return get_regulatory_alerts(ticker=ticker, status="UNACKNOWLEDGED", limit=10)
 
         except Exception as e:
             logger.error(f"Regulatory tool error: {e}")
-            return {"ERROR": True, "error": str(e), "operation": "regulatory_tools"}
+            from services.langchain_tools import error_response
+            return error_response(str(e), "regulatory_tools")
 
     def _call_graph_tools(self, query: str, ticker: str = None) -> Dict:
-        """Call knowledge graph tools."""
+        """Call knowledge graph tools directly."""
         try:
-            messages = [
-                HumanMessage(
-                    content=f"Query knowledge graph for: {query}"
-                    + (f" (ticker: {ticker})" if ticker else "")
-                )
-            ]
-
-            result = self.tool_agent.invoke(
-                {"messages": messages},
-                config={"recursion_limit": 10},
+            from services.langchain_tools import (
+                get_market_segments,
+                get_market_leaders,
+                get_similar_companies,
+                get_competitive_intelligence_summary,
             )
 
-            return self._extract_tool_output(result)
+            query_lower = query.lower()
+
+            # Direct tool selection based on query patterns
+            if any(p in query_lower for p in ["segment", "market segment", "cluster"]):
+                return get_market_segments()
+            elif any(p in query_lower for p in ["leader", "top", "ranking"]):
+                return get_market_leaders()
+            elif any(p in query_lower for p in ["similar", "like", "comparable"]) and ticker:
+                return get_similar_companies(ticker)
+            elif any(p in query_lower for p in ["competitive", "competition", "overview", "intelligence"]):
+                return get_competitive_intelligence_summary()
+            else:
+                # Default: competitive intelligence summary
+                return get_competitive_intelligence_summary()
 
         except Exception as e:
             logger.error(f"Graph tool error: {e}")
-            return {"ERROR": True, "error": str(e), "operation": "graph_tools"}
+            from services.langchain_tools import error_response
+            return error_response(str(e), "graph_tools")
 
     def _call_document_tools(self, query: str, ticker: str = None) -> Dict:
-        """Call document search tools."""
+        """Call document search tools directly."""
         try:
-            messages = [
-                HumanMessage(
-                    content=f"Search documents for: {query}"
-                    + (f" (ticker: {ticker})" if ticker else "")
-                )
-            ]
+            from services.langchain_tools import search_documents, get_document_context
 
-            result = self.tool_agent.invoke(
-                {"messages": messages},
-                config={"recursion_limit": 10},
-            )
-
-            return self._extract_tool_output(result)
+            # Use semantic search for document queries
+            return search_documents(query, ticker=ticker, limit=5)
 
         except Exception as e:
             logger.error(f"Document tool error: {e}")
-            return {"ERROR": True, "error": str(e), "operation": "document_tools"}
+            from services.langchain_tools import error_response
+            return error_response(str(e), "document_tools")
 
     def _extract_tool_output(self, result: Dict) -> Dict:
         """Extract the tool output from agent result."""
