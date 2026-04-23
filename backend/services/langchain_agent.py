@@ -419,8 +419,8 @@ class LangChainAgentService:
     - Optional hallucination grader catches remaining issues
     """
 
-    SONNET_MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
-    HAIKU_MODEL_ID = "anthropic.claude-3-5-haiku-20241022-v1:0"
+    SONNET_MODEL_ID = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    HAIKU_MODEL_ID = "anthropic.claude-haiku-4-5-20251001-v1:0"
 
     def __init__(self):
         """Initialize the anti-hallucination agent service."""
@@ -540,7 +540,7 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
                     "what companies",
                 ]
             ):
-                return list_companies()
+                return list_companies.invoke({})
 
             if ticker:
                 # Specific data requests for a ticker
@@ -548,23 +548,23 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
                     p in query_lower
                     for p in ["sentiment", "feeling", "tone", "analysis"]
                 ):
-                    return get_sentiment(ticker)
+                    return get_sentiment.invoke({"ticker": ticker})
                 elif any(
                     p in query_lower
                     for p in ["forecast", "predict", "price target", "future"]
                 ):
-                    return get_forecast(ticker)
+                    return get_forecast.invoke({"ticker": ticker})
                 elif any(
                     p in query_lower
                     for p in ["growth", "hiring", "employees", "headcount"]
                 ):
-                    return get_growth_metrics(ticker)
+                    return get_growth_metrics.invoke({"ticker": ticker})
                 else:
                     # Default: company info
-                    return get_company_info(ticker)
+                    return get_company_info.invoke({"ticker": ticker})
 
             # Fallback: list companies if no specific request
-            return list_companies()
+            return list_companies.invoke({})
 
         except Exception as e:
             logger.error(f"Financial tool error: {e}")
@@ -585,13 +585,15 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
             # Check for compliance status vs alerts
             if any(p in query_lower for p in ["compliance", "status"]):
                 if ticker:
-                    return get_company_compliance_status(ticker)
+                    return get_company_compliance_status.invoke({"ticker": ticker})
                 else:
-                    return get_regulatory_alerts(status="UNACKNOWLEDGED", limit=10)
+                    return get_regulatory_alerts.invoke(
+                        {"status": "UNACKNOWLEDGED", "limit": 10}
+                    )
             else:
                 # Default: get alerts
-                return get_regulatory_alerts(
-                    ticker=ticker, status="UNACKNOWLEDGED", limit=10
+                return get_regulatory_alerts.invoke(
+                    {"ticker": ticker, "status": "UNACKNOWLEDGED", "limit": 10}
                 )
 
         except Exception as e:
@@ -614,22 +616,22 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
 
             # Direct tool selection based on query patterns
             if any(p in query_lower for p in ["segment", "market segment", "cluster"]):
-                return get_market_segments()
+                return get_market_segments.invoke({})
             elif any(p in query_lower for p in ["leader", "top", "ranking"]):
-                return get_market_leaders()
+                return get_market_leaders.invoke({})
             elif (
                 any(p in query_lower for p in ["similar", "like", "comparable"])
                 and ticker
             ):
-                return get_similar_companies(ticker)
+                return get_similar_companies.invoke({"ticker": ticker})
             elif any(
                 p in query_lower
                 for p in ["competitive", "competition", "overview", "intelligence"]
             ):
-                return get_competitive_intelligence_summary()
+                return get_competitive_intelligence_summary.invoke({})
             else:
                 # Default: competitive intelligence summary
-                return get_competitive_intelligence_summary()
+                return get_competitive_intelligence_summary.invoke({})
 
         except Exception as e:
             logger.error(f"Graph tool error: {e}")
@@ -643,7 +645,9 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
             from services.langchain_tools import search_documents, get_document_context
 
             # Use semantic search for document queries
-            return search_documents(query, ticker=ticker, limit=5)
+            return search_documents.invoke(
+                {"query": query, "ticker": ticker, "limit": 5}
+            )
 
         except Exception as e:
             logger.error(f"Document tool error: {e}")
