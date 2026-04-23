@@ -19,6 +19,16 @@ yfinance>=0.2.36
 # Machine learning and forecasting
 prophet>=1.1.5
 scikit-learn>=1.3.0
+xgboost>=2.0.0
+lightgbm>=4.0.0
+shap>=0.43.0
+chronos-forecasting>=1.2.0
+torch>=2.0.0
+pyarrow>=14.0.0
+
+# NLP pipeline (Phase 2)
+transformers>=4.36.0
+vaderSentiment>=3.3.2
 
 # PDF processing and OCR
 PyPDF2>=3.0.0

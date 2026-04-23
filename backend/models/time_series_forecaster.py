@@ -116,8 +116,8 @@ class CyberRiskForecaster:
     def _get_real_sentiment(self):
         """Get real sentiment from AWS Comprehend targeted sentiment analysis"""
         try:
-            from backend.services.s3_service import S3ArtifactService
-            from backend.services.comprehend_service import ComprehendService
+            from services.s3_service import S3ArtifactService
+            from services.comprehend_service import ComprehendService
 
             print("🤖 Fetching real sentiment from AWS Comprehend...")
 
