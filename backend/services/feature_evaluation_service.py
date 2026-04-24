@@ -87,11 +87,17 @@ class FeatureEvaluationService:
         Features extracted by CompanyFeatureExtractor:
         - cyber_sector_relevance (0-4)
         - market_positioning (categorical)
-        - threat_specialization (list)
+        - threat_specialization (list -> count)
         - competitive_moat (categorical)
-        - analyst_sentiment (categorical)
-        - management_tone (categorical)
-        - guidance_direction (categorical)
+        - leadership_cyber_expertise (0-4)
+        - product_market_fit (0-4)
+        - innovation_intensity (0-4)
+        - customer_concentration_risk (0-4)
+        - regulatory_alignment (0-4)
+        - management_sentiment (0-4)
+        - growth_trajectory (0-4)
+        - risk_disclosure_quality (0-4)
+        - threat_landscape_awareness (0-4)
         """
         query = """
             MATCH (o:Organization {ticker: $ticker})
@@ -100,25 +106,29 @@ class FeatureEvaluationService:
                 o.market_positioning as market_positioning,
                 o.threat_specialization as threat_specialization,
                 o.competitive_moat as competitive_moat,
-                o.analyst_sentiment as analyst_sentiment,
-                o.analyst_concerns as analyst_concerns,
-                o.management_tone as management_tone,
-                o.guidance_direction as guidance_direction
+                o.leadership_cyber_expertise as leadership_cyber_expertise,
+                o.product_market_fit as product_market_fit,
+                o.innovation_intensity as innovation_intensity,
+                o.customer_concentration_risk as customer_concentration_risk,
+                o.regulatory_alignment as regulatory_alignment,
+                o.management_sentiment as management_sentiment,
+                o.growth_trajectory as growth_trajectory,
+                o.risk_disclosure_quality as risk_disclosure_quality,
+                o.threat_landscape_awareness as threat_landscape_awareness,
+                o.key_risks as key_risks
         """
         try:
             result = self.neo4j.execute_read(query, {"ticker": ticker})
             if result:
                 features = dict(result[0])
-                # Count threat specializations
+                # Count list fields and replace with numeric versions
                 specs = features.get("threat_specialization") or []
                 features["threat_spec_count"] = len(specs) if specs else 0
-                # Count analyst concerns
-                concerns = features.get("analyst_concerns") or []
-                features["concern_count"] = len(concerns) if concerns else 0
+                risks = features.get("key_risks") or []
+                features["key_risk_count"] = len(risks) if risks else 0
                 # Remove list fields - they can't be used in NumPy arrays
-                # We keep the numeric counts (threat_spec_count, concern_count) instead
                 features.pop("threat_specialization", None)
-                features.pop("analyst_concerns", None)
+                features.pop("key_risks", None)
                 return features
             return {}
         except Exception as e:

@@ -56,6 +56,7 @@ coresignal_service = CoreSignalService()  # API key from CORESIGNAL_API_KEY env 
 lex_service = LexService()  # Bot ID/Alias from env vars or Terraform outputs
 forecasters = {}  # Prophet forecasters
 chronos_forecasters = {}  # Chronos forecasters
+ml_forecasters = {}  # XGBoost, LightGBM, Random Forest, LSTM, Ensemble forecasters
 
 
 @app.route("/health", methods=["GET"])
@@ -413,11 +414,12 @@ def get_forecast():
     refresh = request.args.get("refresh", "false").lower() == "true"
 
     # Validate model type
-    if model_type not in ["prophet", "chronos"]:
+    valid_models = ["prophet", "chronos", "xgboost", "lightgbm", "random_forest", "lstm", "ensemble"]
+    if model_type not in valid_models:
         return (
             jsonify(
                 {
-                    "error": f"Invalid model type: {model_type}. Use 'prophet' or 'chronos'"
+                    "error": f"Invalid model type: {model_type}. Use one of: {', '.join(valid_models)}"
                 }
             ),
             400,
@@ -439,6 +441,10 @@ def get_forecast():
                 del forecasters[ticker]
             elif model_type == "chronos" and ticker in chronos_forecasters:
                 del chronos_forecasters[ticker]
+            else:
+                cache_key = f"{model_type}_{ticker}"
+                if cache_key in ml_forecasters:
+                    del ml_forecasters[cache_key]
 
         import datetime
 
@@ -497,6 +503,45 @@ def get_forecast():
                 "notes": "Using log returns with P10/P50/P90 quantiles",
             }
 
+        elif model_type in ["xgboost", "lightgbm", "random_forest", "lstm", "ensemble"]:
+            # Use ML forecasters
+            cache_key = f"{model_type}_{ticker}"
+            if cache_key not in ml_forecasters:
+                print(f"Training {model_type} model for {ticker}...")
+                from services.backtest_service import _instantiate_forecaster
+                ml_forecasters[cache_key] = _instantiate_forecaster(model_type, ticker)
+                print(f"{model_type} model ready for {ticker}")
+
+            results = ml_forecasters[cache_key].forecast(days_ahead=days)
+
+            # Convert forecast DataFrame to list
+            forecast_data = results["forecast_df"][
+                ["ds", "yhat", "yhat_lower", "yhat_upper"]
+            ].to_dict("records")
+
+            historical_data = results["historical_df"].to_dict("records")
+
+            response_data = {
+                "ticker": ticker,
+                "model": model_type,
+                "current_price": float(results["current_price"]),
+                "predicted_price": float(results["predicted_price"]),
+                "expected_return_pct": float(results["expected_return_pct"]),
+                "confidence_interval": {
+                    "lower": float(results["confidence_lower"]),
+                    "upper": float(results["confidence_upper"]),
+                },
+                "forecast": forecast_data,
+                "historical": historical_data,
+                "today": today,
+                "from_cache": False,
+            }
+
+            # Add ensemble-specific data
+            if model_type == "ensemble" and "model_weights" in results:
+                response_data["model_weights"] = results["model_weights"]
+                response_data["individual_predictions"] = results.get("individual_predictions", {})
+
         else:
             # Use Prophet forecaster (default)
             if ticker not in forecasters:
@@ -548,20 +593,30 @@ def get_forecast():
 @app.route("/api/forecast/models", methods=["GET"])
 def get_available_models():
     """Get list of available forecast models"""
-    models = [
-        {
-            "id": "prophet",
-            "name": "Prophet",
-            "description": "Facebook Prophet with cybersecurity sentiment regressors",
-            "available": True,
-        },
-        {
-            "id": "chronos",
-            "name": "Chronos-Bolt",
-            "description": "Amazon foundation model using log returns (zero-shot, no training)",
-            "available": _load_chronos_forecaster(),
-        },
-    ]
+    from services.backtest_service import MODEL_REGISTRY
+
+    models = []
+    for model_id, info in MODEL_REGISTRY.items():
+        available = True
+        if model_id == "chronos":
+            available = _load_chronos_forecaster()
+        elif model_id in ["xgboost", "lightgbm"]:
+            try:
+                if model_id == "xgboost":
+                    import xgboost
+                else:
+                    import lightgbm
+            except ImportError:
+                available = False
+
+        models.append({
+            "id": model_id,
+            "name": info["name"],
+            "description": info["description"],
+            "paradigm": info["paradigm"],
+            "available": available,
+        })
+
     return jsonify({"models": models})
 
 
@@ -741,6 +796,151 @@ def evaluate_model(ticker):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ============================================================================
+# MODEL COMPARISON & BACKTESTING ENDPOINTS
+# ============================================================================
+
+
+@app.route("/api/forecast/leaderboard", methods=["GET"])
+def get_forecast_leaderboard():
+    """
+    Run backtests for all models and return a ranked leaderboard.
+
+    Query params:
+        ticker: Stock ticker symbol (required)
+        days: Backtest test period in days (default: 30)
+        models: Comma-separated model list (default: all)
+        refresh: If 'true', recompute (bypass cache)
+    """
+    ticker = request.args.get("ticker", "").upper()
+    test_days = int(request.args.get("days", 30))
+    models_param = request.args.get("models", "")
+    refresh = request.args.get("refresh", "false").lower() == "true"
+
+    if not ticker:
+        return jsonify({"error": "Ticker is required"}), 400
+
+    try:
+        from services.backtest_service import get_backtest_service
+
+        service = get_backtest_service()
+
+        # Check cache first
+        if not refresh:
+            cached = service.get_cached_leaderboard(ticker, test_days)
+            if cached:
+                return jsonify(cached)
+
+        # Parse models
+        models = None
+        if models_param:
+            models = [m.strip() for m in models_param.split(",")]
+
+        result = service.run_leaderboard(ticker, test_days, models)
+        return jsonify(result)
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/forecast/backtest", methods=["GET"])
+def get_forecast_backtest():
+    """
+    Run backtest for a single model.
+
+    Query params:
+        ticker: Stock ticker symbol (required)
+        model: Model type (required)
+        days: Test period in days (default: 30)
+    """
+    ticker = request.args.get("ticker", "").upper()
+    model_type = request.args.get("model", "").lower()
+    test_days = int(request.args.get("days", 30))
+
+    if not ticker or not model_type:
+        return jsonify({"error": "Both ticker and model are required"}), 400
+
+    try:
+        from services.backtest_service import get_backtest_service
+
+        service = get_backtest_service()
+        result = service.run_backtest(ticker, model_type, test_days)
+        return jsonify(result)
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/forecast/feature-importance", methods=["GET"])
+def get_forecast_feature_importance():
+    """
+    Get feature importance for a trained model.
+
+    Query params:
+        ticker: Stock ticker symbol (required)
+        model: Model type (default: xgboost)
+    """
+    ticker = request.args.get("ticker", "").upper()
+    model_type = request.args.get("model", "xgboost").lower()
+
+    if not ticker:
+        return jsonify({"error": "Ticker is required"}), 400
+
+    try:
+        cache_key = f"{model_type}_{ticker}"
+
+        # Try to get from already-loaded models
+        if cache_key in ml_forecasters:
+            importance = ml_forecasters[cache_key].get_feature_importance()
+            return jsonify({"ticker": ticker, "model": model_type, **importance})
+
+        # Train a fresh model for this
+        from services.backtest_service import _instantiate_forecaster
+
+        forecaster = _instantiate_forecaster(model_type, ticker)
+        ml_forecasters[cache_key] = forecaster
+        importance = forecaster.get_feature_importance()
+
+        return jsonify({"ticker": ticker, "model": model_type, **importance})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/forecast/ensemble-weights", methods=["GET"])
+def get_ensemble_weights():
+    """
+    Get current ensemble model weights for a ticker.
+
+    Query params:
+        ticker: Stock ticker symbol (required)
+    """
+    ticker = request.args.get("ticker", "").upper()
+    if not ticker:
+        return jsonify({"error": "Ticker is required"}), 400
+
+    cache_key = f"ensemble_{ticker}"
+    if cache_key in ml_forecasters:
+        ensemble = ml_forecasters[cache_key]
+        return jsonify({
+            "ticker": ticker,
+            "weights": ensemble.weights,
+            "strategy": ensemble.strategy,
+            "base_evaluations": {
+                k: {
+                    "mape": v.get("mape"),
+                    "directional_accuracy": v.get("directional_accuracy"),
+                }
+                for k, v in ensemble.base_evaluations.items()
+            },
+        })
+
+    return jsonify({"error": "Ensemble not trained yet. Call /api/forecast?model=ensemble first."}), 404
 
 
 # ============================================================================
@@ -1343,7 +1543,11 @@ def clear_cache():
 @app.route("/api/financials/<ticker>", methods=["GET"])
 def get_financials(ticker):
     """
-    Extract financial metrics from SEC filings using AWS Textract
+    Return pre-extracted financial metrics for a ticker.
+
+    Fast path: reads from filing_financials table (populated at ingestion time),
+    aggregates rolling averages in Python. Falls back to on-demand extraction
+    only if no rows exist yet (pre-backfill state).
 
     Returns:
         - Revenue, Subscription Revenue, ARR, Net Income, Operating Income, EPS
@@ -1353,19 +1557,33 @@ def get_financials(ticker):
     try:
         ticker = ticker.upper()
 
-        # Get all artifacts for this ticker
-        artifacts = s3_service.get_artifacts_table()
+        # Fast path: read pre-extracted rows from filing_financials table.
+        # DB returns newest-first; reverse to oldest-first so rolling averages
+        # compute against the correct trailing window.
+        rows = db_service.get_filing_financials(ticker, limit=12)
+        financials = list(reversed(rows))
 
-        # Import and initialize financial extractor
-        # Using HTML extractor for modern iXBRL filings (more reliable than Textract)
-        from services.financial_html_extractor import FinancialHtmlExtractor
+        # Fallback: if nothing in the table yet, fall back to on-demand extraction
+        # and opportunistically backfill. Only hit in pre-backfill state.
+        if not financials:
+            print(f"filing_financials empty for {ticker} — falling back to on-demand extract")
+            from services.financial_html_extractor import FinancialHtmlExtractor
 
-        extractor = FinancialHtmlExtractor()
+            artifacts = s3_service.get_artifacts_table()
+            extractor = FinancialHtmlExtractor()
+            financials = extractor.extract_all_financials_for_ticker(ticker, artifacts)
 
-        print(f"Extracting financial data for {ticker}...")
-
-        # Extract financial data from SEC filings
-        financials = extractor.extract_all_financials_for_ticker(ticker, artifacts)
+            # Opportunistic backfill — store what we just computed so next request is fast
+            for item in financials:
+                s3_key = item.get("s3_key")
+                if s3_key:
+                    db_service.upsert_filing_financials(
+                        ticker,
+                        s3_key,
+                        item.get("type", "10-Q"),
+                        item.get("date"),
+                        item,
+                    )
 
         if not financials:
             return (
@@ -1379,10 +1597,12 @@ def get_financials(ticker):
                 404,
             )
 
-        # Calculate rolling averages
+        # Calculate rolling averages (reuse existing extractor logic)
+        from services.financial_html_extractor import FinancialHtmlExtractor
+
+        extractor = FinancialHtmlExtractor()
         financials_with_avg = extractor.calculate_rolling_averages(financials, window=4)
 
-        # Calculate summary statistics
         latest = financials_with_avg[-1] if financials_with_avg else {}
 
         summary = {
@@ -1409,9 +1629,12 @@ def get_financials(ticker):
             "filing_count": len(financials_with_avg),
         }
 
-        print(f"Extracted {len(financials_with_avg)} financial data points")
-
-        return jsonify(summary)
+        # Edge-cache for 5 minutes. Filings arrive quarterly so staleness is
+        # bounded by ingestion, not by this TTL. Shields backend from user
+        # tab-thrashing and React StrictMode double-renders.
+        response = jsonify(summary)
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return response
 
     except Exception as e:
         print(f"Error extracting financials: {e}")

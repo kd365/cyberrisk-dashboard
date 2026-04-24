@@ -116,6 +116,25 @@ class DatabaseService:
                 );
                 CREATE INDEX IF NOT EXISTS idx_alerts_status ON regulatory_alerts(status);
                 CREATE INDEX IF NOT EXISTS idx_alerts_impact ON regulatory_alerts(impact_level);
+
+                -- Pre-extracted financials per SEC filing (populated at ingestion)
+                CREATE TABLE IF NOT EXISTS filing_financials (
+                    id SERIAL PRIMARY KEY,
+                    ticker VARCHAR(10) NOT NULL,
+                    s3_key VARCHAR(500) NOT NULL UNIQUE,
+                    filing_type VARCHAR(20) NOT NULL,
+                    filing_date DATE NOT NULL,
+                    revenue BIGINT,
+                    subscription_revenue BIGINT,
+                    arr BIGINT,
+                    net_income BIGINT,
+                    operating_income BIGINT,
+                    eps DECIMAL(10, 4),
+                    raw_data JSONB,
+                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_filing_financials_ticker_date
+                    ON filing_financials(ticker, filing_date DESC);
             """
             )
             self.connection.commit()
@@ -538,12 +557,166 @@ class DatabaseService:
             cursor.close()
 
             print(f"✅ Created artifact: {artifact_type} for {ticker}")
+
+            # Precompute financials for SEC filings so /api/financials/ stays fast.
+            # Failures here are logged but don't fail the artifact insert —
+            # the filing is still valuable for other features even if extraction fails.
+            if artifact_type in ("10-K", "10-Q"):
+                try:
+                    self._extract_and_store_financials(
+                        ticker, s3_key, artifact_type, published_date
+                    )
+                except Exception as e:
+                    print(f"⚠️  Financials extraction failed for {s3_key}: {e}")
+
             return artifact
 
         except Exception as e:
             conn.rollback()
             print(f"⚠️  Error creating artifact: {e}")
             return None
+
+    def _extract_and_store_financials(
+        self, ticker: str, s3_key: str, filing_type: str, filing_date: str
+    ):
+        """
+        Extract financial metrics from a single SEC filing and persist them.
+        Called from create_artifact for 10-K/10-Q types, and from the backfill script.
+        """
+        # Local import avoids circular dependency (extractor depends on S3 service)
+        from services.financial_html_extractor import FinancialHtmlExtractor
+
+        extractor = FinancialHtmlExtractor()
+        financials = extractor.extract_financials_from_html_filing(s3_key, filing_date)
+
+        if not financials:
+            print(f"  ⚠️  No financials extracted from {s3_key}")
+            return
+
+        # Skip if all key metrics are missing — nothing to store meaningfully
+        has_data = any(
+            financials.get(k)
+            for k in ("revenue", "subscription_revenue", "net_income", "operating_income")
+        )
+        if not has_data:
+            print(f"  ⚠️  Extracted data is empty for {s3_key}, skipping store")
+            return
+
+        self.upsert_filing_financials(
+            ticker, s3_key, filing_type, filing_date, financials
+        )
+
+    # =========================================================================
+    # FILING FINANCIALS CRUD OPERATIONS
+    # =========================================================================
+
+    def upsert_filing_financials(
+        self,
+        ticker: str,
+        s3_key: str,
+        filing_type: str,
+        filing_date: str,
+        financials: Dict[str, Any],
+    ) -> bool:
+        """
+        Store extracted financial metrics for a single filing.
+        Idempotent: UNIQUE(s3_key) means re-running extraction updates in place.
+        """
+        conn = self._get_connection()
+        if not conn:
+            return False
+
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO filing_financials (
+                    ticker, s3_key, filing_type, filing_date,
+                    revenue, subscription_revenue, arr, net_income,
+                    operating_income, eps, raw_data, extracted_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (s3_key) DO UPDATE SET
+                    revenue = EXCLUDED.revenue,
+                    subscription_revenue = EXCLUDED.subscription_revenue,
+                    arr = EXCLUDED.arr,
+                    net_income = EXCLUDED.net_income,
+                    operating_income = EXCLUDED.operating_income,
+                    eps = EXCLUDED.eps,
+                    raw_data = EXCLUDED.raw_data,
+                    extracted_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    ticker.upper(),
+                    s3_key,
+                    filing_type,
+                    filing_date,
+                    financials.get("revenue"),
+                    financials.get("subscription_revenue"),
+                    financials.get("arr"),
+                    financials.get("net_income"),
+                    financials.get("operating_income"),
+                    financials.get("eps"),
+                    json.dumps(financials, default=str),
+                ),
+            )
+            conn.commit()
+            cursor.close()
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️  Error upserting filing_financials for {s3_key}: {e}")
+            return False
+
+    def get_filing_financials(
+        self, ticker: str, limit: int = 12
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch pre-extracted financials for a ticker, newest first.
+        Returns list of dicts ready for aggregation (rolling averages, summary).
+        """
+        conn = self._get_connection()
+        if not conn:
+            return []
+
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                """
+                SELECT ticker, s3_key, filing_type, filing_date,
+                       revenue, subscription_revenue, arr, net_income,
+                       operating_income, eps, raw_data, extracted_at
+                FROM filing_financials
+                WHERE ticker = %s
+                ORDER BY filing_date DESC
+                LIMIT %s
+                """,
+                (ticker.upper(), limit),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            result = []
+            for row in rows:
+                row_dict = dict(row)
+                # Serialize date and numeric types for JSON response
+                row_dict["date"] = (
+                    row_dict["filing_date"].isoformat()
+                    if row_dict.get("filing_date")
+                    else None
+                )
+                row_dict["type"] = row_dict.get("filing_type")
+                for numeric_key in ("revenue", "subscription_revenue", "arr",
+                                    "net_income", "operating_income"):
+                    if row_dict.get(numeric_key) is not None:
+                        row_dict[numeric_key] = int(row_dict[numeric_key])
+                if row_dict.get("eps") is not None:
+                    row_dict["eps"] = float(row_dict["eps"])
+                result.append(row_dict)
+            return result
+        except Exception as e:
+            print(f"⚠️  Error fetching filing_financials for {ticker}: {e}")
+            return []
 
     # =========================================================================
     # REGULATION CRUD OPERATIONS

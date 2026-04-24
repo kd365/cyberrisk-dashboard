@@ -78,19 +78,40 @@ class CompanyFeatureExtractor:
     - risk_summary: condensed key risks
     """
 
-    EXTRACTION_PROMPT = """Analyze this SEC filing excerpt and extract the following features in JSON format:
+    EXTRACTION_PROMPT = """Analyze this SEC filing excerpt for a cybersecurity company. Extract structured features as JSON.
+
+Company: {ticker}
+Document type: {doc_type}
 
 {text}
 
-Extract these features (respond ONLY with valid JSON, no markdown):
+Rate each feature on a 0-4 scale where:
+  0 = No evidence / Not applicable
+  1 = Weak / Minimal evidence
+  2 = Moderate / Some evidence
+  3 = Strong / Clear evidence
+  4 = Very Strong / Exceptional evidence
+
+Respond ONLY with valid JSON, no markdown:
 {{
-    "cyber_sector_relevance": <0-4 scale: 0=not cybersecurity, 1=peripheral, 2=significant, 3=core business, 4=pure-play cybersecurity>,
+    "cyber_sector_relevance": <0-4: 0=not cybersecurity, 1=peripheral, 2=significant, 3=core business, 4=pure-play cybersecurity>,
     "market_positioning": "<leader|challenger|niche|emerging>",
-    "threat_specialization": ["<list of security domains: endpoint, cloud, network, identity, email, data, vulnerability, etc.>"],
+    "threat_specialization": ["<list of security domains: endpoint, cloud, network, identity, email, data, vulnerability, secops, etc.>"],
     "competitive_moat": "<technology|market_share|partnerships|data_scale|platform_breadth>",
+    "leadership_cyber_expertise": <0-4: Does leadership have deep cybersecurity or technical background?>,
+    "product_market_fit": <0-4: How well do products address current threat landscape?>,
+    "innovation_intensity": <0-4: R&D investment signals, patent mentions, new product launches?>,
+    "customer_concentration_risk": <0-4: 0=diversified, 4=heavily dependent on few large customers>,
+    "regulatory_alignment": <0-4: SOC2, FedRAMP, GDPR, compliance certifications mentioned?>,
+    "management_sentiment": <0-4: 0=defensive/cautious, 2=neutral, 4=highly confident>,
+    "growth_trajectory": <0-4: ARR growth, customer acquisition momentum, expansion signals?>,
+    "risk_disclosure_quality": <0-4: 0=pure boilerplate, 4=highly specific actionable risk disclosures>,
+    "threat_landscape_awareness": <0-4: How well do they articulate current cyber threats?>,
     "risk_summary": "<2-3 sentence summary of key business risks>",
-    "competitors_mentioned": ["<list of competitor company names mentioned>"],
-    "partners_mentioned": ["<list of partner/customer company names mentioned>"]
+    "key_risks": ["<top 3 specific risks mentioned>"],
+    "key_opportunities": ["<top 3 growth opportunities mentioned>"],
+    "competitors_mentioned": ["<competitor company names mentioned>"],
+    "partners_mentioned": ["<partner/customer company names mentioned>"]
 }}"""
 
     def __init__(self):
@@ -173,14 +194,16 @@ Extract these features (respond ONLY with valid JSON, no markdown):
             logger.error(f"Error getting filing for {ticker}: {e}")
             return None
 
-    def extract_company_features(self, ticker: str) -> Dict[str, Any]:
+    def extract_company_features(self, ticker: str, filing_type: str = "10-K") -> Dict[str, Any]:
         """Extract LLM-derived features for a company."""
-        text = self.get_filing_text(ticker)
+        text = self.get_filing_text(ticker, filing_type=filing_type)
         if not text:
-            return {"error": f"No filing found for {ticker}"}
+            return {"error": f"No {filing_type} filing found for {ticker}"}
 
-        prompt = self.EXTRACTION_PROMPT.format(text=text[:12000])
-        response = self.llm.extract_features(prompt, max_tokens=800)
+        prompt = self.EXTRACTION_PROMPT.format(
+            ticker=ticker, doc_type=filing_type, text=text[:12000]
+        )
+        response = self.llm.extract_features(prompt, max_tokens=1200)
 
         try:
             # Parse JSON response
@@ -208,7 +231,18 @@ Extract these features (respond ONLY with valid JSON, no markdown):
                     o.market_positioning = $market_positioning,
                     o.threat_specialization = $threat_specialization,
                     o.competitive_moat = $competitive_moat,
+                    o.leadership_cyber_expertise = $leadership_cyber_expertise,
+                    o.product_market_fit = $product_market_fit,
+                    o.innovation_intensity = $innovation_intensity,
+                    o.customer_concentration_risk = $customer_concentration_risk,
+                    o.regulatory_alignment = $regulatory_alignment,
+                    o.management_sentiment = $management_sentiment,
+                    o.growth_trajectory = $growth_trajectory,
+                    o.risk_disclosure_quality = $risk_disclosure_quality,
+                    o.threat_landscape_awareness = $threat_landscape_awareness,
                     o.risk_summary = $risk_summary,
+                    o.key_risks = $key_risks,
+                    o.key_opportunities = $key_opportunities,
                     o.features_extracted_at = $extracted_at
                 RETURN o.name as name
             """
@@ -220,7 +254,18 @@ Extract these features (respond ONLY with valid JSON, no markdown):
                     "market_positioning": features.get("market_positioning", "unknown"),
                     "threat_specialization": features.get("threat_specialization", []),
                     "competitive_moat": features.get("competitive_moat", "unknown"),
+                    "leadership_cyber_expertise": features.get("leadership_cyber_expertise", 0),
+                    "product_market_fit": features.get("product_market_fit", 0),
+                    "innovation_intensity": features.get("innovation_intensity", 0),
+                    "customer_concentration_risk": features.get("customer_concentration_risk", 0),
+                    "regulatory_alignment": features.get("regulatory_alignment", 0),
+                    "management_sentiment": features.get("management_sentiment", 0),
+                    "growth_trajectory": features.get("growth_trajectory", 0),
+                    "risk_disclosure_quality": features.get("risk_disclosure_quality", 0),
+                    "threat_landscape_awareness": features.get("threat_landscape_awareness", 0),
                     "risk_summary": features.get("risk_summary", ""),
+                    "key_risks": features.get("key_risks", []),
+                    "key_opportunities": features.get("key_opportunities", []),
                     "extracted_at": features.get("extracted_at"),
                 },
             )

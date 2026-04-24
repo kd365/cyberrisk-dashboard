@@ -54,3 +54,7 @@ htmlcov/
 .env.local
 .env.*.local
 .envrc
+
+# Feature engineering local cache (regenerated from yfinance)
+backend/models/cache/
+*.parquet

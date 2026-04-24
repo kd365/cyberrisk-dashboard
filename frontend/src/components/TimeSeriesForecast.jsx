@@ -14,13 +14,50 @@ const MODELS = {
     id: 'prophet',
     name: 'Prophet',
     description: 'Facebook Prophet with cybersecurity sentiment regressors',
-    color: '#007bff'
+    color: '#007bff',
+    paradigm: 'Time Series'
   },
   chronos: {
     id: 'chronos',
     name: 'Chronos-Bolt',
     description: 'Amazon foundation model using log returns (zero-shot)',
-    color: '#9b59b6'
+    color: '#9b59b6',
+    paradigm: 'Foundation Model'
+  },
+  xgboost: {
+    id: 'xgboost',
+    name: 'XGBoost',
+    description: 'Gradient-boosted trees with SHAP feature importance',
+    color: '#e74c3c',
+    paradigm: 'Gradient Boosting'
+  },
+  lightgbm: {
+    id: 'lightgbm',
+    name: 'LightGBM',
+    description: 'Leaf-wise gradient boosting with native categorical support',
+    color: '#2ecc71',
+    paradigm: 'Gradient Boosting'
+  },
+  random_forest: {
+    id: 'random_forest',
+    name: 'Random Forest',
+    description: 'Bagged decision tree ensemble (interpretable baseline)',
+    color: '#f39c12',
+    paradigm: 'Ensemble'
+  },
+  lstm: {
+    id: 'lstm',
+    name: 'LSTM',
+    description: '2-layer LSTM deep learning sequence model',
+    color: '#1abc9c',
+    paradigm: 'Deep Learning'
+  },
+  ensemble: {
+    id: 'ensemble',
+    name: 'Weighted Ensemble',
+    description: 'Meta-model combining all base models via inverse-MAPE weighting',
+    color: '#e67e22',
+    paradigm: 'Meta-Ensemble'
   }
 };
 
@@ -64,34 +101,33 @@ function TimeSeriesForecast({ ticker }) {
     const refreshParam = forceRefresh ? '&refresh=true' : '';
     const modelParam = `&model=${selectedModel}`;
 
-    // Fetch forecast with selected model
+    // Fetch forecast with selected model — this is the primary gate for rendering.
+    // The chart/metrics depend on this, so clearing the loading state here means
+    // the UI becomes interactive as soon as the forecast lands, regardless of how
+    // long the slower endpoints (evaluation, financials) take.
     fetch(`/api/forecast?ticker=${ticker}&days=${forecastDays}${modelParam}${refreshParam}`)
       .then(res => res.json())
       .then(data => {
         setForecast(data);
         setFromCache(data.from_cache || false);
       })
-      .catch(err => console.error('Error fetching forecast:', err));
+      .catch(err => console.error('Error fetching forecast:', err))
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
 
-    // Fetch model evaluation with selected model
+    // Fetch model evaluation — fills in independently
     fetch(`/api/evaluate/${ticker}?model=${selectedModel}`)
       .then(res => res.json())
       .then(data => setEvaluation(data))
       .catch(err => console.error('Error fetching evaluation:', err));
 
-    // Fetch financial data (model-independent)
+    // Fetch financial data — fills in independently; no longer blocks page render
     fetch(`/api/financials/${ticker}`)
       .then(res => res.json())
-      .then(data => {
-        setFinancials(data);
-        setLoading(false);
-        setRefreshing(false);
-      })
-      .catch(err => {
-        console.error('Error fetching financials:', err);
-        setLoading(false);
-        setRefreshing(false);
-      });
+      .then(data => setFinancials(data))
+      .catch(err => console.error('Error fetching financials:', err));
   };
 
   useEffect(() => {
@@ -186,24 +222,25 @@ function TimeSeriesForecast({ ticker }) {
         <div style={{
           marginTop: '15px',
           padding: '12px 15px',
-          background: selectedModel === 'chronos' ? '#f3e8ff' : '#e8f4fd',
+          background: '#f8f9fa',
           borderRadius: '6px',
           borderLeft: `4px solid ${currentModel.color}`,
           fontSize: '12px',
           color: '#495057'
         }}>
-          {selectedModel === 'prophet' ? (
-            <>
-              <strong>Prophet Model:</strong> Uses <code>changepoint_prior_scale=0.05</code> (conservative trend flexibility)
-              and <code>seasonality_prior_scale=10</code> (strong seasonality patterns).
-              Includes daily, weekly, and yearly seasonality with cybersecurity sentiment and volatility as external regressors.
-            </>
-          ) : (
-            <>
-              <strong>Chronos-Bolt Model:</strong> Amazon's foundation model for time series forecasting.
-              Uses <strong>log returns</strong> instead of raw prices for better percentage-based predictions.
-              Provides probabilistic forecasts with P10/P50/P90 quantiles. Zero-shot inference (no training required).
-            </>
+          <strong>{currentModel.name}:</strong> {currentModel.description}
+          {currentModel.paradigm && (
+            <span style={{
+              marginLeft: '8px',
+              padding: '2px 8px',
+              background: `${currentModel.color}20`,
+              color: currentModel.color,
+              borderRadius: '10px',
+              fontSize: '10px',
+              fontWeight: '600'
+            }}>
+              {currentModel.paradigm}
+            </span>
           )}
         </div>
       </div>
