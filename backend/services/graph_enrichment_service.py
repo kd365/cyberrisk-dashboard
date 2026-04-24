@@ -420,12 +420,14 @@ class GraphEnrichmentService:
 
         try:
             # Query company_headcount_history table
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables
                     WHERE table_name = 'company_headcount_history'
                 )
-            """)
+            """
+            )
 
             table_exists = cursor.fetchone()[0]
 

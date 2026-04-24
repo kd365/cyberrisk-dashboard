@@ -91,7 +91,8 @@ class RAGService:
             cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
             # Create document chunks table with vector column
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS document_chunks (
                     id SERIAL PRIMARY KEY,
                     document_id VARCHAR(255) NOT NULL,
@@ -104,27 +105,34 @@ class RAGService:
                     created_at TIMESTAMP DEFAULT NOW(),
                     UNIQUE(document_id, chunk_index)
                 );
-            """)
+            """
+            )
 
             # Create index for vector similarity search
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_chunks_embedding
                 ON document_chunks
                 USING ivfflat (embedding vector_cosine_ops)
                 WITH (lists = 100);
-            """)
+            """
+            )
 
             # Create index for filtering by ticker
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_chunks_ticker
                 ON document_chunks(ticker);
-            """)
+            """
+            )
 
             # Create index for document lookup
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_chunks_document
                 ON document_chunks(document_id);
-            """)
+            """
+            )
 
             conn.commit()
             cur.close()
@@ -601,14 +609,16 @@ class RAGService:
                     (ticker,),
                 )
             else:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT
                         COUNT(DISTINCT document_id) as document_count,
                         COUNT(*) as chunk_count,
                         COUNT(DISTINCT ticker) as ticker_count,
                         AVG(LENGTH(content)) as avg_chunk_size
                     FROM document_chunks
-                """)
+                """
+                )
 
             row = cur.fetchone()
 

@@ -173,7 +173,8 @@ class MemoryService:
             cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
             # Chat sessions table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     id SERIAL PRIMARY KEY,
                     session_id VARCHAR(255) NOT NULL UNIQUE,
@@ -189,10 +190,12 @@ class MemoryService:
                     ON chat_sessions(user_email);
                 CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_active
                     ON chat_sessions(last_active);
-            """)
+            """
+            )
 
             # Chat messages table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS chat_messages (
                     id SERIAL PRIMARY KEY,
                     session_id VARCHAR(255) NOT NULL,
@@ -209,10 +212,12 @@ class MemoryService:
                     ON chat_messages(session_id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at
                     ON chat_messages(created_at);
-            """)
+            """
+            )
 
             # User memory table (for simple long-term preferences, fallback if mem0 unavailable)
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS user_memory (
                     id SERIAL PRIMARY KEY,
                     user_email VARCHAR(255),
@@ -228,7 +233,8 @@ class MemoryService:
                     ON user_memory(user_email);
                 CREATE INDEX IF NOT EXISTS idx_user_memory_type
                     ON user_memory(memory_type);
-            """)
+            """
+            )
 
             logger.info("Chat memory schema initialized (with pgvector)")
 

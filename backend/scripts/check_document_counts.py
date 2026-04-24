@@ -48,11 +48,13 @@ def check_counts():
         print(f"   Total Document nodes: {neo4j_total}")
 
         # Get by type breakdown
-        result = neo4j.execute_read("""
+        result = neo4j.execute_read(
+            """
             MATCH (d:Document)
             RETURN d.type as type, count(d) as count
             ORDER BY count DESC
-            """)
+            """
+        )
         if result:
             print("   By type:")
             for row in result:

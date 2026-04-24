@@ -66,7 +66,8 @@ class DatabaseService:
 
         try:
             cursor = self.connection.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS companies (
                     id SERIAL PRIMARY KEY,
                     company_name VARCHAR(255) NOT NULL,
@@ -134,7 +135,8 @@ class DatabaseService:
                 );
                 CREATE INDEX IF NOT EXISTS idx_filing_financials_ticker_date
                     ON filing_financials(ticker, filing_date DESC);
-            """)
+            """
+            )
             self.connection.commit()
             cursor.close()
         except Exception as e:
@@ -251,11 +253,13 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, company_name, ticker, sector, description, exchange, location, alternate_names, created_at
                 FROM companies
                 ORDER BY ticker
-            """)
+            """
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -387,7 +391,8 @@ class DatabaseService:
 
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     a.id,
                     c.ticker,
@@ -400,7 +405,8 @@ class DatabaseService:
                 FROM artifacts a
                 JOIN companies c ON a.company_id = c.id
                 ORDER BY a.published_date DESC
-            """)
+            """
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -1127,40 +1133,48 @@ class DatabaseService:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             # Get alert counts by status
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT status, COUNT(*) as count
                 FROM regulatory_alerts
                 GROUP BY status
-            """)
+            """
+            )
             status_counts = {row["status"]: row["count"] for row in cursor.fetchall()}
 
             # Get alert counts by impact level
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT impact_level, COUNT(*) as count
                 FROM regulatory_alerts
                 WHERE status != 'RESOLVED'
                 GROUP BY impact_level
-            """)
+            """
+            )
             impact_counts = {
                 row["impact_level"]: row["count"] for row in cursor.fetchall()
             }
 
             # Get regulation counts by agency
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT agency, COUNT(*) as count
                 FROM regulations
                 GROUP BY agency
-            """)
+            """
+            )
             agency_counts = {row["agency"]: row["count"] for row in cursor.fetchall()}
 
             # Get upcoming effective dates
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, title, agency, effective_date, severity
                 FROM regulations
                 WHERE effective_date >= CURRENT_DATE
                 ORDER BY effective_date ASC
                 LIMIT 5
-            """)
+            """
+            )
             upcoming = [dict(row) for row in cursor.fetchall()]
 
             cursor.close()

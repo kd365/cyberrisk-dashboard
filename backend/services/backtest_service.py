@@ -302,7 +302,8 @@ class BacktestService:
             cursor = conn.cursor()
 
             # Ensure table exists
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS model_backtests (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(10) NOT NULL,
@@ -316,7 +317,8 @@ class BacktestService:
                     backtest_data JSONB,
                     computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """
+            )
 
             # Upsert (replace if same ticker/model/test_days today)
             cursor.execute(

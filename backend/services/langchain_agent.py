@@ -379,13 +379,15 @@ Mark is_grounded=False if the RESPONSE contains:
 
 Be strict - if in doubt, mark as not grounded."""
             ),
-            HumanMessage(content=f"""DATA:
+            HumanMessage(
+                content=f"""DATA:
 {json.dumps(tool_output, indent=2, default=str)}
 
 RESPONSE:
 {response}
 
-Is this response grounded in the data?"""),
+Is this response grounded in the data?"""
+            ),
         ]
 
         result = structured_llm.invoke(messages)

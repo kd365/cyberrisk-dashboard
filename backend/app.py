@@ -3304,10 +3304,12 @@ def run_migration():
         cursor = conn.cursor()
 
         # Add alternate_names column if it doesn't exist
-        cursor.execute("""
+        cursor.execute(
+            """
             ALTER TABLE companies
             ADD COLUMN IF NOT EXISTS alternate_names TEXT
-        """)
+        """
+        )
         conn.commit()
 
         cursor.close()
