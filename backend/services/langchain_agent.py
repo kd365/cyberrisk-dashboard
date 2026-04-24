@@ -419,8 +419,9 @@ class LangChainAgentService:
     - Optional hallucination grader catches remaining issues
     """
 
-    SONNET_MODEL_ID = "anthropic.claude-sonnet-4-5-20250929-v1:0"
-    HAIKU_MODEL_ID = "anthropic.claude-haiku-4-5-20251001-v1:0"
+    # Claude 4.5 models require inference profile IDs (us. prefix for cross-region)
+    SONNET_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    HAIKU_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     def __init__(self):
         """Initialize the anti-hallucination agent service."""
