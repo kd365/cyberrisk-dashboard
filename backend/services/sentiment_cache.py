@@ -88,8 +88,7 @@ class SentimentCache:
 
         try:
             cursor = self.db_connection.cursor()
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS sentiment_cache (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(10) NOT NULL,
@@ -100,8 +99,7 @@ class SentimentCache:
                 );
                 CREATE INDEX IF NOT EXISTS idx_sentiment_cache_lookup
                     ON sentiment_cache(ticker, artifact_hash);
-            """
-            )
+            """)
             self.db_connection.commit()
             cursor.close()
         except Exception as e:
@@ -333,13 +331,11 @@ class SentimentCache:
             if conn:
                 try:
                     cursor = conn.cursor(cursor_factory=RealDictCursor)
-                    cursor.execute(
-                        """
+                    cursor.execute("""
                         SELECT ticker, COUNT(*) as count, MAX(computed_at) as last_computed
                         FROM sentiment_cache
                         GROUP BY ticker
-                    """
-                    )
+                    """)
                     rows = cursor.fetchall()
                     cursor.close()
 

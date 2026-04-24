@@ -22,6 +22,7 @@ def _load_lightgbm():
     global _lgb
     if _lgb is None:
         import lightgbm as lgb
+
         _lgb = lgb
     return _lgb
 
@@ -60,19 +61,19 @@ class LightGBMForecaster:
 
         self.data = build_feature_matrix(self.ticker, period=period)
         self.feature_columns = [
-            c for c in get_feature_columns()
-            if c in self.data.columns
+            c for c in get_feature_columns() if c in self.data.columns
         ]
 
         # Identify categorical features for native handling
         self.categorical_features = [
-            c for c in ["day_of_week", "month", "quarter"]
-            if c in self.feature_columns
+            c for c in ["day_of_week", "month", "quarter"] if c in self.feature_columns
         ]
 
         return self.data
 
-    def train(self, df: Optional[pd.DataFrame] = None, test_ratio: float = 0.1) -> Dict[str, Any]:
+    def train(
+        self, df: Optional[pd.DataFrame] = None, test_ratio: float = 0.1
+    ) -> Dict[str, Any]:
         """Train LightGBM model with early stopping."""
         lgb = _load_lightgbm()
 
@@ -118,7 +119,8 @@ class LightGBMForecaster:
         )
 
         self.model.fit(
-            X_train, y_train,
+            X_train,
+            y_train,
             eval_set=[(X_val, y_val)],
             callbacks=callbacks,
         )
@@ -129,12 +131,18 @@ class LightGBMForecaster:
         train_mape = np.mean(np.abs((y_train - train_pred) / y_train)) * 100
         val_mape = np.mean(np.abs((y_val - val_pred) / y_val)) * 100
 
-        logger.info(f"LightGBM trained for {self.ticker}: train MAPE={train_mape:.2f}%, val MAPE={val_mape:.2f}%")
+        logger.info(
+            f"LightGBM trained for {self.ticker}: train MAPE={train_mape:.2f}%, val MAPE={val_mape:.2f}%"
+        )
 
         return {
             "train_mape": float(train_mape),
             "val_mape": float(val_mape),
-            "best_iteration": self.model.best_iteration_ if hasattr(self.model, "best_iteration_") else self.params["n_estimators"],
+            "best_iteration": (
+                self.model.best_iteration_
+                if hasattr(self.model, "best_iteration_")
+                else self.params["n_estimators"]
+            ),
             "n_features": len(self.feature_columns),
             "n_categorical": len(self.categorical_features),
             "train_size": len(X_train),
@@ -171,7 +179,9 @@ class LightGBMForecaster:
 
             recent_features = recent_features.copy()
             if len(predictions) > 1:
-                recent_features["returns_1d"] = (pred - predictions[-2]) / predictions[-2]
+                recent_features["returns_1d"] = (pred - predictions[-2]) / predictions[
+                    -2
+                ]
             else:
                 recent_features["returns_1d"] = (pred - current_price) / current_price
 
@@ -180,15 +190,17 @@ class LightGBMForecaster:
 
         # Confidence interval from training residuals
         train_pred = self.model.predict(df[self.feature_columns].dropna())
-        residuals = df["target"].dropna().values[:len(train_pred)] - train_pred
+        residuals = df["target"].dropna().values[: len(train_pred)] - train_pred
         std_residual = np.std(residuals)
 
-        forecast_df = pd.DataFrame({
-            "ds": forecast_dates,
-            "yhat": predictions,
-            "yhat_lower": [p - 1.96 * std_residual for p in predictions],
-            "yhat_upper": [p + 1.96 * std_residual for p in predictions],
-        })
+        forecast_df = pd.DataFrame(
+            {
+                "ds": forecast_dates,
+                "yhat": predictions,
+                "yhat_lower": [p - 1.96 * std_residual for p in predictions],
+                "yhat_upper": [p + 1.96 * std_residual for p in predictions],
+            }
+        )
 
         historical_days = 60
         historical_data = df[["close"]].tail(historical_days).copy()
@@ -246,7 +258,8 @@ class LightGBMForecaster:
             verbose=-1,
         )
         eval_model.fit(
-            X_train, y_train,
+            X_train,
+            y_train,
             eval_set=[(X_val, y_val)],
             callbacks=callbacks,
         )
@@ -283,7 +296,9 @@ class LightGBMForecaster:
 
         importance = self.model.feature_importances_
         importance_dict = dict(zip(self.feature_columns, importance.tolist()))
-        sorted_importance = dict(sorted(importance_dict.items(), key=lambda x: x[1], reverse=True))
+        sorted_importance = dict(
+            sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+        )
 
         return {"builtin_importance": sorted_importance}
 
@@ -296,18 +311,23 @@ class LightGBMForecaster:
             os.makedirs(save_dir, exist_ok=True)
             path = os.path.join(save_dir, f"lightgbm_{self.ticker}.pkl")
         with open(path, "wb") as f:
-            pickle.dump({
-                "model": self.model,
-                "feature_columns": self.feature_columns,
-                "categorical_features": self.categorical_features,
-                "params": self.params,
-                "ticker": self.ticker,
-            }, f)
+            pickle.dump(
+                {
+                    "model": self.model,
+                    "feature_columns": self.feature_columns,
+                    "categorical_features": self.categorical_features,
+                    "params": self.params,
+                    "ticker": self.ticker,
+                },
+                f,
+            )
 
     def load_model(self, path: Optional[str] = None):
         """Load trained model from disk."""
         if path is None:
-            path = os.path.join(os.path.dirname(__file__), "saved", f"lightgbm_{self.ticker}.pkl")
+            path = os.path.join(
+                os.path.dirname(__file__), "saved", f"lightgbm_{self.ticker}.pkl"
+            )
         if not os.path.exists(path):
             raise FileNotFoundError(f"No saved model at {path}")
         with open(path, "rb") as f:

@@ -8,7 +8,6 @@ and calendar features from stock price data.
 Designed to be extended with sentiment, news, and LLM features in later phases.
 """
 
-
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -17,7 +16,6 @@ import os
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
-
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +27,6 @@ _CROSS_ASSET_CACHE_DIR = Path(__file__).parent / "cache"
 _CROSS_ASSET_CACHE_DIR.mkdir(exist_ok=True)
 _CROSS_ASSET_CACHE_FILE = _CROSS_ASSET_CACHE_DIR / "cross_asset.parquet"
 _CACHE_TTL_HOURS = 24
-
 
 
 def fetch_stock_data(ticker: str, period: str = "2y") -> pd.DataFrame:
@@ -51,14 +48,17 @@ def fetch_stock_data(ticker: str, period: str = "2y") -> pd.DataFrame:
 
     return hist
 
-def fetch_cross_asset_data(period: str = "2y", force_refresh: bool = False) ->pd.DataFrame:
-    """ Fetching cross-asset features from yfinance, specifically a DataFrame
-        indexed by date with the following columns:
-        - spy_return_1d: Daily return of SPY
-        - qqq_return_1d: Daily return of QQQ
-        - hack_return_1d: Daily return of HACK
-        - vix_close: Closing price of VIX
-        - vix_change_1d: Daily change in VIX closing price
+
+def fetch_cross_asset_data(
+    period: str = "2y", force_refresh: bool = False
+) -> pd.DataFrame:
+    """Fetching cross-asset features from yfinance, specifically a DataFrame
+    indexed by date with the following columns:
+    - spy_return_1d: Daily return of SPY
+    - qqq_return_1d: Daily return of QQQ
+    - hack_return_1d: Daily return of HACK
+    - vix_close: Closing price of VIX
+    - vix_change_1d: Daily change in VIX closing price
     """
     now = datetime.utcnow()
     ttl = timedelta(hours=_CACHE_TTL_HOURS)
@@ -67,13 +67,18 @@ def fetch_cross_asset_data(period: str = "2y", force_refresh: bool = False) ->pd
     if not force_refresh:
         cache = _cross_asset_memory_cache
 
-        if _cross_asset_memory_cache["data"] is not None and (now - _cross_asset_memory_cache["fetched_at"]) < ttl:
+        if (
+            _cross_asset_memory_cache["data"] is not None
+            and (now - _cross_asset_memory_cache["fetched_at"]) < ttl
+        ):
             logger.info("Using in-memory cache for cross-asset data")
             return cache["data"].copy()
-        
+
     if not force_refresh and _CROSS_ASSET_CACHE_FILE.exists():
         try:
-            fetched_at = datetime.utcfromtimestamp(_CROSS_ASSET_CACHE_FILE.stat().st_mtime)
+            fetched_at = datetime.utcfromtimestamp(
+                _CROSS_ASSET_CACHE_FILE.stat().st_mtime
+            )
             if (now - fetched_at) < ttl:
                 data = pd.read_parquet(_CROSS_ASSET_CACHE_FILE)
                 logger.info("Using disk cache for cross-asset data")
@@ -83,16 +88,19 @@ def fetch_cross_asset_data(period: str = "2y", force_refresh: bool = False) ->pd
         except Exception as e:
             logger.warning(f"Failed to read cross-asset cache from disk: {e}")
 
-
     # 1. Fetch OHLCV for each ticker using yf.download()
     try:
-        data = yf.download(["SPY", "QQQ", "HACK", "^VIX"], period=period, progress=False, auto_adjust=True)
+        data = yf.download(
+            ["SPY", "QQQ", "HACK", "^VIX"],
+            period=period,
+            progress=False,
+            auto_adjust=True,
+        )
     except Exception as e:
         logger.error(f"Error fetching cross-asset data: {e}")
         return pd.DataFrame()
 
     close = data["Close"]
-
 
     # 2. Compute daily returns for SPY, QQQ, HACK (pct_change)
     result = pd.DataFrame(index=close.index)
@@ -102,7 +110,6 @@ def fetch_cross_asset_data(period: str = "2y", force_refresh: bool = False) ->pd
     result["vix_close"] = close["^VIX"]
     result["vix_change_1d"] = result["vix_close"].pct_change()
 
-    
     # 3. For VIX, keep the raw level AND compute its daily change
     #    (VIX is a rate, not a price — level matters, not just change)
     result.index = pd.to_datetime(result.index).tz_localize(None)
@@ -117,8 +124,9 @@ def fetch_cross_asset_data(period: str = "2y", force_refresh: bool = False) ->pd
         logger.debug(f"Cross-asset cache written to {_CROSS_ASSET_CACHE_FILE}")
     except Exception as e:
         logger.warning(f"Failed to write cross-asset disk cache: {e}")
-    
+
     return result.copy()
+
 
 def compute_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -214,7 +222,7 @@ def build_feature_matrix(
     include_sentiment: bool = False,
     include_news: bool = False,
     include_llm: bool = False,
-    include_cross_asset: bool = True
+    include_cross_asset: bool = True,
 ) -> pd.DataFrame:
     """
     Build a complete feature matrix for a ticker.
@@ -247,22 +255,29 @@ def build_feature_matrix(
             cross_asset = fetch_cross_asset_data(period)
             if not cross_asset.empty:
                 features = features.join(cross_asset, how="left")
-                cross_asset_cols = ["spy_return_1d", "qqq_return_1d", "hack_return_1d",
-                                    "vix_close", "vix_change_1d"]
+                cross_asset_cols = [
+                    "spy_return_1d",
+                    "qqq_return_1d",
+                    "hack_return_1d",
+                    "vix_close",
+                    "vix_change_1d",
+                ]
                 features[cross_asset_cols] = features[cross_asset_cols].ffill()
         except Exception as e:
             logger.warning(f"Could not load cross-asset features for {ticker}: {e}")
 
-
-
     # --- Target variable ---
     features["target_price"] = df["Close"].shift(-target_days)
-    features["target_return"] = df["Close"].pct_change(periods=target_days).shift(-target_days)
-    features["target_log_return"] = np.log(df["Close"].shift(-target_days) / df["Close"])  # Log return
+    features["target_return"] = (
+        df["Close"].pct_change(periods=target_days).shift(-target_days)
+    )
+    features["target_log_return"] = np.log(
+        df["Close"].shift(-target_days) / df["Close"]
+    )  # Log return
     features["target_direction"] = (features["target_return"] > 0).astype(int)
     features["target_abs_return"] = np.abs(features["target_return"])
     # Backwards Compatibility
-    features["target"] = features["target_price"] 
+    features["target"] = features["target_price"]
 
     # --- Sentiment features (Phase integration) ---
     if include_sentiment:
@@ -304,7 +319,7 @@ def get_feature_columns(
     include_sentiment: bool = False,
     include_news: bool = False,
     include_llm: bool = False,
-    include_cross_asset: bool = False
+    include_cross_asset: bool = False,
 ) -> list:
     """
     Get the list of feature column names (excludes target columns and raw price/volume).
@@ -312,40 +327,71 @@ def get_feature_columns(
     """
     # Base technical features
     base_features = [
-        "sma_20", "sma_50", "sma_200", "ema_12", "ema_26",
-        "price_to_sma20", "price_to_sma50",
+        "sma_20",
+        "sma_50",
+        "sma_200",
+        "ema_12",
+        "ema_26",
+        "price_to_sma20",
+        "price_to_sma50",
         "rsi_14",
-        "macd", "macd_signal", "macd_histogram",
-        "bb_upper", "bb_lower", "bb_width", "bb_position",
-        "atr_14", "atr_pct",
-        "obv", "obv_sma20",
-        "volume_ratio", "volume_trend",
-        "returns_1d", "volatility_20d", "volatility_60d", "gk_volatility_20d",
-        "momentum_5d", "momentum_10d", "momentum_20d",
-        "day_of_week", "month", "quarter",
+        "macd",
+        "macd_signal",
+        "macd_histogram",
+        "bb_upper",
+        "bb_lower",
+        "bb_width",
+        "bb_position",
+        "atr_14",
+        "atr_pct",
+        "obv",
+        "obv_sma20",
+        "volume_ratio",
+        "volume_trend",
+        "returns_1d",
+        "volatility_20d",
+        "volatility_60d",
+        "gk_volatility_20d",
+        "momentum_5d",
+        "momentum_10d",
+        "momentum_20d",
+        "day_of_week",
+        "month",
+        "quarter",
     ]
 
     if include_news:
         base_features += [
-            "news_sentiment_7d", "news_sentiment_30d",
-            "news_volume_7d", "news_sentiment_volatility",
-            "negative_news_spike", "breach_news_count_30d",
+            "news_sentiment_7d",
+            "news_sentiment_30d",
+            "news_volume_7d",
+            "news_sentiment_volatility",
+            "negative_news_spike",
+            "breach_news_count_30d",
             "product_news_sentiment_30d",
         ]
 
     if include_llm:
         base_features += [
-            "llm_leadership_cyber_expertise", "llm_product_market_fit",
-            "llm_competitive_moat", "llm_innovation_intensity",
-            "llm_customer_concentration_risk", "llm_regulatory_alignment",
-            "llm_management_sentiment", "llm_growth_trajectory",
-            "llm_risk_disclosure_quality", "llm_threat_landscape_awareness",
+            "llm_leadership_cyber_expertise",
+            "llm_product_market_fit",
+            "llm_competitive_moat",
+            "llm_innovation_intensity",
+            "llm_customer_concentration_risk",
+            "llm_regulatory_alignment",
+            "llm_management_sentiment",
+            "llm_growth_trajectory",
+            "llm_risk_disclosure_quality",
+            "llm_threat_landscape_awareness",
         ]
 
     if include_cross_asset:
         base_features += [
-            "spy_return_1d", "qqq_return_1d", "hack_return_1d",
-            "vix_close", "vix_change_1d",
+            "spy_return_1d",
+            "qqq_return_1d",
+            "hack_return_1d",
+            "vix_close",
+            "vix_change_1d",
         ]
 
     return base_features
@@ -355,7 +401,10 @@ def get_feature_columns(
 # Phase integration stubs — will be implemented in Phases 2 and 3
 # ---------------------------------------------------------------------------
 
-def _get_sentiment_features(ticker: str, date_index: pd.DatetimeIndex) -> Optional[pd.DataFrame]:
+
+def _get_sentiment_features(
+    ticker: str, date_index: pd.DatetimeIndex
+) -> Optional[pd.DataFrame]:
     """Pull Comprehend sentiment scores from sentiment_cache and align to dates."""
     try:
         from services.sentiment_cache import get_cached_sentiment
@@ -377,11 +426,15 @@ def _get_sentiment_features(ticker: str, date_index: pd.DatetimeIndex) -> Option
         return None
 
 
-def _get_news_features(ticker: str, date_index: pd.DatetimeIndex) -> Optional[pd.DataFrame]:
+def _get_news_features(
+    ticker: str, date_index: pd.DatetimeIndex
+) -> Optional[pd.DataFrame]:
     """Pull news features from news_events table. Implemented in Phase 2."""
     return None
 
 
-def _get_llm_features(ticker: str, date_index: pd.DatetimeIndex) -> Optional[pd.DataFrame]:
+def _get_llm_features(
+    ticker: str, date_index: pd.DatetimeIndex
+) -> Optional[pd.DataFrame]:
     """Pull LLM-extracted features from company_features table. Implemented in Phase 3."""
     return None

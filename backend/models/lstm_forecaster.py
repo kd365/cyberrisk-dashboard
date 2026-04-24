@@ -26,6 +26,7 @@ def _load_torch():
     if _torch is None:
         import torch
         import torch.nn as nn
+
         _torch = torch
         _nn = nn
     return _torch, _nn
@@ -53,9 +54,13 @@ class LSTMModel:
         # Combine into nn.Module-like interface via ModuleDict is complex,
         # so we manage parameters manually
         self.device = torch.device(
-            "cuda" if torch.cuda.is_available()
-            else "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
-            else "cpu"
+            "cuda"
+            if torch.cuda.is_available()
+            else (
+                "mps"
+                if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+                else "cpu"
+            )
         )
         self.lstm = self.lstm.to(self.device)
         self.fc = self.fc.to(self.device)
@@ -120,30 +125,36 @@ class LSTMForecaster:
         # Use a subset of features that work well with LSTM
         # (avoid redundant/highly correlated features)
         lstm_features = [
-            "rsi_14", "macd", "macd_histogram",
-            "bb_position", "bb_width",
+            "rsi_14",
+            "macd",
+            "macd_histogram",
+            "bb_position",
+            "bb_width",
             "atr_pct",
             "volume_ratio",
-            "returns_1d", "volatility_20d",
-            "momentum_5d", "momentum_10d", "momentum_20d",
-            "price_to_sma20", "price_to_sma50",
+            "returns_1d",
+            "volatility_20d",
+            "momentum_5d",
+            "momentum_10d",
+            "momentum_20d",
+            "price_to_sma20",
+            "price_to_sma50",
         ]
 
-        self.feature_columns = [
-            c for c in lstm_features
-            if c in self.data.columns
-        ]
+        self.feature_columns = [c for c in lstm_features if c in self.data.columns]
         return self.data
 
     def _create_sequences(self, features: np.ndarray, targets: np.ndarray):
         """Create overlapping sequences for LSTM input."""
         X, y = [], []
         for i in range(self.SEQUENCE_LENGTH, len(features)):
-            X.append(features[i - self.SEQUENCE_LENGTH:i])
+            X.append(features[i - self.SEQUENCE_LENGTH : i])
             y.append(targets[i])
         return np.array(X), np.array(y)
 
-    def train(self, df: Optional[pd.DataFrame] = None, test_ratio: float = 0.1) -> Dict[str, Any]:
+    def train(
+        self, df: Optional[pd.DataFrame] = None, test_ratio: float = 0.1
+    ) -> Dict[str, Any]:
         """
         Train LSTM model with early stopping.
 
@@ -196,7 +207,9 @@ class LSTMForecaster:
         X_val, y_val = X_val.to(device), y_val.to(device)
 
         criterion = nn.MSELoss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.params["learning_rate"])
+        optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=self.params["learning_rate"]
+        )
 
         # Training loop with early stopping
         best_val_loss = float("inf")
@@ -213,7 +226,7 @@ class LSTMForecaster:
             n_batches = 0
 
             for start in range(0, len(X_train), batch_size):
-                batch_idx = indices[start:start + batch_size]
+                batch_idx = indices[start : start + batch_size]
                 X_batch = X_train[batch_idx]
                 y_batch = y_train[batch_idx]
 
@@ -235,11 +248,13 @@ class LSTMForecaster:
                 val_output = self.model.forward(X_val)
                 val_loss = criterion(val_output, y_val).item()
 
-            self.training_history.append({
-                "epoch": epoch + 1,
-                "train_loss": avg_train_loss,
-                "val_loss": val_loss,
-            })
+            self.training_history.append(
+                {
+                    "epoch": epoch + 1,
+                    "train_loss": avg_train_loss,
+                    "val_loss": val_loss,
+                }
+            )
 
             # Early stopping
             if val_loss < best_val_loss:
@@ -247,7 +262,9 @@ class LSTMForecaster:
                 patience_counter = 0
                 # Save best model state
                 best_state = {
-                    "lstm": {k: v.clone() for k, v in self.model.lstm.state_dict().items()},
+                    "lstm": {
+                        k: v.clone() for k, v in self.model.lstm.state_dict().items()
+                    },
                     "fc": {k: v.clone() for k, v in self.model.fc.state_dict().items()},
                 }
             else:
@@ -270,7 +287,9 @@ class LSTMForecaster:
 
         val_mape = np.mean(np.abs((val_actual - val_pred) / val_actual)) * 100
 
-        logger.info(f"LSTM trained for {self.ticker}: val MAPE={val_mape:.2f}%, epochs={len(self.training_history)}")
+        logger.info(
+            f"LSTM trained for {self.ticker}: val MAPE={val_mape:.2f}%, epochs={len(self.training_history)}"
+        )
 
         return {
             "val_mape": float(val_mape),
@@ -298,7 +317,7 @@ class LSTMForecaster:
         # Prepare the last sequence
         features = df[self.feature_columns].dropna()
         X_scaled = self.scaler_X.transform(features.values)
-        last_sequence = X_scaled[-self.SEQUENCE_LENGTH:]
+        last_sequence = X_scaled[-self.SEQUENCE_LENGTH :]
 
         predictions = []
         forecast_dates = []
@@ -348,12 +367,14 @@ class LSTMForecaster:
         all_preds = np.array(all_preds)
         pred_std = np.std(all_preds, axis=0)
 
-        forecast_df = pd.DataFrame({
-            "ds": forecast_dates,
-            "yhat": predictions,
-            "yhat_lower": [p - 1.96 * s for p, s in zip(predictions, pred_std)],
-            "yhat_upper": [p + 1.96 * s for p, s in zip(predictions, pred_std)],
-        })
+        forecast_df = pd.DataFrame(
+            {
+                "ds": forecast_dates,
+                "yhat": predictions,
+                "yhat_lower": [p - 1.96 * s for p, s in zip(predictions, pred_std)],
+                "yhat_upper": [p + 1.96 * s for p, s in zip(predictions, pred_std)],
+            }
+        )
 
         historical_days = 60
         historical_data = df[["close"]].tail(historical_days).copy()
@@ -388,27 +409,36 @@ class LSTMForecaster:
 
         # Split
         train_df = df.iloc[:-test_days]
-        test_df = df.iloc[-test_days - self.SEQUENCE_LENGTH:]  # Include lookback
+        test_df = df.iloc[-test_days - self.SEQUENCE_LENGTH :]  # Include lookback
 
         # Scale on training data only
         scaler_X = MinMaxScaler()
         scaler_y = MinMaxScaler()
 
         X_train_scaled = scaler_X.fit_transform(train_df[self.feature_columns].values)
-        y_train_scaled = scaler_y.fit_transform(train_df["target"].values.reshape(-1, 1)).flatten()
+        y_train_scaled = scaler_y.fit_transform(
+            train_df["target"].values.reshape(-1, 1)
+        ).flatten()
 
         X_seq, y_seq = self._create_sequences(X_train_scaled, y_train_scaled)
 
         # Quick training for evaluation
         input_size = len(self.feature_columns)
-        eval_model = LSTMModel(input_size, self.params["hidden_size"], self.params["num_layers"], self.params["dropout"])
+        eval_model = LSTMModel(
+            input_size,
+            self.params["hidden_size"],
+            self.params["num_layers"],
+            self.params["dropout"],
+        )
         device = eval_model.device
 
         X_tensor = torch.FloatTensor(X_seq).to(device)
         y_tensor = torch.FloatTensor(y_seq).unsqueeze(1).to(device)
 
         criterion = nn.MSELoss()
-        optimizer = torch.optim.Adam(eval_model.parameters(), lr=self.params["learning_rate"])
+        optimizer = torch.optim.Adam(
+            eval_model.parameters(), lr=self.params["learning_rate"]
+        )
 
         eval_model.train_mode()
         for epoch in range(50):
@@ -426,12 +456,12 @@ class LSTMForecaster:
         predictions = []
         with torch.no_grad():
             for i in range(self.SEQUENCE_LENGTH, len(X_test_all)):
-                seq = X_test_all[i - self.SEQUENCE_LENGTH:i]
+                seq = X_test_all[i - self.SEQUENCE_LENGTH : i]
                 X_input = torch.FloatTensor(seq).unsqueeze(0).to(device)
                 pred = eval_model.forward(X_input).cpu().numpy()[0, 0]
                 predictions.append(scaler_y.inverse_transform([[pred]])[0, 0])
 
-        actual_prices = test_df["target"].values[self.SEQUENCE_LENGTH:]
+        actual_prices = test_df["target"].values[self.SEQUENCE_LENGTH :]
         min_len = min(len(predictions), len(actual_prices))
         predictions = np.array(predictions[:min_len])
         actual_prices = actual_prices[:min_len]
@@ -443,7 +473,9 @@ class LSTMForecaster:
         if len(actual_prices) > 1:
             actual_direction = np.diff(actual_prices) > 0
             predicted_direction = np.diff(predictions) > 0
-            directional_accuracy = np.mean(actual_direction == predicted_direction) * 100
+            directional_accuracy = (
+                np.mean(actual_direction == predicted_direction) * 100
+            )
         else:
             directional_accuracy = 0.0
 
@@ -474,15 +506,18 @@ class LSTMForecaster:
             os.makedirs(save_dir, exist_ok=True)
             path = os.path.join(save_dir, f"lstm_{self.ticker}.pt")
 
-        torch.save({
-            "lstm_state": self.model.lstm.state_dict(),
-            "fc_state": self.model.fc.state_dict(),
-            "feature_columns": self.feature_columns,
-            "scaler_X": self.scaler_X,
-            "scaler_y": self.scaler_y,
-            "params": self.params,
-            "ticker": self.ticker,
-        }, path)
+        torch.save(
+            {
+                "lstm_state": self.model.lstm.state_dict(),
+                "fc_state": self.model.fc.state_dict(),
+                "feature_columns": self.feature_columns,
+                "scaler_X": self.scaler_X,
+                "scaler_y": self.scaler_y,
+                "params": self.params,
+                "ticker": self.ticker,
+            },
+            path,
+        )
         logger.info(f"LSTM model saved to {path}")
 
     def load_model(self, path: Optional[str] = None):
@@ -490,7 +525,9 @@ class LSTMForecaster:
         torch, _ = _load_torch()
 
         if path is None:
-            path = os.path.join(os.path.dirname(__file__), "saved", f"lstm_{self.ticker}.pt")
+            path = os.path.join(
+                os.path.dirname(__file__), "saved", f"lstm_{self.ticker}.pt"
+            )
         if not os.path.exists(path):
             raise FileNotFoundError(f"No saved model at {path}")
 

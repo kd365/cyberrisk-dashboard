@@ -67,6 +67,7 @@ def _instantiate_forecaster(model_type: str, ticker: str):
     """Create and initialize a forecaster instance."""
     if model_type == "prophet":
         from models.time_series_forecaster import CyberRiskForecaster
+
         f = CyberRiskForecaster(ticker)
         f.fetch_stock_data(period="2y")
         f.add_cybersecurity_sentiment(mock=True)
@@ -75,35 +76,41 @@ def _instantiate_forecaster(model_type: str, ticker: str):
         return f
     elif model_type == "chronos":
         from models.chronos_forecaster import ChronosForecaster
+
         f = ChronosForecaster(ticker, model_size="small")
         f.fetch_stock_data(period="3y")
         return f
     elif model_type == "xgboost":
         from models.xgboost_forecaster import XGBoostForecaster
+
         f = XGBoostForecaster(ticker)
         f.prepare_features()
         f.train()
         return f
     elif model_type == "lightgbm":
         from models.lightgbm_forecaster import LightGBMForecaster
+
         f = LightGBMForecaster(ticker)
         f.prepare_features()
         f.train()
         return f
     elif model_type == "random_forest":
         from models.random_forest_forecaster import RandomForestForecaster
+
         f = RandomForestForecaster(ticker)
         f.prepare_features()
         f.train()
         return f
     elif model_type == "lstm":
         from models.lstm_forecaster import LSTMForecaster
+
         f = LSTMForecaster(ticker)
         f.prepare_features()
         f.train()
         return f
     elif model_type == "ensemble":
         from models.ensemble_forecaster import EnsembleForecaster
+
         f = EnsembleForecaster(ticker)
         f.train()
         return f
@@ -124,6 +131,7 @@ class BacktestService:
         if self._db is None:
             try:
                 from services.database_service import db_service
+
                 self._db = db_service
             except Exception:
                 pass
@@ -235,14 +243,17 @@ class BacktestService:
                 return None
 
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT model_type, mape, rmse, mae, directional_accuracy,
                        sharpe_ratio, backtest_data, computed_at
                 FROM model_backtests
                 WHERE ticker = %s AND test_days = %s
                   AND DATE(computed_at) = CURRENT_DATE
                 ORDER BY mape ASC
-            """, (ticker, test_days))
+            """,
+                (ticker, test_days),
+            )
 
             rows = cursor.fetchall()
             cursor.close()
@@ -252,17 +263,19 @@ class BacktestService:
 
             leaderboard = []
             for i, row in enumerate(rows):
-                leaderboard.append({
-                    "rank": i + 1,
-                    "model_type": row[0],
-                    "mape": float(row[1]) if row[1] else None,
-                    "rmse": float(row[2]) if row[2] else None,
-                    "mae": float(row[3]) if row[3] else None,
-                    "directional_accuracy": float(row[4]) if row[4] else None,
-                    "sharpe_ratio": float(row[5]) if row[5] else None,
-                    "computed_at": row[7].isoformat() if row[7] else None,
-                    "status": "success",
-                })
+                leaderboard.append(
+                    {
+                        "rank": i + 1,
+                        "model_type": row[0],
+                        "mape": float(row[1]) if row[1] else None,
+                        "rmse": float(row[2]) if row[2] else None,
+                        "mae": float(row[3]) if row[3] else None,
+                        "directional_accuracy": float(row[4]) if row[4] else None,
+                        "sharpe_ratio": float(row[5]) if row[5] else None,
+                        "computed_at": row[7].isoformat() if row[7] else None,
+                        "status": "success",
+                    }
+                )
 
             return {
                 "ticker": ticker,
@@ -306,28 +319,34 @@ class BacktestService:
             """)
 
             # Upsert (replace if same ticker/model/test_days today)
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM model_backtests
                 WHERE ticker = %s AND model_type = %s AND test_days = %s
                   AND DATE(computed_at) = CURRENT_DATE
-            """, (result["ticker"], result["model_type"], result["test_days"]))
+            """,
+                (result["ticker"], result["model_type"], result["test_days"]),
+            )
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO model_backtests
                     (ticker, model_type, test_days, mape, rmse, mae,
                      directional_accuracy, sharpe_ratio, backtest_data)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                result["ticker"],
-                result["model_type"],
-                result["test_days"],
-                result.get("mape"),
-                result.get("rmse"),
-                result.get("mae"),
-                result.get("directional_accuracy"),
-                result.get("sharpe_ratio"),
-                json.dumps({"elapsed_seconds": result.get("elapsed_seconds")}),
-            ))
+            """,
+                (
+                    result["ticker"],
+                    result["model_type"],
+                    result["test_days"],
+                    result.get("mape"),
+                    result.get("rmse"),
+                    result.get("mae"),
+                    result.get("directional_accuracy"),
+                    result.get("sharpe_ratio"),
+                    json.dumps({"elapsed_seconds": result.get("elapsed_seconds")}),
+                ),
+            )
 
             conn.commit()
             cursor.close()

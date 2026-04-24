@@ -24,6 +24,7 @@ def _load_xgboost():
     global _xgb
     if _xgb is None:
         import xgboost as xgb
+
         _xgb = xgb
     return _xgb
 
@@ -33,6 +34,7 @@ def _load_shap():
     if _shap is None:
         try:
             import shap
+
             _shap = shap
         except ImportError:
             logger.warning("SHAP not available. Install with: pip install shap")
@@ -73,12 +75,13 @@ class XGBoostForecaster:
 
         self.data = build_feature_matrix(self.ticker, period=period)
         self.feature_columns = [
-            c for c in get_feature_columns()
-            if c in self.data.columns
+            c for c in get_feature_columns() if c in self.data.columns
         ]
         return self.data
 
-    def train(self, df: Optional[pd.DataFrame] = None, test_ratio: float = 0.1) -> Dict[str, Any]:
+    def train(
+        self, df: Optional[pd.DataFrame] = None, test_ratio: float = 0.1
+    ) -> Dict[str, Any]:
         """
         Train XGBoost model with early stopping.
 
@@ -124,7 +127,8 @@ class XGBoostForecaster:
         )
 
         self.model.fit(
-            X_train, y_train,
+            X_train,
+            y_train,
             eval_set=[(X_val, y_val)],
             verbose=False,
         )
@@ -136,12 +140,18 @@ class XGBoostForecaster:
         train_mape = np.mean(np.abs((y_train - train_pred) / y_train)) * 100
         val_mape = np.mean(np.abs((y_val - val_pred) / y_val)) * 100
 
-        logger.info(f"XGBoost trained for {self.ticker}: train MAPE={train_mape:.2f}%, val MAPE={val_mape:.2f}%")
+        logger.info(
+            f"XGBoost trained for {self.ticker}: train MAPE={train_mape:.2f}%, val MAPE={val_mape:.2f}%"
+        )
 
         return {
             "train_mape": float(train_mape),
             "val_mape": float(val_mape),
-            "best_iteration": self.model.best_iteration if hasattr(self.model, "best_iteration") else self.params["n_estimators"],
+            "best_iteration": (
+                self.model.best_iteration
+                if hasattr(self.model, "best_iteration")
+                else self.params["n_estimators"]
+            ),
             "n_features": len(self.feature_columns),
             "train_size": len(X_train),
             "val_size": len(X_val),
@@ -184,7 +194,9 @@ class XGBoostForecaster:
             # Only update price-derived features that can be computed
             if len(predictions) > 1:
                 recent_features = recent_features.copy()
-                recent_features["returns_1d"] = (pred - predictions[-2]) / predictions[-2]
+                recent_features["returns_1d"] = (pred - predictions[-2]) / predictions[
+                    -2
+                ]
             else:
                 recent_features = recent_features.copy()
                 recent_features["returns_1d"] = (pred - current_price) / current_price
@@ -195,7 +207,7 @@ class XGBoostForecaster:
         # Confidence interval from training residuals
         if len(df) > 60:
             train_pred = self.model.predict(df[self.feature_columns].dropna())
-            residuals = df["target"].dropna().values[:len(train_pred)] - train_pred
+            residuals = df["target"].dropna().values[: len(train_pred)] - train_pred
             std_residual = np.std(residuals)
         else:
             std_residual = current_price * 0.05
@@ -204,12 +216,14 @@ class XGBoostForecaster:
         confidence_upper = predicted_price + 1.96 * std_residual
 
         # Build forecast DataFrame
-        forecast_df = pd.DataFrame({
-            "ds": forecast_dates,
-            "yhat": predictions,
-            "yhat_lower": [p - 1.96 * std_residual for p in predictions],
-            "yhat_upper": [p + 1.96 * std_residual for p in predictions],
-        })
+        forecast_df = pd.DataFrame(
+            {
+                "ds": forecast_dates,
+                "yhat": predictions,
+                "yhat_lower": [p - 1.96 * std_residual for p in predictions],
+                "yhat_upper": [p + 1.96 * std_residual for p in predictions],
+            }
+        )
 
         # Historical data for chart
         historical_days = 60
@@ -240,7 +254,9 @@ class XGBoostForecaster:
         df = df[valid_mask]
 
         if len(df) < test_days + 100:
-            raise ValueError(f"Not enough data for evaluation. Have {len(df)}, need {test_days + 100}")
+            raise ValueError(
+                f"Not enough data for evaluation. Have {len(df)}, need {test_days + 100}"
+            )
 
         # Train on everything except last test_days
         train_df = df.iloc[:-test_days]
@@ -302,7 +318,9 @@ class XGBoostForecaster:
         # Built-in importance (always available)
         importance = self.model.feature_importances_
         importance_dict = dict(zip(self.feature_columns, importance.tolist()))
-        sorted_importance = dict(sorted(importance_dict.items(), key=lambda x: x[1], reverse=True))
+        sorted_importance = dict(
+            sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+        )
         result["builtin_importance"] = sorted_importance
 
         # SHAP importance (if available)
@@ -320,7 +338,9 @@ class XGBoostForecaster:
 
                     mean_abs_shap = np.abs(shap_values).mean(axis=0)
                     shap_dict = dict(zip(self.feature_columns, mean_abs_shap.tolist()))
-                    sorted_shap = dict(sorted(shap_dict.items(), key=lambda x: x[1], reverse=True))
+                    sorted_shap = dict(
+                        sorted(shap_dict.items(), key=lambda x: x[1], reverse=True)
+                    )
                     result["shap_importance"] = sorted_shap
                 except Exception as e:
                     logger.warning(f"SHAP computation failed: {e}")
@@ -338,18 +358,23 @@ class XGBoostForecaster:
             path = os.path.join(save_dir, f"xgboost_{self.ticker}.pkl")
 
         with open(path, "wb") as f:
-            pickle.dump({
-                "model": self.model,
-                "feature_columns": self.feature_columns,
-                "params": self.params,
-                "ticker": self.ticker,
-            }, f)
+            pickle.dump(
+                {
+                    "model": self.model,
+                    "feature_columns": self.feature_columns,
+                    "params": self.params,
+                    "ticker": self.ticker,
+                },
+                f,
+            )
         logger.info(f"XGBoost model saved to {path}")
 
     def load_model(self, path: Optional[str] = None):
         """Load trained model from disk."""
         if path is None:
-            path = os.path.join(os.path.dirname(__file__), "saved", f"xgboost_{self.ticker}.pkl")
+            path = os.path.join(
+                os.path.dirname(__file__), "saved", f"xgboost_{self.ticker}.pkl"
+            )
 
         if not os.path.exists(path):
             raise FileNotFoundError(f"No saved model at {path}")

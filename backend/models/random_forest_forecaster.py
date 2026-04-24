@@ -47,12 +47,13 @@ class RandomForestForecaster:
 
         self.data = build_feature_matrix(self.ticker, period=period)
         self.feature_columns = [
-            c for c in get_feature_columns()
-            if c in self.data.columns
+            c for c in get_feature_columns() if c in self.data.columns
         ]
         return self.data
 
-    def train(self, df: Optional[pd.DataFrame] = None, test_ratio: float = 0.1) -> Dict[str, Any]:
+    def train(
+        self, df: Optional[pd.DataFrame] = None, test_ratio: float = 0.1
+    ) -> Dict[str, Any]:
         """Train Random Forest model."""
         if df is None:
             if self.data is None:
@@ -88,7 +89,9 @@ class RandomForestForecaster:
         train_mape = np.mean(np.abs((y_train - train_pred) / y_train)) * 100
         val_mape = np.mean(np.abs((y_val - val_pred) / y_val)) * 100
 
-        logger.info(f"RandomForest trained for {self.ticker}: train MAPE={train_mape:.2f}%, val MAPE={val_mape:.2f}%")
+        logger.info(
+            f"RandomForest trained for {self.ticker}: train MAPE={train_mape:.2f}%, val MAPE={val_mape:.2f}%"
+        )
 
         return {
             "train_mape": float(train_mape),
@@ -96,7 +99,11 @@ class RandomForestForecaster:
             "n_features": len(self.feature_columns),
             "train_size": len(X_train),
             "val_size": len(X_val),
-            "oob_score": float(self.model.oob_score_) if hasattr(self.model, "oob_score_") else None,
+            "oob_score": (
+                float(self.model.oob_score_)
+                if hasattr(self.model, "oob_score_")
+                else None
+            ),
         }
 
     def forecast(self, days_ahead: int = 30) -> Dict[str, Any]:
@@ -116,10 +123,9 @@ class RandomForestForecaster:
 
         for i in range(days_ahead):
             # Get predictions from all trees for confidence intervals
-            tree_preds = np.array([
-                tree.predict(recent_features)[0]
-                for tree in self.model.estimators_
-            ])
+            tree_preds = np.array(
+                [tree.predict(recent_features)[0] for tree in self.model.estimators_]
+            )
             pred = np.mean(tree_preds)
             pred_std = np.std(tree_preds)
 
@@ -139,12 +145,14 @@ class RandomForestForecaster:
         predicted_price = pred_prices[-1]
         expected_return = ((predicted_price - current_price) / current_price) * 100
 
-        forecast_df = pd.DataFrame({
-            "ds": forecast_dates,
-            "yhat": pred_prices,
-            "yhat_lower": [p - 1.96 * s for p, s in zip(pred_prices, pred_stds)],
-            "yhat_upper": [p + 1.96 * s for p, s in zip(pred_prices, pred_stds)],
-        })
+        forecast_df = pd.DataFrame(
+            {
+                "ds": forecast_dates,
+                "yhat": pred_prices,
+                "yhat_lower": [p - 1.96 * s for p, s in zip(pred_prices, pred_stds)],
+                "yhat_upper": [p + 1.96 * s for p, s in zip(pred_prices, pred_stds)],
+            }
+        )
 
         historical_days = 60
         historical_data = df[["close"]].tail(historical_days).copy()
@@ -211,7 +219,9 @@ class RandomForestForecaster:
 
         importance = self.model.feature_importances_
         importance_dict = dict(zip(self.feature_columns, importance.tolist()))
-        sorted_importance = dict(sorted(importance_dict.items(), key=lambda x: x[1], reverse=True))
+        sorted_importance = dict(
+            sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+        )
 
         return {"builtin_importance": sorted_importance}
 
@@ -223,16 +233,21 @@ class RandomForestForecaster:
             os.makedirs(save_dir, exist_ok=True)
             path = os.path.join(save_dir, f"random_forest_{self.ticker}.pkl")
         with open(path, "wb") as f:
-            pickle.dump({
-                "model": self.model,
-                "feature_columns": self.feature_columns,
-                "params": self.params,
-                "ticker": self.ticker,
-            }, f)
+            pickle.dump(
+                {
+                    "model": self.model,
+                    "feature_columns": self.feature_columns,
+                    "params": self.params,
+                    "ticker": self.ticker,
+                },
+                f,
+            )
 
     def load_model(self, path: Optional[str] = None):
         if path is None:
-            path = os.path.join(os.path.dirname(__file__), "saved", f"random_forest_{self.ticker}.pkl")
+            path = os.path.join(
+                os.path.dirname(__file__), "saved", f"random_forest_{self.ticker}.pkl"
+            )
         if not os.path.exists(path):
             raise FileNotFoundError(f"No saved model at {path}")
         with open(path, "rb") as f:

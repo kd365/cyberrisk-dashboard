@@ -38,6 +38,7 @@ class EnsembleForecaster:
         """Lazy-load a base forecaster."""
         if model_name == "prophet":
             from models.time_series_forecaster import CyberRiskForecaster
+
             f = CyberRiskForecaster(self.ticker)
             f.fetch_stock_data(period="2y")
             f.add_cybersecurity_sentiment(mock=True)
@@ -46,29 +47,34 @@ class EnsembleForecaster:
             return f
         elif model_name == "chronos":
             from models.chronos_forecaster import ChronosForecaster
+
             f = ChronosForecaster(self.ticker, model_size="small")
             f.fetch_stock_data(period="3y")
             return f
         elif model_name == "xgboost":
             from models.xgboost_forecaster import XGBoostForecaster
+
             f = XGBoostForecaster(self.ticker)
             f.prepare_features()
             f.train()
             return f
         elif model_name == "lightgbm":
             from models.lightgbm_forecaster import LightGBMForecaster
+
             f = LightGBMForecaster(self.ticker)
             f.prepare_features()
             f.train()
             return f
         elif model_name == "random_forest":
             from models.random_forest_forecaster import RandomForestForecaster
+
             f = RandomForestForecaster(self.ticker)
             f.prepare_features()
             f.train()
             return f
         elif model_name == "lstm":
             from models.lstm_forecaster import LSTMForecaster
+
             f = LSTMForecaster(self.ticker)
             f.prepare_features()
             f.train()
@@ -76,7 +82,9 @@ class EnsembleForecaster:
         else:
             raise ValueError(f"Unknown model: {model_name}")
 
-    def train(self, models: Optional[List[str]] = None, test_days: int = 30) -> Dict[str, Any]:
+    def train(
+        self, models: Optional[List[str]] = None, test_days: int = 30
+    ) -> Dict[str, Any]:
         """
         Train ensemble by evaluating all base models and computing weights.
 
@@ -100,10 +108,12 @@ class EnsembleForecaster:
 
                 self.base_forecasters[model_name] = forecaster
                 self.base_evaluations[model_name] = evaluation
-                results["models_evaluated"].append({
-                    "model": model_name,
-                    **evaluation,
-                })
+                results["models_evaluated"].append(
+                    {
+                        "model": model_name,
+                        **evaluation,
+                    }
+                )
                 logger.info(f"Ensemble: {model_name} MAPE={evaluation['mape']:.2f}%")
 
             except Exception as e:
@@ -130,7 +140,9 @@ class EnsembleForecaster:
                 if mape > 0:
                     inverse_mapes[model_name] = 1.0 / mape
                 else:
-                    inverse_mapes[model_name] = 10.0  # Very high weight for perfect MAPE
+                    inverse_mapes[model_name] = (
+                        10.0  # Very high weight for perfect MAPE
+                    )
 
             total = sum(inverse_mapes.values())
             self.weights = {k: v / total for k, v in inverse_mapes.items()}
@@ -148,7 +160,9 @@ class EnsembleForecaster:
 
         # Collect predictions from all base models on the test set
         # This is a simplified version; full implementation would use OOF predictions
-        logger.info("Ridge meta-learner training not yet implemented; falling back to inverse_mape")
+        logger.info(
+            "Ridge meta-learner training not yet implemented; falling back to inverse_mape"
+        )
         self.strategy = "inverse_mape"
         self._compute_weights()
 
@@ -201,7 +215,11 @@ class EnsembleForecaster:
 
         # Confidence interval from prediction spread across models
         all_final_preds = [v[-1] for v in all_predictions.values() if len(v) >= min_len]
-        pred_spread_std = np.std(all_final_preds) if len(all_final_preds) > 1 else current_price * 0.05
+        pred_spread_std = (
+            np.std(all_final_preds)
+            if len(all_final_preds) > 1
+            else current_price * 0.05
+        )
 
         # Build forecast DataFrame
         forecast_dates = any_forecast["forecast_df"]["ds"].values[:min_len]
@@ -210,12 +228,14 @@ class EnsembleForecaster:
         all_pred_matrix = np.array([v[:min_len] for v in all_predictions.values()])
         step_stds = np.std(all_pred_matrix, axis=0)
 
-        forecast_df = pd.DataFrame({
-            "ds": forecast_dates,
-            "yhat": ensemble_pred,
-            "yhat_lower": ensemble_pred - 1.96 * step_stds,
-            "yhat_upper": ensemble_pred + 1.96 * step_stds,
-        })
+        forecast_df = pd.DataFrame(
+            {
+                "ds": forecast_dates,
+                "yhat": ensemble_pred,
+                "yhat_lower": ensemble_pred - 1.96 * step_stds,
+                "yhat_upper": ensemble_pred + 1.96 * step_stds,
+            }
+        )
 
         return {
             "current_price": current_price,
@@ -297,7 +317,9 @@ class EnsembleForecaster:
                 except Exception as e:
                     logger.warning(f"Could not get importance from {model_name}: {e}")
 
-        sorted_importance = dict(sorted(aggregated.items(), key=lambda x: x[1], reverse=True))
+        sorted_importance = dict(
+            sorted(aggregated.items(), key=lambda x: x[1], reverse=True)
+        )
 
         return {
             "ensemble_importance": sorted_importance,

@@ -368,8 +368,7 @@ class CoreSignalService:
             cursor = self.connection.cursor()
 
             # Headcount history table
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS company_headcount_history (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(10) NOT NULL,
@@ -385,12 +384,10 @@ class CoreSignalService:
                 );
                 CREATE INDEX IF NOT EXISTS idx_headcount_ticker ON company_headcount_history(ticker);
                 CREATE INDEX IF NOT EXISTS idx_headcount_date ON company_headcount_history(snapshot_date);
-            """
-            )
+            """)
 
             # Jobs snapshot table
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS company_jobs_snapshot (
                     id SERIAL PRIMARY KEY,
                     ticker VARCHAR(10) NOT NULL,
@@ -406,8 +403,7 @@ class CoreSignalService:
                 );
                 CREATE INDEX IF NOT EXISTS idx_jobs_ticker ON company_jobs_snapshot(ticker);
                 CREATE INDEX IF NOT EXISTS idx_jobs_date ON company_jobs_snapshot(snapshot_date);
-            """
-            )
+            """)
 
             self.connection.commit()
             cursor.close()

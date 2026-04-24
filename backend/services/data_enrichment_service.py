@@ -194,7 +194,9 @@ Respond ONLY with valid JSON, no markdown:
             logger.error(f"Error getting filing for {ticker}: {e}")
             return None
 
-    def extract_company_features(self, ticker: str, filing_type: str = "10-K") -> Dict[str, Any]:
+    def extract_company_features(
+        self, ticker: str, filing_type: str = "10-K"
+    ) -> Dict[str, Any]:
         """Extract LLM-derived features for a company."""
         text = self.get_filing_text(ticker, filing_type=filing_type)
         if not text:
@@ -254,15 +256,23 @@ Respond ONLY with valid JSON, no markdown:
                     "market_positioning": features.get("market_positioning", "unknown"),
                     "threat_specialization": features.get("threat_specialization", []),
                     "competitive_moat": features.get("competitive_moat", "unknown"),
-                    "leadership_cyber_expertise": features.get("leadership_cyber_expertise", 0),
+                    "leadership_cyber_expertise": features.get(
+                        "leadership_cyber_expertise", 0
+                    ),
                     "product_market_fit": features.get("product_market_fit", 0),
                     "innovation_intensity": features.get("innovation_intensity", 0),
-                    "customer_concentration_risk": features.get("customer_concentration_risk", 0),
+                    "customer_concentration_risk": features.get(
+                        "customer_concentration_risk", 0
+                    ),
                     "regulatory_alignment": features.get("regulatory_alignment", 0),
                     "management_sentiment": features.get("management_sentiment", 0),
                     "growth_trajectory": features.get("growth_trajectory", 0),
-                    "risk_disclosure_quality": features.get("risk_disclosure_quality", 0),
-                    "threat_landscape_awareness": features.get("threat_landscape_awareness", 0),
+                    "risk_disclosure_quality": features.get(
+                        "risk_disclosure_quality", 0
+                    ),
+                    "threat_landscape_awareness": features.get(
+                        "threat_landscape_awareness", 0
+                    ),
                     "risk_summary": features.get("risk_summary", ""),
                     "key_risks": features.get("key_risks", []),
                     "key_opportunities": features.get("key_opportunities", []),

@@ -414,7 +414,15 @@ def get_forecast():
     refresh = request.args.get("refresh", "false").lower() == "true"
 
     # Validate model type
-    valid_models = ["prophet", "chronos", "xgboost", "lightgbm", "random_forest", "lstm", "ensemble"]
+    valid_models = [
+        "prophet",
+        "chronos",
+        "xgboost",
+        "lightgbm",
+        "random_forest",
+        "lstm",
+        "ensemble",
+    ]
     if model_type not in valid_models:
         return (
             jsonify(
@@ -509,6 +517,7 @@ def get_forecast():
             if cache_key not in ml_forecasters:
                 print(f"Training {model_type} model for {ticker}...")
                 from services.backtest_service import _instantiate_forecaster
+
                 ml_forecasters[cache_key] = _instantiate_forecaster(model_type, ticker)
                 print(f"{model_type} model ready for {ticker}")
 
@@ -540,7 +549,9 @@ def get_forecast():
             # Add ensemble-specific data
             if model_type == "ensemble" and "model_weights" in results:
                 response_data["model_weights"] = results["model_weights"]
-                response_data["individual_predictions"] = results.get("individual_predictions", {})
+                response_data["individual_predictions"] = results.get(
+                    "individual_predictions", {}
+                )
 
         else:
             # Use Prophet forecaster (default)
@@ -609,13 +620,15 @@ def get_available_models():
             except ImportError:
                 available = False
 
-        models.append({
-            "id": model_id,
-            "name": info["name"],
-            "description": info["description"],
-            "paradigm": info["paradigm"],
-            "available": available,
-        })
+        models.append(
+            {
+                "id": model_id,
+                "name": info["name"],
+                "description": info["description"],
+                "paradigm": info["paradigm"],
+                "available": available,
+            }
+        )
 
     return jsonify({"models": models})
 
@@ -927,20 +940,29 @@ def get_ensemble_weights():
     cache_key = f"ensemble_{ticker}"
     if cache_key in ml_forecasters:
         ensemble = ml_forecasters[cache_key]
-        return jsonify({
-            "ticker": ticker,
-            "weights": ensemble.weights,
-            "strategy": ensemble.strategy,
-            "base_evaluations": {
-                k: {
-                    "mape": v.get("mape"),
-                    "directional_accuracy": v.get("directional_accuracy"),
-                }
-                for k, v in ensemble.base_evaluations.items()
-            },
-        })
+        return jsonify(
+            {
+                "ticker": ticker,
+                "weights": ensemble.weights,
+                "strategy": ensemble.strategy,
+                "base_evaluations": {
+                    k: {
+                        "mape": v.get("mape"),
+                        "directional_accuracy": v.get("directional_accuracy"),
+                    }
+                    for k, v in ensemble.base_evaluations.items()
+                },
+            }
+        )
 
-    return jsonify({"error": "Ensemble not trained yet. Call /api/forecast?model=ensemble first."}), 404
+    return (
+        jsonify(
+            {
+                "error": "Ensemble not trained yet. Call /api/forecast?model=ensemble first."
+            }
+        ),
+        404,
+    )
 
 
 # ============================================================================
@@ -1566,7 +1588,9 @@ def get_financials(ticker):
         # Fallback: if nothing in the table yet, fall back to on-demand extraction
         # and opportunistically backfill. Only hit in pre-backfill state.
         if not financials:
-            print(f"filing_financials empty for {ticker} — falling back to on-demand extract")
+            print(
+                f"filing_financials empty for {ticker} — falling back to on-demand extract"
+            )
             from services.financial_html_extractor import FinancialHtmlExtractor
 
             artifacts = s3_service.get_artifacts_table()
@@ -3280,12 +3304,10 @@ def run_migration():
         cursor = conn.cursor()
 
         # Add alternate_names column if it doesn't exist
-        cursor.execute(
-            """
+        cursor.execute("""
             ALTER TABLE companies
             ADD COLUMN IF NOT EXISTS alternate_names TEXT
-        """
-        )
+        """)
         conn.commit()
 
         cursor.close()
