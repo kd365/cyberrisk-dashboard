@@ -126,11 +126,20 @@ You have NO knowledge about companies, markets, or regulations.
 You CANNOT answer questions - only categorize them.
 
 Categories:
-- "financial": Questions about stock prices, forecasts, sentiment, growth, company info
-- "regulatory": Questions about regulations, compliance, alerts, SEC/CISA/FTC rules
-- "graph": Questions about relationships, competitors, market segments, similar companies
-- "document_search": Questions about SEC filings, 10-K, 10-Q, earnings transcripts, specific document content
-- "general": Greetings, help requests, or questions not requiring data
+- "financial": Stock prices, price forecasts, sentiment scores, growth/hiring metrics,
+  basic company info (sector, description). Quantitative numeric data.
+- "regulatory": Regulations, compliance, alerts, SEC/CISA/FTC rules.
+- "graph": Knowledge-graph queries — M&A / mergers / acquisitions ("has X been acquired?",
+  "did Y acquire Z?"), executive changes (appointments, departures, CEOs, CFOs),
+  patents / IP, vulnerabilities / CVEs, security incidents / breaches, business events,
+  persons / leadership / boards, locations / offices, market segments, market leaders,
+  similar companies, competitive landscape. Anything querying graph nodes/relationships.
+- "document_search": SEC filing text content — 10-K/10-Q/8-K prose, earnings transcript text,
+  "what does the 10-K say about X", risk-factor language.
+- "general": Greetings, help requests, dashboard navigation questions.
+
+Heuristic: structured answers (lists, counts, dates, rankings) → "graph" or "financial".
+Free-text from a filing → "document_search".
 
 Extract ticker symbols ONLY if explicitly mentioned (e.g., "CRWD", "CrowdStrike" → "CRWD").
 
@@ -604,35 +613,48 @@ Available data: company info, sentiment, forecasts, growth metrics, regulatory a
             return error_response(str(e), "regulatory_tools")
 
     def _call_graph_tools(self, query: str, ticker: str = None) -> Dict:
-        """Call knowledge graph tools directly."""
+        """Call knowledge graph tools.
+
+        Strategy:
+          1. Cheap precomputed paths (PageRank, Louvain, similarity) — these
+             use cached GDS projections and don't benefit from on-the-fly
+             Cypher generation.
+          2. Catch-all: hand off to query_knowledge_graph, which uses the
+             text-to-Cypher generator with schema-injected prompts. This
+             handles M&A, executive events, vulnerabilities, patents,
+             feature scores, and arbitrary cross-entity queries.
+        """
         try:
             from services.langchain_tools import (
                 get_market_segments,
                 get_market_leaders,
                 get_similar_companies,
                 get_competitive_intelligence_summary,
+                query_knowledge_graph,
             )
 
             query_lower = query.lower()
 
-            # Direct tool selection based on query patterns
+            # Cheap precomputed paths — only for explicit GDS analytics requests
             if any(p in query_lower for p in ["segment", "market segment", "cluster"]):
                 return get_market_segments.invoke({})
-            elif any(p in query_lower for p in ["leader", "top", "ranking"]):
+            if any(
+                p in query_lower for p in ["market leader", "leaderboard", "pagerank"]
+            ):
                 return get_market_leaders.invoke({})
-            elif (
-                any(p in query_lower for p in ["similar", "like", "comparable"])
+            if (
+                any(p in query_lower for p in ["similar to", "comparable to"])
                 and ticker
             ):
                 return get_similar_companies.invoke({"ticker": ticker})
-            elif any(
+            if any(
                 p in query_lower
-                for p in ["competitive", "competition", "overview", "intelligence"]
+                for p in ["competitive intelligence", "intelligence overview"]
             ):
                 return get_competitive_intelligence_summary.invoke({})
-            else:
-                # Default: competitive intelligence summary
-                return get_competitive_intelligence_summary.invoke({})
+
+            # Catch-all: text-to-Cypher
+            return query_knowledge_graph.invoke({"query": query, "ticker": ticker})
 
         except Exception as e:
             logger.error(f"Graph tool error: {e}")

@@ -486,28 +486,50 @@ def get_documents(ticker: str) -> dict:
 
 @tool
 def query_knowledge_graph(query: str, ticker: Optional[str] = None) -> dict:
-    """Search the knowledge graph for information from SEC filings and documents.
+    """Answer free-form questions about the knowledge graph by generating
+    a read-only Cypher query, executing it, and returning the rows.
+
+    Use this as the catch-all for graph questions that don't fit a more
+    specific tool. Examples:
+      - "Has any tracked company acquired Splunk?"
+      - "Which executives left CRWD in 2025?"
+      - "What patents did PANW file related to zero-trust?"
+      - "Show me companies with the highest competitive moat scores"
+
+    The generator is constrained to read-only Cypher (no CREATE, DELETE, etc.),
+    has the full graph schema injected, and is given few-shot examples covering
+    M&A, executive changes, vulnerabilities, patents, and feature scores.
 
     Args:
-        query: Natural language query to search for (e.g., "cloud security risks", "AI investments")
-        ticker: Optional ticker to limit search to specific company
+        query: Natural-language question
+        ticker: Optional ticker hint (e.g. "CRWD") to inject as context
 
-    Use this for questions about topics, risks, people, or concepts mentioned in filings.
-    Returns relevant entities, concepts, and relationships from the graph.
+    Returns:
+        Dict with status, generated cypher, row count, and result rows.
+        On no-data, returns NO_DATA structured response.
     """
-    neo4j = get_neo4j_service()
-    if not neo4j:
+    from services.cypher_generator import get_cypher_generator
+
+    ticker = ticker.upper() if ticker else None
+    gen = get_cypher_generator()
+    result = gen.generate(query, ticker=ticker)
+
+    if result["status"] == "ok":
+        if result["row_count"] == 0:
+            return no_data_response("graph results", entity=ticker or "the question")
         return {
-            "error": "Knowledge graph not available",
-            "message": "Neo4j service is not connected",
+            "status": "ok",
+            "query_used": result["cypher"],
+            "row_count": result["row_count"],
+            "rows": result["rows"],
         }
 
-    try:
-        ticker = ticker.upper() if ticker else None
-        result = neo4j.semantic_query(query, ticker)
-        return result
-    except Exception as e:
-        return {"error": str(e)}
+    # Surface generation/validation/execution errors as TOOL_ERROR so the
+    # synthesizer responds with the standard "couldn't retrieve" message.
+    return error_response(
+        f"{result['status']}: {result.get('error', 'unknown')}",
+        "knowledge_graph_query",
+    )
 
 
 @tool
