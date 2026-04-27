@@ -107,10 +107,39 @@ class FinancialHtmlExtractor:
 
     def _extract_from_pdf_text(self, s3_key, filing_date):
         """
-        For PDF files, download and extract text using existing method
-        This is a placeholder - would integrate with PDF text extraction
+        Extract financials from a PDF filing via OCR + text parsing.
+
+        Uses OCRService for high-quality text extraction (Unstructured.io for
+        scanned PDFs, PyMuPDF for text-based PDFs), then runs the existing
+        text-based parser to find revenue / net_income / etc. via regex
+        patterns and dollar-amount heuristics.
+
+        Returns the same dict shape as HTML extraction so callers can treat
+        both paths identically.
         """
-        print(f"  ⚠️  PDF extraction not yet implemented, returning None")
+        try:
+            from .ocr_service import get_ocr_service
+        except ImportError:
+            print(f"  ⚠️  OCR service unavailable, cannot parse PDF {s3_key}")
+            return None
+
+        ocr = get_ocr_service()
+        # Point OCR at the same bucket the extractor is using
+        ocr.bucket = self.bucket
+
+        text = ocr.extract_text_from_s3(s3_key, use_ocr=True)
+        if not text:
+            print(f"  ⚠️  OCR returned no text for {s3_key}")
+            return None
+
+        # Run the existing text-based parser (regexes for "Total revenue",
+        # "Net income", subscription revenue patterns, etc.)
+        financials = self._extract_from_text(text, filing_date)
+        if financials:
+            print(f"  ✅ Extracted financials via OCR text parsing")
+            return financials
+
+        print(f"  ⚠️  Text parser found no metrics in OCR output for {s3_key}")
         return None
 
     def _parse_financial_from_html(self, soup, filing_date):

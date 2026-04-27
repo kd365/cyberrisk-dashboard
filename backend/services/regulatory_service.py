@@ -35,8 +35,9 @@ class RegulatoryService:
     # Federal Register API configuration
     FEDERAL_REGISTER_BASE_URL = "https://www.federalregister.gov/api/v1"
 
-    # Bedrock model for LLM validation
-    MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+    # Bedrock model for LLM validation (legacy claude-3-haiku-20240307 was
+    # deprecated by Bedrock in 2026 for accounts that hadn't used it in 30+ days)
+    MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     # Agencies to track for cybersecurity regulations
     # Note: CISA publishes through homeland-security-department, not its own slug

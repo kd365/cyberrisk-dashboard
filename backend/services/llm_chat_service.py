@@ -42,8 +42,9 @@ class LLMChatService:
     for document-based intelligence.
     """
 
-    # Claude 3 Haiku model ID on Bedrock
-    MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+    # Bedrock inference profile ID for Claude 4.5 Haiku
+    # (legacy claude-3-haiku-20240307 was deprecated by Bedrock in 2026)
+    MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     # System prompt loaded dynamically from shared prompts module
     # This ensures all companies from RDS are included

@@ -38,7 +38,9 @@ logger = logging.getLogger(__name__)
 class LLMFeatureExtractor:
     """Uses Claude via Bedrock for feature extraction from documents."""
 
-    MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+    # Active model — legacy claude-3-haiku-20240307 was deprecated by Bedrock
+    # in 2026 for accounts that hadn't used it in 30+ days.
+    MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     def __init__(self):
         self.region = os.environ.get("AWS_REGION", "us-west-2")
