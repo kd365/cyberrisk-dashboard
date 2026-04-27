@@ -7,10 +7,13 @@ request time.
 Idempotent — UNIQUE(s3_key) on filing_financials means re-running updates
 existing rows rather than creating duplicates.
 
-Usage:
-    python scripts/backfill_financials.py              # run for all tickers
-    python scripts/backfill_financials.py --ticker CRWD  # one ticker
-    python scripts/backfill_financials.py --dry-run      # preview only
+Usage (from backend/ as cwd, or inside the container):
+    python scripts/backfill_financials.py              # all tickers
+    python scripts/backfill_financials.py --ticker CRWD
+    python scripts/backfill_financials.py --dry-run
+
+In production (Docker), run via SSM:
+    docker exec cyberrisk-backend python /app/scripts/backfill_financials.py
 """
 
 import os
@@ -18,10 +21,10 @@ import sys
 import argparse
 import time
 
-# Add backend/ to path so services.* imports resolve
+# Add the parent directory (backend/) to path so services.* imports resolve.
+# Script lives at backend/scripts/backfill_financials.py — go up one level.
 sys.path.insert(
-    0,
-    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend"),
+    0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
 from services.database_service import db_service
