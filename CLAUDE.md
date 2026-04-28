@@ -23,10 +23,12 @@ A comprehensive cybersecurity risk analytics platform analyzing SEC filings, ear
 ### Data Services
 | File | Purpose |
 |------|---------|
-| [database_service.py](backend/services/database_service.py) | PostgreSQL CRUD (companies, artifacts, regulations) |
+| [database_service.py](backend/services/database_service.py) | PostgreSQL CRUD (companies, artifacts, regulations, **filing_financials**) |
 | [neo4j_service.py](backend/services/neo4j_service.py) | Neo4j graph database operations |
 | [gds_service.py](backend/services/gds_service.py) | Graph Data Science analytics (PageRank, Louvain) |
 | [memory_service.py](backend/services/memory_service.py) | Mem0 semantic memory + pgvector |
+| [cypher_generator.py](backend/services/cypher_generator.py) | **Text-to-Cypher LLM generator** (read-only, schema-injected) |
+| [financial_html_extractor.py](backend/services/financial_html_extractor.py) | XBRL/HTML/PDF→OCR financial metrics extraction |
 
 ### Feature Services
 | File | Purpose |
@@ -44,6 +46,20 @@ A comprehensive cybersecurity risk analytics platform analyzing SEC filings, ear
 | [ComplianceMonitor.jsx](frontend/src/components/ComplianceMonitor.jsx) | Regulatory alerts dashboard |
 | [AuthProvider.jsx](frontend/src/components/AuthProvider.jsx) | Cognito authentication |
 
+### ML Models (data science portfolio layer)
+| File | Purpose |
+|------|---------|
+| [feature_engineering.py](backend/models/feature_engineering.py) | Shared feature matrix: 31 technical indicators + cross-asset (SPY/QQQ/HACK/VIX) + 34 lag/change features. Multi-target (price, return, log_return, direction, abs_return). Two-tier cache (memory + parquet). |
+| [direction_classifier.py](backend/models/direction_classifier.py) | XGBoost binary classifier → P(next-day return > 0). Uses log-loss / AUC eval. Stage 1 of signed-return forecaster. |
+| [magnitude_regressor.py](backend/models/magnitude_regressor.py) | XGBoost regressor → E[\|return\|], one instance per direction (up/down). Stage 2 of signed-return forecaster. |
+| [xgboost_forecaster.py](backend/models/xgboost_forecaster.py) | Original price-level XGBoost forecaster (regression on raw price). Used in Forecast tab UI. |
+| [lightgbm_forecaster.py](backend/models/lightgbm_forecaster.py) | LightGBM with native categorical handling. |
+| [random_forest_forecaster.py](backend/models/random_forest_forecaster.py) | sklearn RF; per-tree variance gives natural confidence intervals. |
+| [lstm_forecaster.py](backend/models/lstm_forecaster.py) | PyTorch 2-layer LSTM with MC Dropout uncertainty. |
+| [ensemble_forecaster.py](backend/models/ensemble_forecaster.py) | Weighted meta-model (Prophet + Chronos + 4 ML); inverse-MAPE weighting. |
+| [time_series_forecaster.py](backend/models/time_series_forecaster.py) | Prophet (decomposable additive). |
+| [chronos_forecaster.py](backend/models/chronos_forecaster.py) | Amazon Chronos T5 foundation model (zero-shot). |
+
 ### Infrastructure
 | File | Purpose |
 |------|---------|
@@ -51,6 +67,9 @@ A comprehensive cybersecurity risk analytics platform analyzing SEC filings, ear
 | [.github/workflows/](/.github/workflows/) | CI/CD pipelines |
 | [scripts/hibernate.sh](scripts/hibernate.sh) | Cost management - stop resources |
 | [scripts/wakeup.sh](scripts/wakeup.sh) | Cost management - restart resources |
+| [backend/scripts/sync_s3_to_db.py](backend/scripts/sync_s3_to_db.py) | Closes scraper→DB gap: lists raw/sec/ in S3, inserts missing rows into artifacts table. Auto-extracts financials at insert. |
+| [backend/scripts/backfill_financials.py](backend/scripts/backfill_financials.py) | One-time backfill of filing_financials table from existing S3 filings. |
+| [backend/scripts/extract_8k_events_all.py](backend/scripts/extract_8k_events_all.py) | Runs SEC8KEventExtractor across all tickers; populates MAEvent/ExecutiveEvent/SecurityEvent nodes. |
 
 ### Archived Files
 Development artifacts, test results, and one-time scripts have been moved to `archive/`:
@@ -978,4 +997,275 @@ def synthesize_response(state, llm):
 - `has_data`: Whether tools returned actual data
 
 ---
-*Last Updated: 2026-01-28*
+
+### 2026-04-23: Bedrock Model ID Migration (Legacy → Inference Profiles)
+
+**Problem**: Chat agent and several services failed with `ResourceNotFoundException`
+("Model marked as Legacy and you have not been actively using the model in the
+last 30 days"). Bedrock had deprecated the older Claude model IDs after 30+ days
+of dormancy.
+
+**Fix**: Updated all hardcoded model IDs to Claude 4.5 cross-region inference
+profiles. Note the `us.` prefix — Claude 4.5 models cannot be invoked with raw
+on-demand model IDs; they require an inference profile ARN/ID.
+
+| File | Old | New |
+|------|-----|-----|
+| [langchain_agent.py](backend/services/langchain_agent.py) | `anthropic.claude-3-5-sonnet-20241022-v2:0`, `anthropic.claude-3-5-haiku-20241022-v1:0` | `us.anthropic.claude-sonnet-4-5-20250929-v1:0`, `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| [data_enrichment_service.py](backend/services/data_enrichment_service.py) | `anthropic.claude-3-haiku-20240307-v1:0` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| [regulatory_service.py](backend/services/regulatory_service.py) | `anthropic.claude-3-haiku-20240307-v1:0` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| [llm_chat_service.py](backend/services/llm_chat_service.py) | `anthropic.claude-3-haiku-20240307-v1:0` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+
+**Also fixed in same push**:
+- StructuredTool object call bug — direct calls like `list_companies()` raise
+  `'StructuredTool' object is not callable`. Changed all `_call_*_tools` methods
+  in langchain_agent.py to use `tool.invoke({...})` instead.
+- Added `chronos-forecasting`, `torch`, `pyarrow` to requirements.txt
+  (Chronos was failing in production with `ModuleNotFoundError: No module named 'chronos'`).
+- Fixed `from backend.services.s3_service` → `from services.s3_service` in
+  time_series_forecaster.py (PYTHONPATH inside the container has /app on it,
+  not /app/backend).
+
+**Commits**: `70cee7a`, `3a11195`, `7fe6d97`
+
+---
+
+### 2026-04-23: Financials Performance Fix (13s → ~200ms)
+
+**Problem**: `/api/financials/<ticker>` re-parsed 12 SEC filings (XBRL + HTML
+tables) from S3 on every request — 13 seconds per call, blocking Gunicorn
+workers. Frontend chart loading was gated on this.
+
+**Architectural insight**: Filing data never changes once published. Re-parsing
+at request time is fundamentally wrong; extraction belongs at ingestion.
+
+**Solution**: Three-piece change.
+
+#### 1. New `filing_financials` table
+
+```sql
+CREATE TABLE filing_financials (
+    id SERIAL PRIMARY KEY,
+    ticker VARCHAR(10) NOT NULL,
+    s3_key VARCHAR(500) NOT NULL UNIQUE,  -- idempotent on re-run
+    filing_type VARCHAR(20) NOT NULL,
+    filing_date DATE NOT NULL,
+    revenue BIGINT, subscription_revenue BIGINT, arr BIGINT,
+    net_income BIGINT, operating_income BIGINT, eps DECIMAL(10,4),
+    raw_data JSONB,                        -- preserves full extractor output
+    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_filing_financials_ticker_date
+    ON filing_financials(ticker, filing_date DESC);
+```
+
+#### 2. Extraction hook in `db_service.create_artifact()`
+
+For 10-K/10-Q filings, automatically extracts financials and upserts into
+`filing_financials`. Failures don't fail the artifact insert.
+
+#### 3. Endpoint refactor
+
+[`/api/financials/<ticker>`](backend/app.py#L1543) now:
+- Reads pre-extracted rows from `filing_financials` (~5ms DB query)
+- Aggregates rolling averages in Python (~1ms)
+- Falls back to on-demand extraction + opportunistic backfill on miss
+- Sets `Cache-Control: public, max-age=300` so CloudFront edge-caches the
+  response (shields backend from React StrictMode double-renders)
+
+**Performance after backfill**:
+| Scenario | Before | After |
+|----------|--------|-------|
+| First request per cold ticker | 13.0s | 13.0s (one-time fallback) |
+| Subsequent requests | 13.0s every time | **~200ms** |
+| CPU per request | 13s of worker time | ~50ms of DB query time |
+
+**Frontend**: [TimeSeriesForecast.jsx](frontend/src/components/TimeSeriesForecast.jsx)
+moved `setLoading(false)` from the financials callback to the forecast callback
+so the chart renders independently of the slower endpoints.
+
+**Backfill**: 18 of 30 tickers populated. The 12 missing are all delisted/
+acquired companies (SPLK→Cisco, VMW→Broadcom, FEYE→Trellix, JNPR→HPE,
+SCWX→Sophos, etc.) with no SEC filings post-acquisition.
+
+**Commits**: `2d68fa6` (perf fix + ML scaffolding), `8184a55` (Black 24
+formatting), `3857a9d` (Black version pin)
+
+---
+
+### 2026-04-25: Scraper→DB Sync Gap (Architectural Issue)
+
+**Found during Q1 2026 filing refresh**: The scrape pipeline writes raw filings
+to S3 (`raw/sec/{TICKER}_{FORM}_{DATE}.{txt|pdf}`) but **never inserts into
+the PostgreSQL artifacts table**. New filings appear in S3 but are invisible
+to every downstream feature (financials, sentiment, graph, M&A extraction).
+
+**Confirmation**: Triggered `/api/scraping/start` for all 30 tickers. EDGAR
+returned new 8-Ks (CRWD 2026-04-21, VRSN 2026-04-23 10-Q, etc.) and the scraper
+uploaded 176 new files to S3. Zero new rows in artifacts table.
+
+**Root cause**: `scraper.save_raw_pdf_files()` writes to S3 and returns S3
+keys. Nothing in the call chain calls `db_service.create_artifact()`. The
+existing `sync_8k_to_db.py` script handled only 8-Ks for an earlier instance
+of the same gap.
+
+**Stopgap**: New script [`backend/scripts/sync_s3_to_db.py`](backend/scripts/sync_s3_to_db.py)
+that lists `raw/sec/` in S3, parses filenames, and inserts missing rows. Idempotent.
+
+**First sync result**: 202 new artifacts (77 10-K, 78 10-Q, 47 8-K).
+Latest filing dates moved from Dec 2025 → Apr 2026. The auto-extract hook in
+`create_artifact` populated `filing_financials` for all new HTML 10-K/10-Qs.
+
+**Permanent fix (not yet implemented)**: Modify `scraper.save_raw_pdf_files`
+itself to call `db_service.create_artifact` directly so the sync script becomes
+unnecessary. Tracked as outstanding.
+
+---
+
+### 2026-04-25: PDF Financial Extraction via OCR
+
+**Issue**: New 10-Q filings landing as PDFs (not iXBRL/HTML) were producing
+empty rows in `filing_financials`. The `FinancialHtmlExtractor._extract_from_pdf_text`
+method was a stub returning `None` with a "PDF extraction not yet implemented"
+warning. Meanwhile the LLM feature pipeline already had OCR wired up via
+`OCRService`.
+
+**Fix**: Wired the existing OCR service into the financial extractor's PDF
+path. PDFs now flow through:
+1. `OCRService.extract_text_from_s3()` — Unstructured.io (scanned) or PyMuPDF (text)
+2. Existing text-based regex parser for revenue / net_income / operating_income
+3. Same dict shape returned, so callers don't care which path produced it
+
+**Commit**: `2b02ff4`
+
+---
+
+### 2026-04-25: M&A Event Extraction Across All 8-Ks
+
+**Problem**: `MAEvent` nodes existed in Neo4j but only 15 across the entire
+graph, despite having 187+ 8-K filings in PostgreSQL. The extraction had been
+written but never run at scale.
+
+**Fix**: New script
+[`backend/scripts/extract_8k_events_all.py`](backend/scripts/extract_8k_events_all.py)
+that runs `SEC8KEventExtractor.extract_all_events(ticker)` for every ticker
+with 8-Ks, persisting results to Neo4j as MAEvent / ExecutiveEvent /
+SecurityEvent / RestructuringEvent nodes.
+
+**Run results** (7.1 minutes, ~$1 in Bedrock Haiku calls):
+- **MAEvent**: 15 → 41 nodes (+26)
+- ExecutiveEvent: 90 extracted (storage layer had a bug, see TODO)
+- SecurityEvent: 0 (no Item 8.01 cybersecurity disclosures in this window)
+- RestructuringEvent: 1
+
+**Examples surfaced**:
+- ABT → Exact Sciences merger
+- **PANW → CyberArk acquisition (2025-07-30)** — major industry M&A
+- AKAM, NOW, CSCO debt-issuance / credit agreements
+
+**Limitation**: Cisco's Splunk acquisition (Mar 2024) is NOT in the data
+because we cap 8-Ks per ticker at the most recent ~10 — Cisco's pre-2025 8-Ks
+are outside our window. This is a data-window issue, not a pipeline bug.
+
+---
+
+### 2026-04-25: Text-to-Cypher Tool (Major Architectural Improvement)
+
+**Problem**: `_call_graph_tools` in langchain_agent.py used hardcoded if/elif
+keyword matching to pick from 4 GDS analytics tools. No path existed to query
+the entity-event node types (MAEvent, ExecutiveEvent, Vulnerability, Patent,
+etc.) — adding new query types required adding new keyword patterns. Not
+scalable.
+
+**Solution**: Replace pattern matching with text-to-Cypher generation.
+
+[`backend/services/cypher_generator.py`](backend/services/cypher_generator.py):
+
+```
+question + ticker
+    → schema-injected Haiku prompt
+    → generated Cypher (validated read-only)
+    → execute against Neo4j
+    → return rows for synthesizer
+```
+
+**Components**:
+- `GRAPH_SCHEMA` constant — hand-curated description of all node labels,
+  properties, and relationship types in the CyberRisk graph
+- `FEW_SHOT_EXAMPLES` — 7 examples covering M&A, executives, vulnerabilities,
+  patents, feature scores, fuzzy company name matching
+- `validate_read_only()` — regex check rejecting CREATE/DELETE/MERGE/SET/
+  REMOVE/DETACH/DROP/FOREACH/LOAD CSV
+- `enforce_limit()` — caps row count at 100
+- `CypherGenerator.generate()` — Bedrock call → validate → execute → rows
+
+**Tool wiring**: `query_knowledge_graph` in
+[langchain_tools.py](backend/services/langchain_tools.py) now delegates to the
+generator. Same tool name and signature as before, so existing wiring is
+preserved.
+
+**Router prompt updated** to make M&A / executive / vulnerability / patent
+queries route to "graph" instead of being misclassified as "financial".
+
+**Live demo verified**:
+> Q: "Did PANW acquire CyberArk?"
+> A: "Yes, according to the data, Palo Alto Networks (PANW) acquired CyberArk
+>     Software Ltd. On July 30, 2025, Palo Alto Networks entered into an
+>     Agreement and Plan of Merger to acquire CyberArk, with CyberArk
+>     continuing as a wholly owned subsidiary..."
+
+The agent generated:
+```cypher
+MATCH (acquirer:Organization)-[:HAS_MA_EVENT]->(m:MAEvent)
+WHERE toLower(m.target_company) CONTAINS 'cyberark' ...
+```
+
+then executed it and synthesized prose from the rows.
+
+**Architectural impact**: Adding new query types now requires no code change —
+just new node types in the graph and matching schema description.
+
+**Commit**: `a2cb655`
+
+---
+
+### 2026-04-23 to 2026-04-27: Signed-Return Forecaster Workshop
+
+Multi-part workshop building a two-stage stock prediction architecture using
+the existing infrastructure as a foundation. Goal: replace single-target price
+regression with a directional probability + magnitude regression that gives
+calibrated signed-return predictions.
+
+**Architecture**:
+```
+Stage 1: features → DirectionClassifier  → P(up)
+Stage 2: features → MagnitudeRegressor   → E[|return|]   (one per direction)
+Stage 3: signed_return = P(up) * mag_up - (1 - P(up)) * mag_down
+```
+
+**Status by part**:
+
+| Part | Component | Status |
+|------|-----------|--------|
+| 1 | Target variable redesign in `feature_engineering.py` (added target_price, target_return, target_log_return, target_direction, target_abs_return) | ✅ |
+| 2 | Cross-asset features (SPY, QQQ, HACK, VIX) with two-tier cache (in-memory + parquet, 24h TTL) | ✅ |
+| 3 | Lagged features for trajectory-sensitive indicators (rsi_14, macd_histogram, bb_position, volume_ratio, returns_1d, vix_close × lags 1/3/5 + change features) — 34 new columns | ✅ |
+| 4 | DirectionClassifier (XGBoost binary, log-loss, predict_proba returns calibrated P(up)) | ✅ |
+| 5 | MagnitudeRegressor (XGBoost regression, one per direction, MSE on `target_abs_return`) | ✅ |
+| 6 | SignedReturnForecaster + evaluation (Information Coefficient, Sharpe ratio of signal, calibration plots) | ⏳ in progress |
+| 7 | LLM feature integration (wire LLM-extracted features from Neo4j into the feature matrix) | ⏳ pending |
+
+**Key design choices**:
+- Predict signed RETURN, not price level. Naive "tomorrow = today" baseline
+  achieves ~1.5% MAPE on price; that target is misleading.
+- Two-stage > single regressor: lets each model specialize. Direction model
+  optimizes for AUC; magnitude model optimizes for MSE on the directional subset.
+- All models share the same feature matrix (~69 features with cross-asset + lags).
+- Validation observation: walk-forward AUC ≈ 0.55-0.69 across CRWD/PANW/OKTA.
+  Real signal but modest — consistent with realistic next-day prediction
+  difficulty.
+
+**Cost during workshop**: $0 incremental AWS (all local pandas/XGBoost compute).
+
+---
+*Last Updated: 2026-04-27*

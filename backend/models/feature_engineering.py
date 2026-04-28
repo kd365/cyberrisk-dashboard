@@ -215,6 +215,55 @@ def compute_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def add_lag_features(df: pd.DataFrame, lags: list = None) -> pd.DataFrame:
+    """
+    Add lagged values and change features for selected indicators.
+
+    Args:
+        df: DataFrame with technical indicators (and optionally cross-asset)
+        lags: List of lag periods in days. Default [1, 3, 5].
+
+    Returns:
+        New DataFrame with original columns + lag/change columns appended.
+    """
+    if lags is None:
+        lags = [1, 3, 5]
+
+    out = df.copy()
+
+    # Indicators where trajectory matters more than level.
+    # Use difference for bounded/scored fields, pct_change for ratio-style.
+    DIFFERENCE_COLUMNS = [
+        "rsi_14",
+        "macd_histogram",
+        "bb_position",
+        "vix_close",
+    ]
+    PCT_CHANGE_COLUMNS = [
+        "volume_ratio",
+    ]
+    LAG_ONLY_COLUMNS = [
+        "returns_1d",  # already a pct change — only lag, no change feature
+    ]
+
+    for col in DIFFERENCE_COLUMNS + PCT_CHANGE_COLUMNS + LAG_ONLY_COLUMNS:
+        if col not in df.columns:
+            continue  # cross-asset cols are optional
+
+        for lag in lags:
+            # Lagged value — what the indicator was N days ago
+            out[f"{col}_lag{lag}"] = df[col].shift(lag)
+
+            # Change feature — only meaningful for non-percentage columns
+            if col in DIFFERENCE_COLUMNS:
+                out[f"{col}_change_{lag}d"] = df[col] - df[col].shift(lag)
+            elif col in PCT_CHANGE_COLUMNS:
+                out[f"{col}_change_{lag}d"] = df[col].pct_change(periods=lag)
+            # LAG_ONLY_COLUMNS (returns_1d): skip the change feature
+
+    return out
+
+
 def build_feature_matrix(
     ticker: str,
     period: str = "2y",
@@ -223,6 +272,7 @@ def build_feature_matrix(
     include_news: bool = False,
     include_llm: bool = False,
     include_cross_asset: bool = True,
+    include_lags: bool = True,
 ) -> pd.DataFrame:
     """
     Build a complete feature matrix for a ticker.
@@ -265,6 +315,12 @@ def build_feature_matrix(
                 features[cross_asset_cols] = features[cross_asset_cols].ffill()
         except Exception as e:
             logger.warning(f"Could not load cross-asset features for {ticker}: {e}")
+
+    # --- Lagged features ---
+    # Adds lag1/lag3/lag5 + change_1d/3d/5d for trajectory-sensitive indicators.
+    # Must run AFTER cross-asset join so vix_close lag features can be computed.
+    if include_lags:
+        features = add_lag_features(features)
 
     # --- Target variable ---
     features["target_price"] = df["Close"].shift(-target_days)
@@ -320,6 +376,7 @@ def get_feature_columns(
     include_news: bool = False,
     include_llm: bool = False,
     include_cross_asset: bool = False,
+    include_lags: bool = False,
 ) -> list:
     """
     Get the list of feature column names (excludes target columns and raw price/volume).
@@ -372,10 +429,12 @@ def get_feature_columns(
         ]
 
     if include_llm:
+        # Mirror the columns produced by _get_llm_features().
+        # Numeric 0-4 scores from the LLM extraction prompt:
         base_features += [
+            "llm_cyber_sector_relevance",
             "llm_leadership_cyber_expertise",
             "llm_product_market_fit",
-            "llm_competitive_moat",
             "llm_innovation_intensity",
             "llm_customer_concentration_risk",
             "llm_regulatory_alignment",
@@ -383,6 +442,23 @@ def get_feature_columns(
             "llm_growth_trajectory",
             "llm_risk_disclosure_quality",
             "llm_threat_landscape_awareness",
+        ]
+        # List-derived counts:
+        base_features += ["llm_threat_spec_count", "llm_key_risk_count"]
+        # One-hot market positioning:
+        base_features += [
+            "llm_position_leader",
+            "llm_position_challenger",
+            "llm_position_niche",
+            "llm_position_emerging",
+        ]
+        # One-hot competitive moat:
+        base_features += [
+            "llm_moat_technology",
+            "llm_moat_market_share",
+            "llm_moat_partnerships",
+            "llm_moat_data_scale",
+            "llm_moat_platform_breadth",
         ]
 
     if include_cross_asset:
@@ -393,6 +469,19 @@ def get_feature_columns(
             "vix_close",
             "vix_change_1d",
         ]
+
+    if include_lags:
+        # Mirror what add_lag_features() actually produces.
+        # difference-style cols get lag + diff; ratio-style cols get lag + pct_change;
+        # returns_1d gets only the lag.
+        for lag in [1, 3, 5]:
+            for col in ["rsi_14", "macd_histogram", "bb_position", "vix_close"]:
+                base_features.append(f"{col}_lag{lag}")
+                base_features.append(f"{col}_change_{lag}d")
+            for col in ["volume_ratio"]:
+                base_features.append(f"{col}_lag{lag}")
+                base_features.append(f"{col}_change_{lag}d")
+            base_features.append(f"returns_1d_lag{lag}")
 
     return base_features
 
@@ -436,5 +525,104 @@ def _get_news_features(
 def _get_llm_features(
     ticker: str, date_index: pd.DatetimeIndex
 ) -> Optional[pd.DataFrame]:
-    """Pull LLM-extracted features from company_features table. Implemented in Phase 3."""
-    return None
+    """Pull LLM-extracted features from the Neo4j Organization node.
+
+    Features are slow-changing (refreshed when a new 10-K is processed via
+    /api/enrichment/llm-features/<ticker>). For per-ticker time-series models
+    they appear as ~constant columns, which limits within-ticker signal —
+    they're designed for cross-sectional models. Forward-filled across the
+    full date_index since the underlying data has no daily timestamp.
+
+    Returns None if Neo4j isn't reachable (local dev, hibernated infra).
+    Tree models will simply skip the join and proceed with technical features.
+    """
+    try:
+        from services.neo4j_service import get_neo4j_service
+    except ImportError:
+        return None
+
+    try:
+        neo4j = get_neo4j_service()
+    except Exception:
+        return None
+    if neo4j is None:
+        return None
+
+    query = """
+        MATCH (o:Organization {ticker: $ticker})
+        RETURN
+            o.cyber_sector_relevance       AS cyber_sector_relevance,
+            o.leadership_cyber_expertise   AS leadership_cyber_expertise,
+            o.product_market_fit           AS product_market_fit,
+            o.innovation_intensity         AS innovation_intensity,
+            o.customer_concentration_risk  AS customer_concentration_risk,
+            o.regulatory_alignment         AS regulatory_alignment,
+            o.management_sentiment         AS management_sentiment,
+            o.growth_trajectory            AS growth_trajectory,
+            o.risk_disclosure_quality      AS risk_disclosure_quality,
+            o.threat_landscape_awareness   AS threat_landscape_awareness,
+            o.market_positioning           AS market_positioning,
+            o.competitive_moat             AS competitive_moat,
+            o.threat_specialization        AS threat_specialization,
+            o.key_risks                    AS key_risks
+    """
+
+    try:
+        rows = neo4j.execute_read(query, {"ticker": ticker.upper()})
+    except Exception as e:
+        logger.warning(f"Neo4j query failed for LLM features ({ticker}): {e}")
+        return None
+
+    if not rows or not rows[0]:
+        return None
+
+    row = rows[0]
+    features: Dict[str, Any] = {}
+
+    # 0-4 numeric scores. Treat NULL as 0 (= "no evidence") rather than NaN
+    # so tree models don't have to special-case missing — the prompt itself
+    # uses 0 to encode absence.
+    NUMERIC_SCORES = [
+        "cyber_sector_relevance",
+        "leadership_cyber_expertise",
+        "product_market_fit",
+        "innovation_intensity",
+        "customer_concentration_risk",
+        "regulatory_alignment",
+        "management_sentiment",
+        "growth_trajectory",
+        "risk_disclosure_quality",
+        "threat_landscape_awareness",
+    ]
+    for col in NUMERIC_SCORES:
+        val = row.get(col)
+        features[f"llm_{col}"] = int(val) if val is not None else 0
+
+    # Counts from list fields (lists themselves can't be NumPy features)
+    features["llm_threat_spec_count"] = len(row.get("threat_specialization") or [])
+    features["llm_key_risk_count"] = len(row.get("key_risks") or [])
+
+    # One-hot encode the categoricals. Tree models can technically split on
+    # integer-encoded categoricals, but with so few distinct values per
+    # ticker, dummies make the importance attribution clearer.
+    positioning = (row.get("market_positioning") or "unknown").lower()
+    for level in ("leader", "challenger", "niche", "emerging"):
+        features[f"llm_position_{level}"] = int(positioning == level)
+
+    # competitive_moat may store multiple comma-separated values (the LLM
+    # extraction prompt allows multi-select). Split on comma and treat each
+    # one-hot column as "is this moat type present?"
+    moat_raw = (row.get("competitive_moat") or "unknown").lower()
+    moat_values = {v.strip() for v in moat_raw.split(",")}
+    for level in (
+        "technology",
+        "market_share",
+        "partnerships",
+        "data_scale",
+        "platform_breadth",
+    ):
+        features[f"llm_moat_{level}"] = int(level in moat_values)
+
+    # Broadcast the same row across every date in date_index. The downstream
+    # join in build_feature_matrix uses ffill which makes this idempotent.
+    return pd.DataFrame([features] * len(date_index), index=date_index)
