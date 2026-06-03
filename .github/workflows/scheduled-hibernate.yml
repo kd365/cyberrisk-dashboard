@@ -1,0 +1,55 @@
+name: Scheduled Hibernate
+
+# Re-hibernates AWS resources to prevent RDS from auto-restarting (RDS
+# automatically starts back up 7 days after a stop). Runs every 3 days so
+# RDS never reaches that 7-day mark, keeping costs at ~$15-30/month instead
+# of ~$100+/month.
+#
+# The hibernate script is idempotent: resources already stopped are skipped,
+# so a run only does real work when something (usually RDS) has restarted.
+#
+# NOTE: cron "*/3" is day-of-month based, so it fires on days 3, 6, 9 ... 30
+# and then resets. The gap across a month boundary is at most ~4 days, safely
+# under the 7-day RDS auto-restart window.
+
+on:
+  schedule:
+    - cron: '0 8 */3 * *'   # 08:00 UTC (~midnight PT) every 3rd day-of-month
+  workflow_dispatch:          # Allow manual "Run workflow" from the Actions tab
+
+# Never run two hibernations at once
+concurrency:
+  group: scheduled-hibernate
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  AWS_PROFILE: cyber-risk
+
+jobs:
+  hibernate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create cyber-risk named profile
+        # hibernate.sh uses `--profile cyber-risk` for its account-safety check.
+        # Recreate that profile in the runner from the same secrets.
+        run: |
+          aws configure set aws_access_key_id "${{ secrets.AWS_ACCESS_KEY_ID }}" --profile cyber-risk
+          aws configure set aws_secret_access_key "${{ secrets.AWS_SECRET_ACCESS_KEY }}" --profile cyber-risk
+          aws configure set region "${{ env.AWS_REGION }}" --profile cyber-risk
+
+      - name: Run hibernate (non-interactive)
+        env:
+          HIBERNATE_FORCE: "true"
+        run: |
+          chmod +x scripts/hibernate.sh
+          ./scripts/hibernate.sh

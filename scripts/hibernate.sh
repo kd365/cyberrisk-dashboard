@@ -175,10 +175,16 @@ echo "  - deploy-frontend.yml will WORK (S3/CloudFront still active)"
 echo "  - Consider disabling backend deploy workflow while hibernating"
 echo ""
 
-read -p "Do you want to proceed? (yes/no): " CONFIRM
-if [ "$CONFIRM" != "yes" ]; then
-    echo -e "${RED}Aborted.${NC}"
-    exit 0
+# Non-interactive mode for automation (CI/cron): set HIBERNATE_FORCE=true
+# or pass --yes / -y. Manual runs still get the confirmation prompt.
+if [ "${HIBERNATE_FORCE:-}" == "true" ] || [ "${1:-}" == "--yes" ] || [ "${1:-}" == "-y" ]; then
+    echo -e "${YELLOW}Non-interactive mode: proceeding without prompt.${NC}"
+else
+    read -p "Do you want to proceed? (yes/no): " CONFIRM
+    if [ "$CONFIRM" != "yes" ]; then
+        echo -e "${RED}Aborted.${NC}"
+        exit 0
+    fi
 fi
 
 echo ""
