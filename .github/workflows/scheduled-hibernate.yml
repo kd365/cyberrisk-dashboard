@@ -24,7 +24,6 @@ concurrency:
 
 env:
   AWS_REGION: us-west-2
-  AWS_PROFILE: cyber-risk
 
 jobs:
   hibernate:
@@ -48,8 +47,13 @@ jobs:
           aws configure set region "${{ env.AWS_REGION }}" --profile cyber-risk
 
       - name: Run hibernate (non-interactive)
+        # AWS_PROFILE is set HERE (not at job level) so it only applies after
+        # the cyber-risk profile has been created above. Setting it earlier
+        # makes the configure-aws-credentials action look for a profile that
+        # doesn't exist yet and fail with "Could not load credentials".
         env:
           HIBERNATE_FORCE: "true"
+          AWS_PROFILE: cyber-risk
         run: |
           chmod +x scripts/hibernate.sh
           ./scripts/hibernate.sh
